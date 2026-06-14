@@ -306,12 +306,6 @@
             letter-spacing: 1px;
         }
 
-        .score-stats {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
         .score-record {
             display: flex;
             width: 100%;
@@ -319,12 +313,6 @@
             align-items: center;
             color: #a0a0b8;
             margin-top: 6px;
-        }
-
-        .pp-number {
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #fff;
         }
 
         .diff-badge {
@@ -347,7 +335,6 @@
 
         .diff-title {
             font-size: 1.2em;
-            font-weight: bold;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -355,36 +342,33 @@
 
         .acc-number {
             font-size: 1.2em;
-            font-weight: bold;
             color: #fff;
+            grid-column: 1 / 1;
+            grid-row: 1 / 1;
         }
 
-        .hit-count {
+        .score-weight {
+            grid-column: 1 / 1;
+            grid-row: 2 / 2;
+        }
+
+        .pp-number {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #fff;
+
             display: flex;
-            gap: 10px;
+            justify-content: right;
+            align-items: center;
+
+            grid-column: 2 / 2;
+            grid-row: 1 / 3;
         }
 
         .hit-count span {
             font-size: 1.8em;
             font-weight: bold;
         }
-
-        .hit-count-300 {
-            color: #66ffcc;
-        }
-
-        .hit-count-100 {
-            color: #faff00;
-        }
-
-        .hit-count-50 {
-            color: #ffb800;
-        }
-
-        .hit-count-miss {
-            color: #ef5350;
-        }
-
     </style>
     <style>
         .score-type {
@@ -561,22 +545,12 @@
             <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
 
         </div>
-        <div class="score-stats">
-            <div class="hit-count">
-                <span class="hit-count-300" th:text="${Scores.getGreatCount(score)}">300</span>
-                <span class="hit-count-100" th:text="${Scores.getOkCount(score)}">100</span>
-                <span class="hit-count-50" th:text="${Scores.getMehCount(score)}">50</span>
-                <span class="hit-count-miss" th:text="${Scores.getMissCount(score)}">0</span>
-            </div>
-            <span class="pp-number"
-                  th:text="${score.pp != null ? #numbers.formatDecimal(score.pp, 1, 1) + 'pp' : '--pp'}">222pp</span>
-        </div>
-        <div class="score-stats">
+        <div style="display: grid;">
             <span class="acc-number"
                   th:text="${#numbers.formatDecimal(score.accuracy * 100, 1, 2)} + '% ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
-            <div class="score-id" th:text="'#' + ${iterstat.index + 1} + ' ' + ${Scores.getWeightPP(score)}">#1
-                ↪123.45pp
-            </div>
+            <div class="score-weight" th:text="'#' + ${iterstat.index + 1} + ' ' + ${Scores.getWeightPP(score)}">#1 ↪123.45pp</div>
+            <div class="pp-number"
+                  th:text="${score.pp != null ? #numbers.formatDecimal(score.pp, 1, 1) + 'pp' : '--pp'}">123pp</div>
         </div>
         <div class="score-record">
             <div class="score-id" th:text="'S' + ${score.getId()}">S1234567890</div>

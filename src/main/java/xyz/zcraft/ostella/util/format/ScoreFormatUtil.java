@@ -15,12 +15,18 @@ public class ScoreFormatUtil {
 
     public static String getWeightPP(Score score) {
         if (score.getRanked() == false) {
-            return "Unranked";
+            return "×";
+        }
+        String prefix = "";
+        if ("LOVED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
+            prefix = "❤";
+        } else if ("RANKED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
+            prefix = "▲";
         }
         if (!hasWeight(score)) {
-            return "";
+            return prefix;
         }
-        return String.format("%d%% ↪%.1fpp", score.getWeight().getPercentage().intValue(), score.getWeight().getPp());
+        return prefix + String.format("%d%% ↪%.1fpp", score.getWeight().getPercentage().intValue(), score.getWeight().getPp());
     }
 
     public static boolean hasWeight(Score score) {
