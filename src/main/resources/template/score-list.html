@@ -37,6 +37,7 @@
             display: flex;
             align-items: center;
             gap: 40px;
+            width: 100%;
         }
 
         .rank-counts-container {
@@ -335,6 +336,7 @@
 
         .diff-title {
             font-size: 1.2em;
+            font-weight: bold;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -456,29 +458,35 @@
                     </div>
                 </div>
             </div>
-            <div class="stats-row">
-                <div class="stat-group">
-                    <span class="stat-label">Performance</span>
+            <div style="display: flex; ">
+                <div>
+                    <div class="stats-row">
+                        <div class="stat-group">
+                            <span class="stat-label">Performance</span>
+                            <span class="stat-value"
+                                  th:text="${#numbers.formatInteger(user.statistics.pp, 1, 'COMMA')} + 'pp'">3,000pp</span>
+                        </div>
+                        <div class="stat-group">
+                            <span class="stat-label">Play Time</span>
+                            <span class="stat-value"
+                                  th:text="${#numbers.formatInteger(user.statistics.playTime / 3600, 1, 'COMMA')} + ' hrs'">450 hrs</span>
+                            <span class="stat-sub" th:text="'From ' + ${Users.getFormattedJoinDate(user)}">From May 2000</span>
+                        </div>
+                        <div class="stat-group">
+                            <span class="stat-label">Play Count</span>
+                            <span class="stat-value" th:text="${#numbers.formatInteger(user.statistics.playCount, 1, 'COMMA')}">114,514</span>
+                        </div>
+
+                    </div>
+                    <div class="stats-row">
+                        <div class="stat-group">
                     <span class="stat-value"
-                          th:text="${#numbers.formatInteger(user.statistics.pp, 1, 'COMMA')} + 'pp'">3,000pp</span>
+                          th:text="'#' + ${#numbers.formatInteger(user.statistics.globalRank, 1, 'COMMA')}">#123,456,789</span>
+                            <span class="stat-sub" th:text="${user.countryCode} + ' #' + ${user.statistics.rank.country}">AU #150</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="stat-group">
-                    <span class="stat-label">Rank</span>
-                    <span class="stat-value"
-                          th:text="'#' + ${#numbers.formatInteger(user.statistics.globalRank, 1, 'COMMA')}">#12,345</span>
-                    <span class="stat-sub" th:text="${user.countryCode} + ' #' + ${user.statistics.rank.country}">AU #150</span>
-                </div>
-                <div class="stat-group">
-                    <span class="stat-label">Play Time</span>
-                    <span class="stat-value"
-                          th:text="${#numbers.formatInteger(user.statistics.playTime / 3600, 1, 'COMMA')} + ' hrs'">450 hrs</span>
-                    <span class="stat-sub" th:text="'From ' + ${Users.getFormattedJoinDate(user)}">From May 2000</span>
-                </div>
-                <div class="stat-group">
-                    <span class="stat-label">Play Count</span>
-                    <span class="stat-value" th:text="${#numbers.formatInteger(user.statistics.playCount, 1, 'COMMA')}">114,514</span>
-                </div>
-                <div class="chart-wrapper" style="width: 650px; height: 80px; margin-top: 15px;">
+                <div class="chart-wrapper" style="width: 650px; height: 80px; margin-top: 15px; margin-left: auto;">
                     <canvas id="historyChart"></canvas>
                 </div>
             </div>
