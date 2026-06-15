@@ -585,7 +585,7 @@
                     <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
                 </div>
                 <div class="pp-number"
-                     th:text="${#numbers.formatDecimal(score.getWeight().getPp(), 1, 1)} + 'pp'">123pp
+                     th:text="${#numbers.formatDecimal(score.getPp(), 1, 1)} + 'pp'">123pp
                 </div>
             </div>
 
