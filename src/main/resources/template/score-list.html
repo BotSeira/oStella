@@ -374,6 +374,8 @@
             align-items: end;
             border-right: 1px solid white;
             padding-right: 4px;
+
+            font-size: 0.8em;
         }
 
         .pp-number {
@@ -580,10 +582,10 @@
             <div class="score-pp">
                 <div class="pp-weight" th:if="${Scores.hasWeight(score)}">
                     <span th:text="${score.getWeight().getPercentage().intValue()} + '%'">100%</span>
-                    <span>123.45pp</span>
+                    <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
                 </div>
                 <div class="pp-number"
-                     th:text="${#numbers.formatDecimal(score.getWeight().getPp(), 1, 2)} + 'pp'">123pp
+                     th:text="${#numbers.formatDecimal(score.getWeight().getPp(), 1, 1)} + 'pp'">123pp
                 </div>
             </div>
 
