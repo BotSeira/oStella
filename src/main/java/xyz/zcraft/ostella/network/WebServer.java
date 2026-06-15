@@ -51,6 +51,7 @@ public class WebServer implements Closeable {
                     .get("/multiplayer/rooms/current", router::getCurrentRoom)
                     .get("/multiplayer/rooms/current/item", router::getCurrentRoomItem)
 
+                    .post("/users", router::getUsers)
                     .get("/users/me", router::getSelf)
                     .get("/users/me/friends", router::getFriends)
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)

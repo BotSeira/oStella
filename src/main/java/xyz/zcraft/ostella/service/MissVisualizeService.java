@@ -2,8 +2,12 @@ package xyz.zcraft.ostella.service;
 
 import xyz.zcraft.ostella.network.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.osu.parser.data.beatmap.*;
-import xyz.zcraft.osu.parser.data.replay.*;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+import xyz.zcraft.osu.parser.data.beatmap.HitObject;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.data.replay.HitEvent;
+import xyz.zcraft.osu.parser.data.replay.OsuReplay;
+import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
 
 import javax.imageio.ImageIO;
 import java.awt.*;

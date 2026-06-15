@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>oStella - Beatmap DNA</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            width: fit-content;
+            height: fit-content;
+            background-color: #1a1a2e;
+            color: #ffffff;
+            font-family: 'Dejavu Sans', Tahoma, Geneva, Verdana, sans-serif !important;
+        }
+
+        .dna-card {
+            width: 850px;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            background-color: rgba(255, 255, 255, 0.03);
+        }
+
+        .hero-banner {
+            width: 100%;
+            height: 160px;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+
+        .hero-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, rgba(26, 26, 46, 0.1) 0%, rgba(26, 26, 46, 0.6) 60%, rgba(26, 26, 46, 1) 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px 24px;
+        }
+
+        .meta-row {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            padding: 16px 24px 8px 24px;
+            align-items: end;
+        }
+
+        .map-info {
+            margin-right: auto;
+        }
+
+        .song-title {
+            font-size: 1.8em;
+            font-weight: 900;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .song-artist {
+            font-size: 1.1em;
+            color: #e2e8f0;
+            font-weight: 300;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .diff-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: nowrap;
+            padding: 8px 24px 16px 24px;
+        }
+
+        .diff-badge {
+            display: flex;
+            align-items: center;
+            background: #4a90e2; /* Fallback color */
+            font-weight: 700;
+            padding: 2px 12px;
+            border-radius: 40px;
+            font-size: 1.1em;
+            gap: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+            color: white;
+        }
+
+        .diff-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #4a90e2;
+        }
+
+        .dna-content-row {
+            display: flex;
+            padding: 0 24px 24px 24px;
+            gap: 16px;
+            height: 250px;
+        }
+
+        .chart-box {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-title {
+            text-align: center;
+            font-size: 1.1em;
+            color: #a0a0b8;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .chart-content {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        .stats-column {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .data-block {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .data-label {
+            color: #a0a0b8;
+            font-size: 1.1em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .data-primary {
+            font-size: 2.2em;
+            font-weight: 900;
+            color: #ffcc22; /* Vibrant yellow for stats */
+        }
+
+        .data-sub {
+            font-size: 1.1em;
+            color: #e2e8f0;
+            margin-top: 4px;
+        }
+
+        .strain-row {
+            padding: 0 24px 24px 24px;
+            height: 200px;
+        }
+
+        .bottom-footer {
+            margin-top: 16px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 1em;
+            color: #a0a0b8;
+        }
+    </style>
+</head>
+<body>
+
+<div class="dna-card">
+
+    <div class="hero-banner"
+         style="background-image: url('https://assets.ppy.sh/beatmaps/2414617/covers/slimcover.jpg?1755447546');"
+         th:style="'background-image: url(' + ${cache.getImageSrc(dna.getBeatmapset().getCovers().getSlimcover())} + ');'">
+        <div class="hero-overlay">
+            <div class="meta-row">
+                <div class="map-info">
+                    <div class="song-title" th:text="${dna.getBeatmapset().getTitle()}">Example Song Title</div>
+                    <div class="song-artist">
+                        <span th:text="${dna.getBeatmapset().getArtist()}">Example Artist</span>
+                        <span style="color: #a0a0b8; margin: 0 8px;">//</span>
+                        <span style="color: #fff; font-weight: bold;"
+                              th:text="${Beatmaps.getOwnersString(dna.getBeatmap())}">Mapper</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="diff-row">
+        <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
+            <span th:text="'★' + ${#numbers.formatDecimal(diff.getStar(), 1, 2)}">★7.24</span>
+        </div>
+        <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
+             th:text="${dna.getBeatmap().getVersion()}">
+            Extra
+        </div>
+    </div>
+
+    <div class="dna-content-row">
+
+        <div class="chart-box" style="flex: 2;">
+            <div class="chart-title">Map Archetype</div>
+            <div class="chart-content">
+                <div id="archetypeChart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+
+        <div class="stats-column" style="flex: 1;">
+
+            <div class="data-block">
+                <div class="data-label">HP Vibe</div>
+                <div class="data-primary" style="color: #66ffcc;" th:text="${dna.getHpVibe()}">òwó</div>
+                <div class="data-sub">Drain Intensity</div>
+            </div>
+
+            <div class="data-block">
+                <div class="data-label">Farm Spike</div>
+                <div class="data-primary" style="color: #ff4e6a;"
+                     th:text="${#numbers.formatDecimal(dna.getFarmRating(), 1, 1)} + '/10'">
+                    8.5/10
+                </div>
+                <div class="data-sub">Difficulty Focus</div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="strain-row">
+        <div class="chart-box" style="height: 100%;">
+            <div class="chart-title">Difficulty Strain Over Time</div>
+            <div class="chart-content">
+                <div id="strainChart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="bottom-footer">
+    <span th:text="${'DNA mapped at ' + time}">DNA mapped at 2026-04-20T14:20:13Z</span>
+    <span>Generated with oStella</span>
+</div>
+
+<script th:inline="javascript">
+    // Thymeleaf injection
+    const aimPct = /*[[${dna.getAimPercent()}]]*/ 65;
+    const streamPct = /*[[${dna.getStreamPercent()}]]*/ 20;
+    const techPct = /*[[${dna.getTechPercent()}]]*/ 15;
+
+    const archetypeChartDom = document.getElementById('archetypeChart');
+    if (archetypeChartDom) {
+        const archetypeChart = echarts.init(archetypeChartDom, 'dark');
+
+        archetypeChart.setOption({
+            backgroundColor: 'transparent',
+            animation: false, // Critical for Playwright screenshotting
+            tooltip: {show: false},
+            legend: {
+                orient: 'vertical',
+                right: '10%',
+                top: 'center',
+                textStyle: {color: '#ffffff', fontSize: 14},
+                itemGap: 20
+            },
+            series: [
+                {
+                    name: 'Archetype',
+                    type: 'pie',
+                    radius: ['50%', '80%'], // Donut shape
+                    center: ['35%', '50%'], // Push left to make room for legend
+                    avoidLabelOverlap: false,
+                    label: {show: false},
+                    labelLine: {show: false},
+                    data: [
+                        {value: aimPct, name: 'Aim', itemStyle: {color: '#ff4e6a'}},     // Soft red
+                        {value: streamPct, name: 'Stream', itemStyle: {color: '#4a90e2'}}, // Blue
+                        {value: techPct, name: 'Tech', itemStyle: {color: '#9cff22'}}      // Warm yellow/green
+                    ]
+                }
+            ]
+        });
+    }
+</script>
+
+<script th:inline="javascript">
+    // Inject the List<Double> or List<Integer> representing strain points over time
+    const strainData = /*[[${dna.getStrainPoints()}]]*/ [10, 15, 12, 18, 25, 20, 22, 95, 100, 85, 20, 15];
+    const strainLabels = strainData.map((_, index) => index); // Arbitrary X-axis
+
+    const strainChartDom = document.getElementById('strainChart');
+    if (strainChartDom) {
+        const strainChart = echarts.init(strainChartDom, 'dark');
+
+        strainChart.setOption({
+            backgroundColor: 'transparent',
+            animation: false, // Critical for Playwright
+            grid: {left: 0, right: 0, top: 10, bottom: 0, containLabel: false},
+            xAxis: {
+                type: 'category',
+                data: strainLabels,
+                boundaryGap: false,
+                show: false // Hide axis lines completely
+            },
+            yAxis: {
+                type: 'value',
+                show: false // Hide axis lines completely
+            },
+            series: [
+                {
+                    data: strainData,
+                    type: 'line',
+                    smooth: 0.4, // Smooth curve
+                    symbol: 'none', // Remove data point circles
+                    lineStyle: {
+                        color: '#ffcc22', // Yellow line
+                        width: 3
+                    },
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            {offset: 0, color: 'rgba(255, 204, 34, 0.6)'}, // Yellow top
+                            {offset: 1, color: 'rgba(255, 78, 106, 0.0)'}  // Fade to transparent red
+                        ])
+                    }
+                }
+            ]
+        });
+    }
+</script>
+
+</body>
+</html>

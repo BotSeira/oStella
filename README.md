@@ -3,12 +3,12 @@
 `oStella` is a Java service that fetches osu! data and exposes simple HTTP endpoints for status,
 multiplayer info, and rendered osu! images.
 
-It is the backend for [Seira](https://github.com/ZayrexDev/Seira) bot, 
+It is the backend for [Seira](https://github.com/ZayrexDev/Seira) bot,
 and also provides a standalone API for other clients to consume.
 
 ## What You Get
 
-- PNG score panels for best and recent scores, beatmap, beatmapset, and so on! 
+- PNG score panels for best and recent scores, beatmap, beatmapset, and so on!
 - PNG score analysis for a specific score
 - PNG player comparison leaderboard endpoint (`/maplb`, `/leaderboard`)
 - Replay video generation for solo and multiplayer replay showcases (`/replay`)
@@ -20,24 +20,31 @@ and also provides a standalone API for other clients to consume.
 Here are some demo:
 
 ### Best-of-N
+
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/a10742b8-148d-4fab-90b3-3ecd6882e2ae" />
 
 ### Beatmap Card
+
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/41f36596-94c7-4407-af82-490efccf6704" />
 
 ### Group Leaderboard
+
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/cbc361a4-61e0-440d-908e-f1d52009373e" />
 
 ### Score Card
+
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/c3ac7fde-adea-427b-be0a-9871a45ca8ad" />
 
 ### Score Analysis
+
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/024fe6b2-c10a-4c9e-aefc-9c784826a9b7" />
 
 ### Miss Analysis
+
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/fa18c6b7-1c4d-4215-898b-2f6556e5704e" />
 
 ### Beatmapset Card
+
 <img width="400" alt="image" src="https://github.com/user-attachments/assets/2bb887d6-5fff-429b-b39e-963235ec463e" />
 
 ### Replay Video
@@ -60,7 +67,7 @@ Here are some demo:
 
 ### 1) Create `config.yml`
 
-The default config file is generated as `config.yml` when you first start the service. 
+The default config file is generated as `config.yml` when you first start the service.
 You can also copy the example config from [ostella-example-config.yml](/src/main/resources/ostella-example-config.yml)
 
 ### 2) Install Playwright Dependencies
@@ -127,6 +134,7 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 | Method | Path                            | Purpose                   | Params / POST Body               | Response |
 |--------|---------------------------------|---------------------------|----------------------------------|----------|
+| POST   | `/users`                        | Get multiple user data    | POST Body `{"ids":[user ids]}`   | JSON     |
 | GET    | `/users/me`                     | User data                 | Requires Authorization Header    | JSON     |
 | GET    | `/users/me/friends`             | Friends list for user     | Requires Authorization Header    | JSON     |
 | POST   | `/users/leaderboards`           | User PP leaderboard image | `{"uids":[user ids]}`            | PNG      |
@@ -152,7 +160,6 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 | GET    | `/daily`  | Current daily challenge room summary | none               | JSON     |
 | GET    | `/health` | Service health and osu! API health   | none               | JSON     |
 
-
 ### Lookup Params
 
 #### Looking up beatmaps, beatmapsets, or scores by explicit ID:
@@ -162,23 +169,26 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 - `ms` = mapset ID
 - `i` = index for mapset (e.g., `i=0` for the first map in a mapset, `i=1` for the second, etc.)
 
-You can look up a score's beatmap and beatmapset, 
-a beatmap's beatmapset, or a beatmapset's beatmaps 
+You can look up a score's beatmap and beatmapset,
+a beatmap's beatmapset, or a beatmapset's beatmaps
 by including the index `i` in the query parameters.
 You can also look up the score of a beatmap, or the beatmap index of a beatmapset.
 
 #### Looking up beatmaps, beatmapset, or scores by a user and index (e.g., best-of-N):
+
 - `of` = score type
 - `i` = index (for `bo` `rs` `rp`, which score index to return)
 - `u` = user ID
 
 ##### Score Types for `of` parameter:
+
 - `bo` - best scores
 - `rs` - recent scores
 - `rp` - recent **passed** scores
 - `mp` - current multiplayer playlist item
 
 #### Examples
+
 - `/beatmaps/lookup?m=12345678` - Look up beatmap by map ID
 - `/beatmaps/lookup?ms=12345678&i=0` - Look up the first beatmap of a beatmapset
 - `/beatmaps/lookup?s=12345678` - Look up the beatmap of a score
@@ -210,7 +220,7 @@ To clear cache, stop the service and remove files under `data/cache/`; they will
 
 ## Playwright Note
 
-Image rendering depends on Playwright Chromium. If your environment is missing browser binaries, 
+Image rendering depends on Playwright Chromium. If your environment is missing browser binaries,
 when first started, Playwright will attempt to download them.
 
 ## Performance & Requirements
@@ -220,14 +230,16 @@ with how you configure its rendering features. The core web server is incredibly
 but image (Playwright/Chromium) and video (Danser) rendering require careful hardware consideration.
 
 ### Minimum System Requirements
+
 * **CPU:** 2+ Cores (4+ Cores heavily recommended if video rendering is enabled)
 * **RAM:** 2 GB minimum (4 GB recommended for stable multi-worker rendering)
 * **Storage:** 5+ GB free space (for caching osu! beatmaps, replays, and rendered videos)
 
 ### RAM Usage
+
 > Memory consumption is strictly controlled by your worker pool configurations.
-By default, oStella prevents Out-Of-Memory crashes by queuing requests rather
-than spawning infinite browser instances.
+> By default, oStella prevents Out-Of-Memory crashes by queuing requests rather
+> than spawning infinite browser instances.
 
 * **Core Java Server:** ~250MB - 500MB (depending on JVM garbage collection and cache size).
 * **Image Rendering (Playwright/Chromium):** ~100MB - 150MB per active worker.
@@ -235,13 +247,17 @@ than spawning infinite browser instances.
 * **Video Rendering (Danser):** ~200MB - 300MB per active Danser instance during an active render.
 
 ### CPU Usage
+
 * **API Routing & Network:** Near 0% CPU impact. Asynchronous request handling allows the server to idle efficiently.
 * **Image Rendering:** Moderate, bursty CPU usage. Chromium utilizes separate OS processes for rendering,
   meaning concurrent image requests will actively utilize multiple CPU cores for brief moments.
-* **Video Rendering (Replays):** **Extreme CPU usage.** Software encoding (e.g., `libx264`) will easily pin your CPU to 100%.
+* **Video Rendering (Replays):** **Extreme CPU usage.** Software encoding (e.g., `libx264`) will easily pin your CPU to
+  100%.
 
 ### Low Resource Environments?
+
 If you are running oStella on a low-resource environment (e.g., 2GB RAM, 2 CPU cores), it is crucial to:
+
 1. Limit your Playwright worker pool to `2` or `3` to prevent memory exhaustion.
 2. Avoid enabling video rendering or limit it to a single worker with hardware encoding.
 3. Monitor your server's resource usage closely, especially under load, to ensure it remains responsive

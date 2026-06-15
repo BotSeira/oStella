@@ -28,3 +28,8 @@ replayRender:
   configPath: "" # Optional path to danser's config file, if not set default config will be used
   renderQueueSize: 5 # Maximum number of replays to render waiting in queue
   renderThreads: 1 # Maximum number of replays to render at the same time
+
+# === Optional configuration for performance+ ===
+performancePlus:
+  enabled: true # Enable performance+ endpoints, which provide more detailed performance calculations
+  endpoint: "http://localhost:5000/api" # URL of the performance+ API, make sure to set this to your actual performance+ API URL if you have it running

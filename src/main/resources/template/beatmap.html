@@ -613,7 +613,8 @@
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().cs() -  beatmap.getCs())}">▲1.20</span>
                         <div class="spec-item">
                             <span class="spec-label">CS</span>
-                            <span class="spec-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(), 1, 2)}">5.00</span>
+                            <span class="spec-value"
+                                  th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(), 1, 2)}">5.00</span>
                         </div>
                         <span class="spec-sub" th:text="${DiffSpecs.getCSString(diff)}">30px</span>
                     </div>
@@ -623,7 +624,8 @@
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().ar() -  beatmap.getAr())}">▲1.20</span>
                         <div class="spec-item">
                             <span class="spec-label">AR</span>
-                            <span class="spec-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(), 1, 2)}">5.00</span>
+                            <span class="spec-value"
+                                  th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(), 1, 2)}">5.00</span>
                         </div>
                         <span class="spec-sub" th:text="${DiffSpecs.getARString(diff)}">233ms</span>
                     </div>
@@ -633,7 +635,8 @@
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().od() -  beatmap.getAccuracy())}">▲1.20</span>
                         <div class="spec-item">
                             <span class="spec-label">OD</span>
-                            <span class="spec-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().od(), 1, 2)}">5.00</span>
+                            <span class="spec-value"
+                                  th:text="${#numbers.formatDecimal(diff.getDifficulty().od(), 1, 2)}">5.00</span>
                         </div>
                         <span class="spec-sub" th:text="${DiffSpecs.getODString(diff)}">50ms</span>
                     </div>
@@ -643,7 +646,8 @@
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().hp() -  beatmap.getDrain())}">▲1.20</span>
                         <div class="spec-item">
                             <span class="spec-label">HP</span>
-                            <span class="spec-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(), 1, 2)}">5.00</span>
+                            <span class="spec-value"
+                                  th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(), 1, 2)}">5.00</span>
                         </div>
                         <span class="spec-sub" th:text="${DiffSpecs.getHPString(diff)}">qwq</span>
                     </div>

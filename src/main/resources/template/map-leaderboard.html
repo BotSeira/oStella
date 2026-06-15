@@ -391,15 +391,15 @@
                     </div>
                 </div>
 
-<!--                <div class="pk-stat-box" th:style="${placement.score.accuracy == 1 ? 'color: #ffcc22;' : ''}">-->
-<!--                    <div class="pk-acc"-->
-<!--                         th:text="${#numbers.formatDecimal(placement.score.accuracy * 100, 1, 2) + '%'}">98.76%-->
-<!--                    </div>-->
-<!--                    <div class="pk-combo"-->
-<!--                         th:text="${placement.score.maxCombo} + 'x' + ${placement.score.isPerfectCombo ? ' FC' : ''}">-->
-<!--                        432x-->
-<!--                    </div>-->
-<!--                </div>-->
+                <!--                <div class="pk-stat-box" th:style="${placement.score.accuracy == 1 ? 'color: #ffcc22;' : ''}">-->
+                <!--                    <div class="pk-acc"-->
+                <!--                         th:text="${#numbers.formatDecimal(placement.score.accuracy * 100, 1, 2) + '%'}">98.76%-->
+                <!--                    </div>-->
+                <!--                    <div class="pk-combo"-->
+                <!--                         th:text="${placement.score.maxCombo} + 'x' + ${placement.score.isPerfectCombo ? ' FC' : ''}">-->
+                <!--                        432x-->
+                <!--                    </div>-->
+                <!--                </div>-->
 
                 <div class="pk-score-box">
                     <div class="pk-diff"
@@ -407,7 +407,8 @@
                          th:text="${'-' + #numbers.formatInteger(placements[iterStat.index - 1].getScore().getTotalScore() - placement.getScore().getTotalScore(), 1, 'COMMA')}">
                         -12,345
                     </div>
-                    <div class="pk-pp" th:text="${#numbers.formatInteger(placement.getScore().getTotalScore(), 1, 'COMMA')}">
+                    <div class="pk-pp"
+                         th:text="${#numbers.formatInteger(placement.getScore().getTotalScore(), 1, 'COMMA')}">
                         1,000,000
                     </div>
                     <div class="pk-score-sub">

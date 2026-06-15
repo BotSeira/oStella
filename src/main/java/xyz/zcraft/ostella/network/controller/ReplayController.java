@@ -19,12 +19,16 @@ import xyz.zcraft.osu.model.Score;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
 
-import static xyz.zcraft.ostella.util.RequestUtil.*;
+import static xyz.zcraft.ostella.util.RequestUtil.optionalDouble;
+import static xyz.zcraft.ostella.util.RequestUtil.requirePathLong;
 
 public class ReplayController {
     private static final Logger LOG = LogManager.getLogger(ReplayController.class);

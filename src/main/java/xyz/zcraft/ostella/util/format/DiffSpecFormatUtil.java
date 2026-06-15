@@ -8,6 +8,10 @@ public class DiffSpecFormatUtil {
         return Colors.getBeatmapDiffColor(diffSpec.getStar());
     }
 
+    public static String getDiffColorReadable(DiffSpec diffSpec) {
+        return Colors.getBeatmapDiffColor(Math.clamp(diffSpec.getStar(), 0, 6.5));
+    }
+
     public static String getDiffTextColor(DiffSpec diffSpec) {
         return Colors.getBeatmapDiffTextColor(diffSpec.getStar());
     }

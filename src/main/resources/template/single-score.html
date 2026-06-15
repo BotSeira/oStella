@@ -306,7 +306,6 @@
             font-size: 1.3em;
             color: #e2e8f0;
             display: flex;
-            gap: 12px;
             align-items: baseline;
         }
 
@@ -320,23 +319,53 @@
             margin-left: 8px;
         }
 
-        .if-unranked {
-            color: #ffcc22;
+        .if-ranked {
+            color: #66ccff;
             font-weight: bold;
-            background: rgba(255, 204, 34, 0.1);
-            padding: 2px 10px;
-            border-radius: 6px;
+            padding: 2px 6px;
+        }
+
+        .if-unranked {
+            color: #ff2222;
+            font-weight: bold;
+            padding: 2px 6px;
+        }
+
+        .if-loved {
+            color: #ff66ab;
+            font-weight: bold;
+            padding: 2px 6px;
         }
 
         .hit-stats-container {
-            grid-column: span 2;
-            display: flex;
-            justify-content: space-between;
             background: rgba(0, 0, 0, 0.2);
             padding: 16px 24px;
             border-radius: 12px;
             border: 1px solid rgba(255, 255, 255, 0.05);
             margin-top: 8px;
+            grid-column: 1 / -1;
+        }
+
+        .hit-stats-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .hit-stats-row.sub {
+            margin-top: 8px;
+        }
+
+        .hit-stats-row.sub .hit-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 0.6em;
+            gap: 0;
+        }
+
+        .hit-stats-row.sub .hit-label {
+            margin-bottom: 0;
+            font-size: 1.5em;
         }
 
         .hit-item {
@@ -437,7 +466,7 @@
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getStar() - score.getBeatmap().getDifficultyRating())}">▲1.23
                 </span>
 
-                <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
+                <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColorReadable(diff)}"
                      th:text="${score.getBeatmap().getVersion()}">Example Difficulty
                 </div>
             </div>
@@ -470,7 +499,8 @@
         <div class="map-stat-block">
             <div class="map-stat-group">
                 <span class="map-stat-label">CS</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(), 1, 2)}">4.00</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(), 1, 2)}">4.00</span>
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getDifficulty().cs() - score.getBeatmap().getCs())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().cs() - score.getBeatmap().getCs())}">▲1.20</span>
@@ -480,7 +510,8 @@
         <div class="map-stat-block">
             <div class="map-stat-group">
                 <span class="map-stat-label">AR</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(), 1, 2)}">9.30</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(), 1, 2)}">9.30</span>
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getDifficulty().ar() - score.getBeatmap().getAr())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().ar() - score.getBeatmap().getAr())}">▲1.20</span>
@@ -490,7 +521,8 @@
         <div class="map-stat-block">
             <div class="map-stat-group">
                 <span class="map-stat-label">OD</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().od(), 1, 2)}">8.00</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().od(), 1, 2)}">8.00</span>
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getDifficulty().od() - score.getBeatmap().getAccuracy())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().od() - score.getBeatmap().getAccuracy())}">▲1.20</span>
@@ -500,7 +532,8 @@
         <div class="map-stat-block">
             <div class="map-stat-group">
                 <span class="map-stat-label">HP</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(), 1, 2)}">7.00</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(), 1, 2)}">7.00</span>
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getDifficulty().hp() - score.getBeatmap().getDrain())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getDifficulty().hp() - score.getBeatmap().getDrain())}">▲1.20</span>
@@ -526,9 +559,11 @@
                 1,234,567
             </div>
             <div class="data-sub">
-                <span class="if-unranked" th:if="${!Scores.hasPp(score)}">UNRANKED</span>
+                <span class="if-ranked" th:if="${score.getRanked() && score.getBeatmap().getStatus().equalsIgnoreCase('RANKED')}">▲</span>
+                <span class="if-unranked" th:if="${!(score.getRanked())}">×</span>
+                <span class="if-loved" th:if="${score.getBeatmap().getStatus().equalsIgnoreCase('LOVED') && score.getRanked()}">❤</span>
                 <span th:if="${diff != null}"
-                th:text="${score.getPp() != null ? #numbers.formatDecimal(score.getPp(), 1, 1) : '--'} + 'pp' + ' / ' + ${#numbers.formatDecimal(diff.getPpSS(), 1, 1)} + 'pp'">
+                      th:text="${ppSafe != null ? #numbers.formatDecimal(ppSafe, 1, 1) : '--'} + 'pp' + ' / ' + ${#numbers.formatDecimal(diff.getPpSS(), 1, 1)} + 'pp'">
                     412.5pp / 1234.56pp
                 </span>
             </div>
@@ -547,22 +582,46 @@
         </div>
 
         <div class="hit-stats-container">
-            <div class="hit-item">
-                <span class="hit-value c-300" th:text="${Scores.getGreatCount(score)}">450</span>
-                <span class="hit-label">PERFECT</span>
-            </div>
-            <div class="hit-item">
-                <span class="hit-value c-100" th:text="${Scores.getOkCount(score)}">24</span>
-                <span class="hit-label">OK</span>
-            </div>
-            <div class="hit-item">
-                <span class="hit-value c-50" th:text="${Scores.getMehCount(score)}">2</span>
-                <span class="hit-label">MEH</span>
-            </div>
-            <div class="hit-item">
+            <div class="hit-stats-row">
+                <div class="hit-item">
+                    <span class="hit-value c-300" th:text="${Scores.getGreatCount(score)}">450</span>
+                    <span class="hit-label">PERFECT</span>
+                </div>
+                <div class="hit-item">
+                    <span class="hit-value c-100" th:text="${Scores.getOkCount(score)}">24</span>
+                    <span class="hit-label">OK</span>
+                </div>
+                <div class="hit-item">
+                    <span class="hit-value c-50" th:text="${Scores.getMehCount(score)}">2</span>
+                    <span class="hit-label">MEH</span>
+                </div>
+                <div class="hit-item">
                 <span class="hit-value" th:classappend="${Scores.getMissCount(score) > 0 ? 'c-miss' : ''}"
                       th:text="${Scores.getMissCount(score)}">1</span>
-                <span class="hit-label">MISS</span>
+                    <span class="hit-label">MISS</span>
+                </div>
+            </div>
+            <div class="hit-stats-row sub">
+                <div class="hit-item">
+                    <span class="hit-label">Slider Tick</span>
+                    <span class="hit-value"
+                          th:text="${Scores.getSliderTick(score)} + '/' + ${Scores.getSliderTickMax(score)}">450/456</span>
+                </div>
+                <div class="hit-item">
+                    <span class="hit-label">Slider End</span>
+                    <span class="hit-value"
+                          th:text="${Scores.getSliderEnd(score)} + '/' + ${Scores.getSliderEndMax(score)}">123/456</span>
+                </div>
+                <div class="hit-item">
+                    <span class="hit-label">Spinner Bonus</span>
+                    <span class="hit-value"
+                          th:text="${Scores.getSpinnerBonus(score)} + '/' + ${Scores.getSpinnerBonusMax(score)}">123/456</span>
+                </div>
+                <div class="hit-item">
+                    <span class="hit-label">Spinner Spin</span>
+                <span class="hit-value"
+                      th:text="${Scores.getSpinnerSpin(score)} + '/' + ${Scores.getSpinnerSpinMax(score)}">12/34</span>
+                </div>
             </div>
         </div>
     </div>

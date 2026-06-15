@@ -1,8 +1,6 @@
 package xyz.zcraft.ostella.network;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -16,10 +14,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.MultiplayerRoom;
-import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
@@ -31,6 +26,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
@@ -395,6 +391,54 @@ public class Router implements Closeable {
             }
 
             return OsuAPI.getScore(tokenManager.getTokenData(), id);
+        });
+    }
+
+    public void getUsers(@NotNull Context context) {
+        final JsonElement body = JsonParser.parseString(context.body());
+        final var uidArr = body.getAsJsonObject().getAsJsonArray("ids");
+
+        if (uidArr == null || uidArr.isEmpty()) {
+            context.status(400).result(Response.error("Missing 'uid' array in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        context.future(() -> {
+            List<CompletableFuture<List<User>>> userFutures = new ArrayList<>(uidArr.size() / 50 + 1);
+            for (int start = 0; start < uidArr.size(); start += 50) {
+                final int end = Math.min(start + 50, uidArr.size());
+                List<Long> batch = new ArrayList<>();
+                for (int j = start; j < end; j++) {
+                    batch.add(uidArr.get(j).getAsLong());
+                }
+                userFutures.add(executor.enqueueAsync(() -> OsuAPI.getUsers(tokenManager.getTokenData(), batch))
+                        .thenApply(users -> {
+                            if (users == null || users.isEmpty()) {
+                                throw new ApiException(ErrorCode.NO_USER_FOUND, "No users found for the provided ids!");
+                            }
+                            return users;
+                        }));
+            }
+
+            return CompletableFuture.allOf(userFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(_ -> {
+                        JsonArray usersArr = new JsonArray();
+                        for (var future : userFutures) {
+                            try {
+                                final List<User> join = future.join();
+                                for (User user : join) {
+                                    usersArr.add(GSON.toJsonTree(user));
+                                }
+                            } catch (CompletionException e) {
+                                if (e.getCause() instanceof ApiException apiEx && apiEx.getErrorCode() == ErrorCode.NO_USER_FOUND) {
+                                    LOG.warn("User not found for one of the requested ids: {}", apiEx.getMessage());
+                                } else {
+                                    LOG.error("Error fetching user data", e);
+                                }
+                            }
+                        }
+                        return usersArr;
+                    }).thenAccept(usersArr -> context.status(200).result(new Response(true, "Success", usersArr).toString()));
         });
     }
 }

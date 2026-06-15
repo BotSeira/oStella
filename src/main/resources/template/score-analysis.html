@@ -415,19 +415,23 @@
         <div class="map-stats-strip">
             <div class="map-stat-group">
                 <span class="map-stat-label">CS</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(), 1, 2)}">4.00</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(), 1, 2)}">4.00</span>
             </div>
             <div class="map-stat-group">
                 <span class="map-stat-label">AR</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(), 1, 2)}">9.30</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(), 1, 2)}">9.30</span>
             </div>
             <div class="map-stat-group">
                 <span class="map-stat-label">OD</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().od(), 1, 2)}">8.00</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().od(), 1, 2)}">8.00</span>
             </div>
             <div class="map-stat-group">
                 <span class="map-stat-label">HP</span>
-                <span class="map-stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(), 1, 2)}">7.00</span>
+                <span class="map-stat-value"
+                      th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(), 1, 2)}">7.00</span>
             </div>
             <div class="map-stat-group" style="margin-left: auto;">
                 <span class="map-stat-label">BPM</span>

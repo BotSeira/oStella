@@ -4,7 +4,8 @@ public record AppConfig(
         OstellaConfig ostella,
         OsuConfig osu,
         ScoreRenderConfig replayRender,
-        WebserverConfig webserver
+        WebserverConfig webserver,
+        PerfPlusConfig performancePlus
 ) {
 }
 
