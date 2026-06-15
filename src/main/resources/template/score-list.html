@@ -583,7 +583,7 @@
                     <span>123.45pp</span>
                 </div>
                 <div class="pp-number"
-                     th:text="${#numbers.formatDecimal(score.getWeight().getPp(), 1, 2)}">123pp
+                     th:text="${#numbers.formatDecimal(score.getWeight().getPp(), 1, 2)} + 'pp'">123pp
                 </div>
             </div>
 
