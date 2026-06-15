@@ -502,7 +502,7 @@
                 <span class="replay-badge" th:if="${score.getHasReplay()}">▶</span>
                 <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>
             </div>
-            <span class="score-time-long" th:text="${score.getCreatedAt()}">2026-04-19T16:19:16Z</span>
+            <span class="score-time-long" th:text="${score.getEndedAt()}">2026-04-19T16:19:16Z</span>
         </div>
     </div>
 
