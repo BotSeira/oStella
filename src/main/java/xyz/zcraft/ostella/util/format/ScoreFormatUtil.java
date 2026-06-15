@@ -13,20 +13,16 @@ public class ScoreFormatUtil {
         return MiscUtil.getRelativeTimeAgo(score.getEndedAt());
     }
 
-    public static String getWeightPP(Score score) {
+    public static String getScoreStatus(Score score) {
         if (score.getRanked() == false) {
             return "×";
         }
-        String prefix = "";
         if ("LOVED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
-            prefix = "❤";
+            return "❤";
         } else if ("RANKED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
-            prefix = "▲";
+            return "▲";
         }
-        if (!hasWeight(score)) {
-            return prefix;
-        }
-        return prefix + String.format("%d%% ↪%.1fpp", score.getWeight().getPercentage().intValue(), score.getWeight().getPp());
+        return "?";
     }
 
     public static boolean hasWeight(Score score) {
@@ -51,6 +47,10 @@ public class ScoreFormatUtil {
         sb.append("]");
 
         return sb.toString();
+    }
+
+    public static String getHitResultString(Score score) {
+        return getGreatCount(score) + " / " + getOkCount(score) + " / " + getMehCount(score) + " / " + getMissCount(score);
     }
 
     public static long getGreatCount(Score score) {

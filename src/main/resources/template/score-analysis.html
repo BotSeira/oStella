@@ -404,10 +404,7 @@
                      th:text="${#numbers.formatDecimal(score.getAccuracy() * 100, 1, 2)} + '%'">85.42%
                 </div>
                 <div class="data-sub"
-                     th:text="${Scores.getGreatCount(score)}
-                                + ' / ' + ${Scores.getOkCount(score)}
-                                + ' / ' + ${Scores.getMehCount(score)}
-                                + ' / ' + ${Scores.getMissCount(score)}">456 / 78 / 9 / 10
+                     th:text="${Scores.getHitResultString(score)}">456 / 78 / 9 / 10
                 </div>
             </div>
         </div>

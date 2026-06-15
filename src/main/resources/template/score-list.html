@@ -342,6 +342,10 @@
             text-overflow: ellipsis;
         }
 
+        .score-status {
+            margin-left: auto;
+        }
+
         .acc-number {
             font-size: 1.2em;
             color: #fff;
@@ -349,22 +353,33 @@
             grid-row: 1 / 1;
         }
 
-        .score-weight {
+        .hit-stat {
             grid-column: 1 / 1;
             grid-row: 2 / 2;
+        }
+
+        .score-pp {
+            display: flex;
+            justify-content: right;
+            align-items: center;
+            gap: 4px;
+
+            grid-column: 2 / 2;
+            grid-row: 1 / 3;
+        }
+
+        .pp-weight {
+            display: flex;
+            flex-direction: column;
+            align-items: end;
+            border-right: 1px solid white;
+            padding-right: 4px;
         }
 
         .pp-number {
             font-size: 2.2em;
             font-weight: bold;
             color: #fff;
-
-            display: flex;
-            justify-content: right;
-            align-items: center;
-
-            grid-column: 2 / 2;
-            grid-row: 1 / 3;
         }
 
         .hit-count span {
@@ -470,11 +485,13 @@
                             <span class="stat-label">Play Time</span>
                             <span class="stat-value"
                                   th:text="${#numbers.formatInteger(user.statistics.playTime / 3600, 1, 'COMMA')} + ' hrs'">450 hrs</span>
-                            <span class="stat-sub" th:text="'From ' + ${Users.getFormattedJoinDate(user)}">From May 2000</span>
+                            <span class="stat-sub"
+                                  th:text="'From ' + ${Users.getFormattedJoinDate(user)}">From May 2000</span>
                         </div>
                         <div class="stat-group">
                             <span class="stat-label">Play Count</span>
-                            <span class="stat-value" th:text="${#numbers.formatInteger(user.statistics.playCount, 1, 'COMMA')}">114,514</span>
+                            <span class="stat-value"
+                                  th:text="${#numbers.formatInteger(user.statistics.playCount, 1, 'COMMA')}">114,514</span>
                         </div>
 
                     </div>
@@ -482,7 +499,8 @@
                         <div class="stat-group">
                     <span class="stat-value"
                           th:text="'#' + ${#numbers.formatInteger(user.statistics.globalRank, 1, 'COMMA')}">#123,456,789</span>
-                            <span class="stat-sub" th:text="${user.countryCode} + ' #' + ${user.statistics.rank.country}">AU #150</span>
+                            <span class="stat-sub"
+                                  th:text="${user.countryCode} + ' #' + ${user.statistics.rank.country}">AU #150</span>
                         </div>
                     </div>
                 </div>
@@ -551,17 +569,30 @@
                 </div>
             </div>
             <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
-
+            <div class="score-status" th:text="${Scores.getScoreStatus(score)}">❤</div>
         </div>
         <div style="display: grid;">
             <span class="acc-number"
                   th:text="${#numbers.formatDecimal(score.accuracy * 100, 1, 2)} + '% ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
-            <div class="score-weight" th:text="'#' + ${iterstat.index + 1} + ' ' + ${Scores.getWeightPP(score)}">#1 ↪123.45pp</div>
-            <div class="pp-number"
-                  th:text="${score.pp != null ? #numbers.formatDecimal(score.pp, 1, 1) + 'pp' : '--pp'}">123pp</div>
+            <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
+                456 / 132 / 12 / 34
+            </div>
+            <div class="score-pp">
+                <div class="pp-weight" th:if="${Scores.hasWeight(score)}">
+                    <span th:text="${score.getWeight().getPercentage().intValue()} + '%'">100%</span>
+                    <span>123.45pp</span>
+                </div>
+                <div class="pp-number"
+                     th:text="${#numbers.formatDecimal(score.getWeight().getPp(), 1, 2)}">123pp
+                </div>
+            </div>
+
         </div>
         <div class="score-record">
-            <div class="score-id" th:text="'S' + ${score.getId()}">S1234567890</div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span th:text="'#' + ${iterstat.index + 1}">#1</span>
+                <div class="score-id" th:text="'S' + ${score.getId()}">S1234567890</div>
+            </div>
             <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
         </div>
     </div>
