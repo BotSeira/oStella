@@ -356,7 +356,6 @@
         }
 
         .user-stat {
-            display: flex;
             gap: 30px;
             margin: 16px 16px 16px 16px;
         }
@@ -693,49 +692,55 @@
         </div>
 
         <div class="user-stat">
-            <div class="stat-wrapper">
-                <div class="stat">
-                    <div class="stat-label">Pass%</div>
-                    <div class="progress-wrapper">
-                        <div class="progress-track">
-                            <div class="progress-fill" style="width: 23%;"
-                                 th:style="'width: ' + ${Beatmaps.getPassRate(beatmap)} + '%;'"></div>
+            <div style="display: flex;">
+                <div class="stat-wrapper">
+                    <div class="stat">
+                        <div class="stat-label">Pass%</div>
+                        <div class="progress-wrapper">
+                            <div class="progress-track">
+                                <div class="progress-fill" style="width: 23%;"
+                                     th:style="'width: ' + ${Beatmaps.getPassRate(beatmap)} + '%;'"></div>
+                            </div>
+                            <span class="progress-text"
+                                  th:text="${#numbers.formatDecimal(Beatmaps.getPassRate(beatmap), 1, 2)} + '%'">12.7%</span>
                         </div>
-                        <span class="progress-text"
-                              th:text="${#numbers.formatDecimal(Beatmaps.getPassRate(beatmap), 1, 2)} + '%'">12.7%</span>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Source</div>
+                        <span th:text="${Beatmapsets.getSourceString(beatmap.getBeatmapset())}">--</span>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Tags</div>
+                        <span th:text="${Beatmaps.getTagString(beatmap)}">tag tag tag tag tag tag tag tag tag tag tag tag tag tag tag</span>
                     </div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">Source</div>
-                    <span th:text="${Beatmapsets.getSourceString(beatmap.getBeatmapset())}">--</span>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">Tags</div>
-                    <span th:text="${Beatmaps.getTagString(beatmap)}">tag tag tag tag tag tag tag tag tag tag tag tag tag tag tag</span>
-                </div>
-                <div class="community-tags"
-                     th:if="${beatmap.getTopUserTagIds() != null and !beatmap.getTopUserTagIds().isEmpty()}">
-                    <div class="tag-badge" th:each="tag, iterStat : ${beatmap.getTopUserTagIds()}"
-                         th:if="${iterStat.index < 2}">
-                        <span class="tag-name"
-                              th:text="${Beatmapsets.getTagName(beatmap.getBeatmapset(), tag.getTagId())}">additions/combo colors</span>
-                        <span class="tag-num" th:text="${tag.getCount()}">123</span>
+                <div class="chart-row-layout">
+                    <div class="chart-wrapper" style="flex-grow: 1; height: 100px; position: relative;">
+                        <canvas id="failChart"></canvas>
+                    </div>
+                    <div class="side-legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #4bc0c0;"></div>
+                            <span>PP</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #ff4e6a;"></div>
+                            <span>Fails</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #9cff22;"></div>
+                            <span>Retries</span>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="chart-row-layout">
-                <div class="chart-wrapper" style="flex-grow: 1; height: 100px; position: relative;">
-                    <canvas id="failChart"></canvas>
-                </div>
-                <div class="side-legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #ff4e6a;"></div>
-                        <span>Fails</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #9cff22;"></div>
-                        <span>Retries</span>
-                    </div>
+            <div class="community-tags"
+                 th:if="${beatmap.getTopUserTagIds() != null and !beatmap.getTopUserTagIds().isEmpty()}">
+                <div class="tag-badge" th:each="tag, iterStat : ${beatmap.getTopUserTagIds()}"
+                     th:if="${iterStat.index < 4}">
+                        <span class="tag-name"
+                              th:text="${Beatmapsets.getTagName(beatmap.getBeatmapset(), tag.getTagId())}">additions/combo colors</span>
+                    <span class="tag-num" th:text="${tag.getCount()}">123</span>
                 </div>
             </div>
         </div>
@@ -750,17 +755,28 @@
 <script th:inline="javascript">
     const rawFailData = /*[[${beatmap.failtimes.fail}]]*/  [0, 134359, 224183, 133403, 75465, 23034, 38041, 9229];
     const rawExitData = /*[[${beatmap.failtimes.exit}]]*/ [0, 145492, 59974, 26000, 94668, 2179, 2453, 4931];
+    const rawDiffData = /*[[${calDiff}]]*/ [0, 0, 1.23, 6.77, 5.67, 23.25, 16.42, 3.32, 1.1];
 
-    let firstActivityIndex = 0;
+    let i1 = 0;
     for (let i = 0; i < rawFailData.length; i++) {
         if (rawFailData[i] > 0 || rawExitData[i] > 0) {
-            firstActivityIndex = i;
+            i1 = i;
             break;
         }
     }
 
-    const failData = rawFailData.slice(firstActivityIndex);
-    const retryData = rawExitData.slice(firstActivityIndex);
+    const failData = rawFailData.slice(i1);
+    const retryData = rawExitData.slice(i1);
+
+    let i2 = 0;
+    for (let i = 0; i < rawDiffData.length; i++) {
+        if (rawDiffData[i] > 0) {
+            i2 = i;
+            break;
+        }
+    }
+
+    const diffData = rawDiffData.slice(i2);
 
     for (let i = 0; i < retryData.length; i++) {
         retryData[i] = Math.max(0, retryData[i] - failData[i]);
@@ -775,20 +791,33 @@
             labels: failLabels,
             datasets: [
                 {
-                    label: 'Fails',
-                    data: failData,
-                    borderColor: '#ff4e6a', // Soft red
-                    backgroundColor: 'rgba(255, 78, 106, 0.4)',
+                    label: 'Density',
+                    data: diffData,
+                    yAxisID: 'y1',
+                    borderColor: '#4bc0c0',
+                    backgroundColor: 'rgba(75, 192, 192, 0)',
                     borderWidth: 2,
                     pointRadius: 0,
                     fill: true,
-                    tension: 0.4 // Keeps the curve smooth
+                    tension: 0.4
                 },
                 {
                     label: 'Retries',
                     data: retryData,
-                    borderColor: '#9cff22', // Warm yellow/orange
+                    yAxisID: 'y',
+                    borderColor: '#9cff22',
                     backgroundColor: 'rgb(148 255 34 / 0.4)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Fails',
+                    data: failData,
+                    yAxisID: 'y',
+                    borderColor: '#ff4e6a',
+                    backgroundColor: 'rgba(255, 78, 106, 0.4)',
                     borderWidth: 2,
                     pointRadius: 0,
                     fill: true,
@@ -799,17 +828,30 @@
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: false, // CRITICAL for Playwright headless screenshots!
+            animation: false,
             scales: {
-                x: {display: false}, // Hide grid and labels
-                y: {display: false}
+                x: {
+                    display: false
+                },
+                y: {
+                    type: 'linear',
+                    display: false,
+                    position: 'left'
+                },
+                y1: {
+                    type: 'linear',
+                    display: false,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
             },
             plugins: {
-                legend: {display: false},
-                tooltip: {enabled: false}
+                legend: { display: false },
+                tooltip: { enabled: false }
             },
-            // This ensures both lines blend nicely where they overlap
-            interaction: {mode: 'index', intersect: false}
+            interaction: { mode: 'index', intersect: false }
         }
     });
 </script>

@@ -13,12 +13,17 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.data.beatmap.WindowDifficulty;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
+
+import java.time.Duration;
+import java.util.List;
 
 import static xyz.zcraft.ostella.util.RequestUtil.requireLong;
 import static xyz.zcraft.ostella.util.RequestUtil.requirePathLong;
@@ -70,7 +75,12 @@ public class ScoreController {
                             LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
                         }
 
-                        return renderer.renderScore(score, diffSpec, calPp);
+                        final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds(3))
+                                .stream()
+                                .map(WindowDifficulty::pp)
+                                .toList();
+
+                        return renderer.renderScore(score, diffSpec, calPp, diff);
                     } catch (ParseException e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
                     } catch (AnalyzeException e) {

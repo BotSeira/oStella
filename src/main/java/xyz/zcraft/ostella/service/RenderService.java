@@ -145,11 +145,12 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
-    public byte[] renderScore(Score score, DiffSpec spec, Double calPp) {
+    public byte[] renderScore(Score score, DiffSpec spec, Double calPp, List<Double> diff) {
         Context ctx = createContext();
         ctx.setVariable("score", score);
         ctx.setVariable("diff", spec);
         ctx.setVariable("ppSafe", score.getPp() == null ? calPp : score.getPp());
+        ctx.setVariable("calDiff", diff);
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
         String finalHtml = templateEngine.process("single-score", ctx);
