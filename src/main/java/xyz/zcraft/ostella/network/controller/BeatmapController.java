@@ -202,7 +202,7 @@ public class BeatmapController {
                         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
                         DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, mod);
 
-                        final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds(3))
+                        final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) (osuBeatmap.getTotalLength() / 100)))
                                 .stream()
                                 .map(WindowDifficulty::pp)
                                 .toList();
