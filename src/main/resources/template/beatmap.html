@@ -753,42 +753,46 @@
 </div>
 
 <script th:inline="javascript">
+    function mapToPercentage(dataArray) {
+        const maxIndex = dataArray.length - 1;
+        if (maxIndex <= 0) return dataArray.map(y => ({x: 50, y}));
+
+        return dataArray.map((value, index) => {
+            return {
+                x: (index / maxIndex) * 100,
+                y: value
+            };
+        });
+    }
+
+    function getSliceIndex(dataArray) {
+        for (let i = 0; i < dataArray.length; i++) {
+            if (dataArray[i] > 0) {
+                return i;
+            }
+        }
+        return dataArray.length;
+    }
+
     const rawFailData = /*[[${beatmap.failtimes.fail}]]*/  [0, 134359, 224183, 133403, 75465, 23034, 38041, 9229];
     const rawExitData = /*[[${beatmap.failtimes.exit}]]*/ [0, 145492, 59974, 26000, 94668, 2179, 2453, 4931];
-    const rawDiffData = /*[[${calDiff}]]*/ [0, 0, 1.23, 6.77, 5.67, 23.25, 16.42, 3.32, 1.1];
+    const rawDiffData = /*[[${calDiff}]]*/ [0, 23.25, 16.42, 3.32, 1.1];
 
-    let i1 = 0;
-    for (let i = 0; i < rawFailData.length; i++) {
-        if (rawFailData[i] > 0 || rawExitData[i] > 0) {
-            i1 = i;
-            break;
-        }
-    }
+    const sliceIndex = Math.min(getSliceIndex(rawFailData), getSliceIndex(rawExitData));
 
-    const failData = rawFailData.slice(i1);
-    const retryData = rawExitData.slice(i1);
+    const failData = mapToPercentage(rawFailData.slice(sliceIndex));
+    const retryData = mapToPercentage(rawExitData.slice(sliceIndex));
 
-    let i2 = 0;
-    for (let i = 0; i < rawDiffData.length; i++) {
-        if (rawDiffData[i] > 0) {
-            i2 = i;
-            break;
-        }
-    }
-
-    const diffData = rawDiffData.slice(i2);
+    const diffData = mapToPercentage(rawDiffData.slice(getSliceIndex(rawDiffData)));
 
     for (let i = 0; i < retryData.length; i++) {
-        retryData[i] = Math.max(0, retryData[i] - failData[i]);
+        retryData[i].y = Math.max(0, retryData[i].y - failData[i].y);
     }
-
-    const failLabels = failData.map((_, index) => index);
 
     const failCtx = document.getElementById('failChart').getContext('2d');
     new Chart(failCtx, {
         type: 'line',
         data: {
-            labels: failLabels,
             datasets: [
                 {
                     label: 'Density',
@@ -799,7 +803,7 @@
                     borderWidth: 2,
                     pointRadius: 0,
                     fill: true,
-                    tension: 0.4
+                    tension: 0.2
                 },
                 {
                     label: 'Retries',
@@ -810,7 +814,7 @@
                     borderWidth: 2,
                     pointRadius: 0,
                     fill: true,
-                    tension: 0.4
+                    tension: 0.2
                 },
                 {
                     label: 'Fails',
@@ -821,7 +825,7 @@
                     borderWidth: 2,
                     pointRadius: 0,
                     fill: true,
-                    tension: 0.4
+                    tension: 0.2
                 }
             ]
         },
@@ -831,6 +835,9 @@
             animation: false,
             scales: {
                 x: {
+                    type: 'linear',
+                    min: 0,
+                    max: 100,
                     display: false
                 },
                 y: {
@@ -842,16 +849,14 @@
                     type: 'linear',
                     display: false,
                     position: 'right',
-                    grid: {
-                        drawOnChartArea: false
-                    }
+                    grid: {drawOnChartArea: false}
                 }
             },
             plugins: {
-                legend: { display: false },
-                tooltip: { enabled: false }
+                legend: {display: false},
+                tooltip: {enabled: false}
             },
-            interaction: { mode: 'index', intersect: false }
+            interaction: {mode: 'index', intersect: false}
         }
     });
 </script>
