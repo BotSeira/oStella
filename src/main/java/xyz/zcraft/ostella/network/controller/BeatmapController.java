@@ -204,7 +204,8 @@ public class BeatmapController {
 
                         final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) Math.max(3, (beatmap.getTotalLength() / 50.0))))
                                 .stream()
-                                .map(WindowDifficulty::starRating)
+                                .map(WindowDifficulty::pp)
+                                .map(pp -> pp * pp)
                                 .toList();
 
                         return renderer.renderBeatmap(beatmap, diffSpec, diff);
