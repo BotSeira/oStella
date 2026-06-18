@@ -167,9 +167,9 @@
         }
 
         .song-trans {
-            font-size: 1.6em;
+            font-size: 1.5em;
             font-family: serif;
-            margin-top: -4px;
+            margin-top: -1px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -556,8 +556,8 @@
         </div>
 
         <div class="meta">
-            <div class="song-title" th:text="${beatmap.beatmapset.title}">This Is An Example Song Title That
-                Is Too Long
+            <div class="song-title" th:text="${beatmap.beatmapset.title}">
+                This Is An Example Song Title That Is Too Long
             </div>
             <div class="title-sub">
                 <div class="song-trans"
@@ -567,8 +567,8 @@
                 </div>
                 <span style="color: #a0a0b8; font-size: 1.6em;" th:if="${Beatmapsets.hasTitleUnicode(beatmap.getBeatmapset())}">//</span>
                 <div class="song-artist" th:text="${beatmap.beatmapset.artist}">This Is An Example Artist</div>
-                <div class="beatmap-id" th:text="${'MS' + beatmap.beatmapset.id + ' - M' + beatmap.id}">MS123465 -
-                    M987654
+                <div class="beatmap-id" th:text="${'MS' + beatmap.beatmapset.id + ' - M' + beatmap.id}">
+                    MS123465 - M987654
                 </div>
             </div>
             <div class="diff">
@@ -794,12 +794,17 @@
     const rawExitData = /*[[${beatmap.failtimes.exit}]]*/ [0, 145492, 59974, 26000, 94668, 2179, 2453, 4931];
     const rawDiffData = /*[[${calDiff}]]*/ [0, 23.25, 16.42, 3.32, 1.1];
 
-    const sliceIndex = Math.min(getSliceIndex(rawFailData), getSliceIndex(rawExitData));
+    const sliceIndex = getSliceIndex(rawDiffData);
 
-    const failData = mapToPercentage(rawFailData.slice(sliceIndex));
-    const retryData = mapToPercentage(rawExitData.slice(sliceIndex));
+    const slicePercent = sliceIndex / (rawDiffData.length || 1);
 
-    const diffData = mapToPercentage(rawDiffData.slice(getSliceIndex(rawDiffData)));
+    const failStartIndex = Math.floor(rawFailData.length * slicePercent);
+    const retryStartIndex = Math.floor(rawExitData.length * slicePercent);
+
+    const failData = mapToPercentage(rawFailData.slice(failStartIndex));
+    const retryData = mapToPercentage(rawExitData.slice(retryStartIndex));
+
+    const diffData = mapToPercentage(rawDiffData.slice(sliceIndex));
 
     for (let i = 0; i < retryData.length; i++) {
         retryData[i].y = Math.max(0, retryData[i].y - failData[i].y);
