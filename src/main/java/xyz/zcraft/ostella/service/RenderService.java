@@ -166,7 +166,9 @@ public class RenderService implements AutoCloseable {
 
         ctx.setVariable("hitErrors", analyzeData.hitErrors());
         ctx.setVariable("hitPositions", analyzeData.hitPositions());
+        ctx.setVariable("hitPositionsAbsolute", analyzeData.hitPositionsAbsolute());
         ctx.setVariable("missPositions", analyzeData.missPositions());
+        ctx.setVariable("missPositionsAbsolute", analyzeData.missPositionsAbsolute());
         ctx.setVariable("aimBias", analyzeData.aimBias());
         ctx.setVariable("avgTimingError", analyzeData.avgTimingError());
         ctx.setVariable("analyze", analyzeData.replayAnalyze());
