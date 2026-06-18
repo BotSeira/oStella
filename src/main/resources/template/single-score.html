@@ -461,6 +461,8 @@
         <div class="map-info">
             <div class="song-title" th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
             <div class="song-artist">
+                <span th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}" style="font-family: serif;">标题</span>
+                <span th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}" style="color: #a0a0b8; margin: 0 8px;">//</span>
                 <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
                 <span style="color: #a0a0b8; margin: 0 8px;">//</span>
                 <span style="color: #a0a0b8;">By </span>

@@ -163,6 +163,16 @@
             display: flex;
             font-weight: lighter;
             margin-bottom: 6px;
+            gap: 8px;
+        }
+
+        .song-trans {
+            font-size: 1.6em;
+            font-family: serif;
+            margin-top: -4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .song-artist {
@@ -550,6 +560,12 @@
                 Is Too Long
             </div>
             <div class="title-sub">
+                <div class="song-trans"
+                     th:if="${Beatmapsets.hasTitleUnicode(beatmap.getBeatmapset())}"
+                     th:text="${beatmap.getBeatmapset().getTitleUnicode()}">
+                    标题
+                </div>
+                <span style="color: #a0a0b8; font-size: 1.6em;" th:if="${Beatmapsets.hasTitleUnicode(beatmap.getBeatmapset())}">//</span>
                 <div class="song-artist" th:text="${beatmap.beatmapset.artist}">This Is An Example Artist</div>
                 <div class="beatmap-id" th:text="${'MS' + beatmap.beatmapset.id + ' - M' + beatmap.id}">MS123465 -
                     M987654
