@@ -555,7 +555,7 @@
 <div class="grid-container">
     <div class="card" th:each="score, iterstat : ${scores}">
         <div class="song-cover">
-            <div class="rank-badge" th:style="'background:' + ${Scores.getRankColor(score)}" th:text="${score.rank}">
+            <div class="rank-badge" th:style="'background:' + ${Scores.getRankBgColor(score)}" th:text="${score.rank}">
                 SS
             </div>
             <div class="mod-badges" th:if="${score.mods != null and !score.mods.isEmpty()}">

@@ -79,8 +79,11 @@
             font-size: 8em;
             font-weight: 900;
             font-style: italic;
+            letter-spacing: -0.1em;
+
             line-height: 0.8;
             text-shadow: 0 4px 15px rgba(0, 0, 0, 0.8);
+
             margin-top: auto;
             margin-left: -5px;
         }
@@ -444,8 +447,8 @@
                 </div>
             </div>
 
-            <div class="grade-letter" th:style="'color: ' + ${Scores.getRankColor(score)}" th:text="${score.getRank()}">
-                S
+            <div class="grade-letter" th:style="'color: ' + ${Scores.getRankColor(score)}" th:text="${Scores.getRankText(score)}">
+                SS
             </div>
             <div class="id-info">
                 <div th:text="${'MS' + score.getBeatmapset().getId() + ' - ' + 'M' + score.getBeatmap().getId()}">

@@ -45,10 +45,24 @@ public class Colors {
         return "#394246";
     }
 
-    public static String getScoreRankColor(String rank) {
+    public static String getScoreRankBgColor(String rank) {
         return switch (rank) {
             case "X", "XH" -> "#de31ae";
-            case "SH", "S" -> "#00a8b5";
+            case "S", "SH" -> "#00a8b5";
+            case "A" -> "#88da20";
+            case "B" -> "#ebbd48";
+            case "C" -> "#ff8e5d";
+            case "D" -> "#ff5a5a";
+            case "F" -> "#fe004f";
+            default -> "#FFFFFF";
+        };
+    }
+
+    public static String getScoreRankColor(String rank) {
+        return switch (rank) {
+            case "XH", "SH" -> "#eaeaea";
+            case "X" -> "#de31ae";
+            case "S" -> "#00a8b5";
             case "A" -> "#88da20";
             case "B" -> "#ebbd48";
             case "C" -> "#ff8e5d";

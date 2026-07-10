@@ -1,43 +1,11 @@
 package xyz.zcraft.ostella.util;
 
+import com.google.gson.JsonObject;
+
 import java.time.Duration;
 import java.time.Instant;
 
 public class MiscUtil {
-    public static boolean isInteger(String... str) {
-        for (String s : str) {
-            try {
-                Integer.parseInt(s);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public static boolean isDouble(String... str) {
-        for (String s : str) {
-            try {
-                Double.parseDouble(s);
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    public static boolean notNumber(String... str) {
-        for (String s : str) {
-            if (s == null) return true;
-            try {
-                Long.parseLong(s);
-            } catch (NumberFormatException e) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     public static String getRelativeTimeAgo(String isoTimestamp) {
         Instant pastTime = Instant.parse(isoTimestamp);
         Instant now = Instant.now();
@@ -64,5 +32,21 @@ public class MiscUtil {
             return "just now";
         }
         return seconds + " secs ago";
+    }
+
+    public static JsonObject deepMergeJson(JsonObject first, JsonObject... others) {
+        JsonObject merged = first.deepCopy();
+        for (JsonObject other : others) {
+            for (String key : other.keySet()) {
+                if (merged.has(key)) {
+                    if (merged.get(key).isJsonObject() && other.get(key).isJsonObject()) {
+                        merged.add(key, deepMergeJson(merged.getAsJsonObject(key), other.getAsJsonObject(key)));
+                    }
+                } else {
+                    merged.add(key, other.get(key));
+                }
+            }
+        }
+        return merged;
     }
 }

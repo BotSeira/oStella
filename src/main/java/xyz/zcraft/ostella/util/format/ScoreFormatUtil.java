@@ -35,6 +35,22 @@ public class ScoreFormatUtil {
         return score == null ? "#d0d0d0" : Colors.getScoreRankColor(score.getRank());
     }
 
+    public static String getRankBgColor(Score score) {
+        return score == null ? "#d0d0d0" : Colors.getScoreRankBgColor(score.getRank());
+    }
+
+    public static String getRankText(Score score) {
+        if ("XH".equalsIgnoreCase(score.getRank())) {
+            return "SS";
+        } else if ("X".equalsIgnoreCase(score.getRank())) {
+            return "SS";
+        } else if ("SH".equalsIgnoreCase(score.getRank())) {
+            return "S";
+        } else {
+            return score.getRank();
+        }
+    }
+
     public static String getModString(Score score) {
         if (score == null || score.getMods() == null || score.getMods().isEmpty()) {
             return "[NM]";
