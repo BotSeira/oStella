@@ -96,30 +96,39 @@ public class AnalyzeController {
                             .map(HitEvent::hitTimeOffset)
                             .toList();
 
-                    final List<double[]> hitPos = analyze.events().stream()
+                    final List<HitEvent.AimBias> aimBiasAbs = analyze.events().stream()
                             .filter(HitEvent::wasHit)
                             .filter(e -> e.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
                             .map(HitEvent::aimBias)
                             .filter(Objects::nonNull)
+                            .toList();
+
+                    final List<double[]> hitPos = aimBiasAbs.stream()
                             .map(HitEvent.AimBias::standardize)
                             .map(b -> new double[]{b.theta(), b.distance()})
                             .toList();
 
-                    final List<double[]> missPos = analyze.events().stream()
+                    final List<double[]> hitPosAbs = aimBiasAbs.stream()
+                            .map(b -> new double[]{b.theta(), b.distance()})
+                            .toList();
+
+                    final List<HitEvent.AimBias> misses = analyze.events().stream()
                             .filter(hitEvent -> !hitEvent.wasHit())
                             .filter(e -> e.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
                             .map(HitEvent::aimBias)
                             .filter(Objects::nonNull)
-                            .filter(b -> b.distance() < diffSpec.getDifficulty().getCircleRadiusInPixel() * 1.2)
+                            .filter(b -> b.distance() < diffSpec.getDifficulty().getCircleRadiusInPixel() * 1.2).toList();
+
+                    final List<double[]> missPosAbs = misses.stream()
+                            .map(b -> new double[]{b.theta(), b.distance()})
+                            .toList();
+
+                    final List<double[]> missPos = misses.stream()
                             .map(HitEvent.AimBias::standardize)
                             .map(b -> new double[]{b.theta(), b.distance()})
                             .toList();
 
-                    final List<Double> aimBiases = analyze.events().stream()
-                            .filter(HitEvent::wasHit)
-                            .filter(e -> e.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
-                            .map(HitEvent::aimBias)
-                            .filter(Objects::nonNull)
+                    final List<Double> aimBiases = aimBiasAbs.stream()
                             .map(HitEvent.AimBias::standardize)
                             .map(b -> b.distance() * (Math.abs(b.theta() - Math.PI) >= (Math.PI / 2) ? 1 : -1))
                             .toList();
@@ -127,7 +136,7 @@ public class AnalyzeController {
                     final double aimBias = aimBiases.isEmpty() ? 0.0 : (aimBiases.stream().reduce(0.0, Double::sum) / aimBiases.size() / diffSpec.getDifficulty().getCircleRadiusInPixel());
 
                     final double avgTimingError = hitErrors.isEmpty() ? 0.0 : (hitErrors.stream().reduce(0L, Long::sum) / (double) hitErrors.size());
-                    return new ScoreAnalyzeData(score, diffSpec, hitErrors, hitPos, missPos, aimBias, avgTimingError, analyze);
+                    return new ScoreAnalyzeData(score, diffSpec, hitErrors, hitPos, hitPosAbs, missPos, missPosAbs, aimBias, avgTimingError, analyze);
                 })
                 .thenApplyAsync(renderer::renderScoreAnalysis, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
@@ -219,7 +228,9 @@ public class AnalyzeController {
             DiffSpec diffSpec,
             List<Long> hitErrors,
             List<double[]> hitPositions,
+            List<double[]> hitPositionsAbsolute,
             List<double[]> missPositions,
+            List<double[]> missPositionsAbsolute,
             double aimBias,
             double avgTimingError,
             ReplayAnalyze replayAnalyze

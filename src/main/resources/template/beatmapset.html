@@ -99,8 +99,24 @@
         }
 
         .set-title {
+            display: flex;
+            gap: 16px;
+            align-items: end;
+        }
+
+        .title-main {
             font-size: 2.6em;
             font-weight: 900;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+        }
+
+        .title-sub {
+            font-family: serif;
+            font-size: 1.5em;
+            font-weight: lighter;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -204,6 +220,7 @@
             display: flex;
             width: 90px;
             height: 30px;
+            min-width: 90px;
             text-align: center;
             border-radius: 999px;
             font-weight: 900;
@@ -303,7 +320,10 @@
             <div class="badge-spotlight" th:if="${beatmapset.spotlight}">SPOTLIGHT</div>
         </div>
         <div class="banner-overlay">
-            <div class="set-title" th:text="${beatmapset.title}">No title</div>
+            <div class="set-title">
+                <div class="title-main" th:text="${beatmapset.getTitle()}">Example Title Here</div>
+                <div class="title-sub" th:if="${Beatmapsets.hasTitleUnicode(beatmapset)}" th:text="${beatmapset.getTitleUnicode()}">小标题</div>
+            </div>
             <div class="set-subtitle">
                 <div class="set-artist" th:text="${beatmapset.artist}">Reol</div>
                 <div class="set-id" th:text="${'MS' + beatmapset.id}">MS320118</div>
@@ -370,8 +390,8 @@
 
 
             <div class="diff-info">
-                <div class="diff-version" th:text="${bm.version}">Insane</div>
-                <div class="diff-mapper" th:text="${'Mapped by ' + Beatmaps.getOwnersString(bm)}">Mapped by VINXIS</div>
+                <div class="diff-version" th:text="${bm.version}">Example Name</div>
+                <div class="diff-mapper" th:text="${'Mapped by ' + Beatmaps.getOwnersString(bm)}">Mapped by Example Mapper</div>
             </div>
 
             <div class="diff-stats">

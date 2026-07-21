@@ -7,6 +7,11 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class BeatmapsetFormatUtil {
+    public static boolean hasTitleUnicode(Beatmapset beatmapset) {
+        if (beatmapset == null) return false;
+        return !Objects.equals(beatmapset.getTitle(), beatmapset.getTitleUnicode());
+    }
+
     public static String getTagName(Beatmapset beatmapset, int id) {
         if (beatmapset == null || beatmapset.getRelatedTags() == null) {
             return null;

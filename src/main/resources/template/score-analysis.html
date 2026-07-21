@@ -60,11 +60,19 @@
         }
 
         .mod-badge {
-            font-weight: 900;
-            font-size: 1.2em;
-            padding: 6px 16px;
-            border-radius: 100px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+            display: grid;
+            place-items: center;
+        }
+
+        .mod-back {
+            grid-area: 1 / 1;
+            z-index: 1;
+        }
+
+        .mod-icon {
+            grid-area: 1 / 1;
+            z-index: 2;
+            filter: brightness(0) saturate(100%) invert(16%) sepia(7%) saturate(5011%) hue-rotate(314deg) brightness(107%) contrast(101%);
         }
 
         .score-info {
@@ -231,7 +239,7 @@
         }
 
         .data-primary {
-            font-size: 2.2em;
+            font-size: 2.1em;
             font-weight: 900;
         }
 
@@ -258,6 +266,10 @@
             padding: 16px;
             display: flex;
             flex-direction: column;
+        }
+
+        .chart-box.aim-bias {
+            margin-bottom: -20px;
         }
 
         .chart-title {
@@ -325,6 +337,14 @@
             height: 40px;
             margin-top: 8px;
         }
+
+        .aim-heatmap {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin-top: -30px;
+            rotate: -45deg;
+        }
     </style>
 </head>
 <body>
@@ -335,9 +355,13 @@
          th:style="'background-image: url(' + ${cache.getImageSrc(score.getBeatmapset().getCovers().getSlimcover())} + ');'">
         <div class="hero-overlay">
             <div class="mod-badges" th:if="${diff.isModded()}">
-                <div class="mod-badge" th:each="amod : ${score.getMods()}"
-                     th:style="'background: ' + ${Mods.getColorHex(amod)} + '; color: ' + ${Mods.getTextColorHex(amod)} + ';'"
-                     th:text="${amod.getAcronym()}">HD
+                <div class="mod-badge" th:each="amod : ${score.getMods()}">
+                    <svg class="mod-back" width="50" height="50" fill="#ff6666"
+                         th:style="'fill: ' + ${Mods.getColorHex(amod)}" viewBox="0 -14 100 100">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <img class="mod-icon" src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" alt="mod" width="45" height="45">
                 </div>
             </div>
             <div class="meta-row">
@@ -404,10 +428,7 @@
                      th:text="${#numbers.formatDecimal(score.getAccuracy() * 100, 1, 2)} + '%'">85.42%
                 </div>
                 <div class="data-sub"
-                     th:text="${Scores.getGreatCount(score)}
-                                + ' / ' + ${Scores.getOkCount(score)}
-                                + ' / ' + ${Scores.getMehCount(score)}
-                                + ' / ' + ${Scores.getMissCount(score)}">456 / 78 / 9 / 10
+                     th:text="${Scores.getHitResultString(score)}">456 / 78 / 9 / 10
                 </div>
             </div>
         </div>
@@ -448,23 +469,12 @@
             </div>
         </div>
 
-        <div class="chart-box aim-bias" style="flex: 1;">
-            <div class="chart-title">Accuracy Heatmap</div>
-            <div class="chart-content">
-                <div style="position: relative; width: 240px; height: 240px; margin-top: -20px; rotate: -45deg;">
-                    <div id="aimGridHeatmap" style="width: 100%; height: 100%;"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="charts-container">
         <div class="chart-box" style="flex: 1;">
-            <div class="chart-title">Analysis Summary</div>
+            <div class="chart-title">Timing Summary</div>
             <div class="chart-content" style="align-items: stretch;">
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 100%;">
+                <div style="display: flex; flex-direction: column; gap: 12px; width: 100%;">
                     <div class="data-block"
-                         style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 10px;">
+                         style="align-items: center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 10px;">
                         <div class="data-label">Unstable Rate</div>
                         <div class="data-primary" th:text="${#numbers.formatDecimal(analyze.unstableRate(), 1, 2)}">
                             123.45
@@ -472,36 +482,60 @@
                     </div>
 
                     <div class="data-block"
-                         style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 10px; align-items: flex-end; text-align: right;">
-                        <div class="data-label">Avg. Timing Error</div>
+                         style="padding: 12px; background: rgba(255,255,255,0.03); border-radius: 10px; align-items: center; text-align: right;">
+                        <div class="data-label">Avg. Error</div>
                         <div class="data-primary"
                              th:text="${avgTimingError > 0 ? '+' : ''} + ${#numbers.formatDecimal(avgTimingError, 1, 2)} + 'ms'">
                             +12.34ms
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                    <div class="data-block"
-                         style="grid-column: 1 / 3; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 10px; align-items: center; text-align: center;">
-                        <div class="data-label">Aiming Bias</div>
-                        <div class="aim-bias">
-                            <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
-                                <span>Undershoot</span>
-                                <div class="aim-bias-bar-wrap">
-                                    <div class="aim-bias-bar"></div>
-                                    <div class="aim-bias-mark" style="left: 25.85%;"
-                                         th:style="'left: ' + ${#numbers.formatDecimal(((aimBias + 1) / 2.0) * 100, 1, 1)} + '%;'">
-                                        <div class="aim-bias-arrow"></div>
-                                        <span th:text="${#numbers.formatDecimal((aimBias < 0 ? -aimBias : aimBias) * 100, 1, 2)} + '% '
+    <div class="charts-container">
+        <div class="chart-box aim-bias" style="flex: 1;">
+            <div class="chart-title">Accuracy Heatmap</div>
+            <div class="chart-content">
+                <div class="aim-heatmap" style="rotate: none;">
+                    <div id="aimGridHeatmapOrig" style="width: 100%; height: 100%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="chart-box aim-bias" style="flex: 1;">
+            <div class="chart-title">Standardized Heatmap</div>
+            <div class="chart-content">
+                <div class="aim-heatmap">
+                    <div id="aimGridHeatmap" style="width: 100%; height: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="chart-box" style="flex: 1; margin: 0 24px 12px 24px;">
+        <div class="chart-content" style="align-items: stretch;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 100%;">
+                <div class="data-block"
+                     style="grid-column: 1 / 3; padding: 12px; border-radius: 10px; align-items: center; text-align: center;">
+                    <div class="data-label">Aiming Bias</div>
+                    <div class="aim-bias">
+                        <div style="display: flex; gap: 8px; justify-content: center; align-items: center;">
+                            <span>Undershoot</span>
+                            <div class="aim-bias-bar-wrap">
+                                <div class="aim-bias-bar"></div>
+                                <div class="aim-bias-mark" style="left: 25.85%;"
+                                     th:style="'left: ' + ${#numbers.formatDecimal(((aimBias + 1) / 2.0) * 100, 1, 1)} + '%;'">
+                                    <div class="aim-bias-arrow"></div>
+                                    <span th:text="${#numbers.formatDecimal((aimBias < 0 ? -aimBias : aimBias) * 100, 1, 2)} + '% '
                                                      + ${(aimBias < 0 ? 'Undershoot' : 'Overshoot')}">23.45% Undershoot</span>
-                                    </div>
-                                    <div class="aim-bias-mark" style="left: 50%;">
-                                        <div class="aim-bias-arrow-zero"></div>
-                                    </div>
                                 </div>
-                                <span>Overshoot</span>
+                                <div class="aim-bias-mark" style="left: 50%;">
+                                    <div class="aim-bias-arrow-zero"></div>
+                                </div>
                             </div>
-
+                            <span>Overshoot</span>
                         </div>
+
                     </div>
                 </div>
             </div>
@@ -598,7 +632,7 @@
     }
 </script>
 
-<!-- ACCURACY HEATMAP -->
+<!-- STANDARDIZED HEATMAP -->
 <script th:inline="javascript">
     const hitPos = /*[[${hitPositions}]]*/ [
         [-0.000000, 7.940422], [1.869563, 5.515452], [1.824474, 5.916956], [3.208178, 25.016224], [3.851322, 27.779473], [6.056345, 11.629703], [2.029581, 0.761582], [3.894133, 16.871585], [3.525496, 20.130083], [0.322148, 6.530686], [3.983904, 20.554797], [3.845686, 8.188412], [5.461438, 9.234698], [1.771344, 4.792683], [5.657664, 7.683718], [0.231709, 36.748337], [6.000701, 10.704187], [4.944635, 16.075148], [5.750863, 11.000015], [3.182934, 18.409226], [5.201930, 11.092348], [3.046876, 16.658050], [1.624561, 13.000000], [4.039570, 25.448390], [0.415945, 14.360010], [0.555110, 7.354602], [3.382145, 10.358575], [4.657584, 1.664336], [4.166951, 19.030775], [2.339390, 19.948448], [5.195112, 14.641367], [2.590772, 14.115251], [2.379600, 17.650209], [3.993122, 4.947718], [2.808835, 14.612341], [3.338987, 18.748885], [3.288674, 9.042687], [3.278401, 6.512298], [3.583298, 10.090102], [2.775023, 4.294185], [1.234117, 6.276927], [2.183333, 6.395315], [0.164630, 18.227991], [3.283490, 15.999985], [3.309925, 17.367771], [3.547966, 10.307791], [5.966673, 29.848499], [3.159270, 23.418368], [1.163304, 21.410748], [1.913014, 16.832392], [4.726766, 11.649885], [2.792821, 14.897646], [5.563435, 5.899994], [3.254031, 15.623722], [1.353683, 9.847851], [2.209442, 15.108290], [3.957031, 9.192368], [3.330566, 13.174584], [3.782890, 28.448535], [2.422010, 15.079131], [2.236844, 22.465957], [2.750844, 5.635604], [2.214877, 22.109735], [2.874464, 16.020631], [2.713551, 6.989264], [2.230636, 18.159302], [3.063875, 16.324830], [1.773036, 7.592746], [4.140593, 25.083276], [3.060936, 30.717599], [3.152231, 26.588702], [4.840214, 7.083787], [2.155143, 6.862224], [5.897998, 33.342468], [0.668407, 9.066972], [3.476602, 11.605620], [1.907470, 5.700892], [2.843093, 9.617706], [5.431529, 1.345353], [3.026246, 15.530946], [3.002785, 25.599991], [0.892298, 9.159148], [3.804497, 8.261974], [0.599972, 10.007988], [3.500613, 13.994675], [1.783362, 14.220077], [3.358536, 10.259152], [3.724565, 13.384312], [0.499896, 4.884660], [0.325533, 5.818086], [2.920116, 34.940663], [4.824963, 14.809774], [4.872821, 14.227095], [2.159115, 23.613561], [4.521095, 16.378329], [3.753505, 12.401622], [5.696002, 2.009975], [4.809965, 14.712241], [2.877788, 16.592150], [5.088715, 22.262294], [2.723287, 12.952256], [3.395932, 8.962710], [2.186137, 18.141691], [2.296614, 6.293650], [5.865924, 24.880898], [2.037943, 33.428278], [1.001747, 22.675309], [4.681948, 10.630151], [5.990473, 30.974172], [0.020188, 22.507967], [2.337178, 14.103189], [0.049658, 5.821530], [6.222823, 21.718635], [2.099896, 14.743472], [5.330897, 19.535842], [4.074068, 24.565204], [3.638560, 28.476305], [4.675685, 24.460804], [2.482377, 5.883048], [2.999601, 26.970359], [5.397034, 17.182842], [3.580484, 13.309398], [5.534217, 14.094330], [3.440267, 34.091788], [5.415288, 12.549490], [3.610047, 22.002030], [2.041340, 2.817808], [4.861291, 24.014182], [0.712098, 7.545184], [3.221191, 11.335789], [5.908138, 26.023054], [3.725641, 13.369011], [4.029222, 26.504712], [3.200442, 10.478546], [5.176535, 4.428315], [3.206491, 13.290971], [4.194515, 8.015612], [4.653630, 6.020820], [4.080535, 8.499994], [4.960564, 6.152225], [2.786245, 5.675384], [2.962492, 3.306065], [3.100433, 15.357413], [5.304033, 17.026128], [0.612316, 3.220247], [5.127959, 13.548408], [1.573610, 6.462196], [5.362985, 9.042661], [5.742516, 8.149229], [4.985518, 16.025280], [5.729292, 11.112599], [5.521593, 6.708190], [1.817530, 21.617806], [1.479273, 25.828850], [0.480056, 17.987749], [3.178994, 36.156617], [1.954069, 30.545875], [5.976863, 30.423699], [5.654870, 20.299992], [5.927002, 6.435054], [4.438184, 29.724907], [6.032743, 25.107782], [5.963547, 21.153245], [3.726650, 14.317821], [5.297920, 9.219542], [2.702926, 24.250796], [3.344289, 10.746626], [0.060173, 20.068393], [0.942087, 1.941615], [4.933634, 3.712153], [0.999498, 10.296095], [1.979384, 14.940219], [4.260380, 13.038405], [4.505428, 17.541095], [3.021334, 15.979047], [4.231126, 26.627242], [2.082413, 8.839130], [5.118297, 12.593662], [0.861763, 14.404503], [3.542723, 20.171770], [4.234457, 22.138209], [4.079328, 24.382377]
@@ -750,70 +784,212 @@
         ]
     });
 
-    function drawAccessories() {
-        const x0 = aimGridChart.convertToPixel({xAxisIndex: 1}, 0);
-        const y0 = aimGridChart.convertToPixel({yAxisIndex: 1}, 0);
-        const xr = aimGridChart.convertToPixel({xAxisIndex: 1}, radius);
+    function drawAccessories(chart, axis) {
+        const x0 = chart.convertToPixel({xAxisIndex: 1}, 0);
+        const y0 = chart.convertToPixel({yAxisIndex: 1}, 0);
+        const xr = chart.convertToPixel({xAxisIndex: 1}, radius);
         const rPx = Math.abs(xr - x0);
+        let graphic = [];
 
-        aimGridChart.setOption({
-            graphic: [
-                {
-                    type: 'circle',
-                    id: 'aim-ring',
-                    silent: true,
-                    z: 2,
-                    shape: {
-                        cx: x0,
-                        cy: y0,
-                        r: rPx
-                    },
-                    style: {
-                        fill: 'none',
-                        stroke: 'rgba(255, 255, 255, 1)',
-                        lineWidth: 1
-                    }
-                },
-                {
-                    type: 'text',
-                    id: 'undershoot-label',
-                    left: '1%',
-                    top: '50%',
-                    z: 2,
-                    rotation: Math.PI * -0.25,
-                    style: {
-                        text: 'Undershoot',
-                        fill: '#ffffff',
-                        font: '12px "Dejavu Sans", Tahoma, sans-serif',
-                        textAlign: 'left',
-                        textVerticalAlign: 'middle',
-                        opacity: 0.85
-                    }
-                },
-                {
-                    type: 'text',
-                    id: 'overshoot-label',
-                    right: '1%',
-                    top: '35%',
-                    z: 2,
-                    rotation: Math.PI * -0.25,
-                    style: {
-                        text: 'Overshoot',
-                        fill: '#ffffff',
-                        font: '12px "Dejavu Sans", Tahoma, sans-serif',
-                        textAlign: 'right',
-                        textVerticalAlign: 'middle',
-                        opacity: 0.85
-                    }
+        graphic.push({
+            type: 'circle',
+            id: 'aim-ring',
+            silent: true,
+            z: 2,
+            shape: {
+                cx: x0,
+                cy: y0,
+                r: rPx
+            },
+            style: {
+                fill: 'none',
+                stroke: 'rgba(255, 255, 255, 1)',
+                lineWidth: 1
+            }
+        });
+
+        if (axis) {
+            graphic.push({
+                type: 'text',
+                id: 'undershoot-label',
+                left: '1%',
+                top: '50%',
+                z: 2,
+                rotation: Math.PI * -0.25,
+                style: {
+                    text: 'Undershoot',
+                    fill: '#ffffff',
+                    font: '12px "Dejavu Sans", Tahoma, sans-serif',
+                    textAlign: 'left',
+                    textVerticalAlign: 'middle',
+                    opacity: 0.85
                 }
-            ]
+            },{
+                type: 'text',
+                id: 'overshoot-label',
+                right: '1%',
+                top: '35%',
+                z: 2,
+                rotation: Math.PI * -0.25,
+                style: {
+                    text: 'Overshoot',
+                    fill: '#ffffff',
+                    font: '12px "Dejavu Sans", Tahoma, sans-serif',
+                    textAlign: 'right',
+                    textVerticalAlign: 'middle',
+                    opacity: 0.85
+                }
+            });
+        }
+
+        chart.setOption({
+            graphic: graphic
         });
     }
 
-    drawAccessories();
+    drawAccessories(aimGridChart, true);
     window.addEventListener('resize', () => {
         aimGridChart.resize();
-        drawAccessories();
+        drawAccessories(aimGridChart);
+    });
+</script>
+
+<!-- ACCURACY HEATMAP -->
+<script th:inline="javascript">
+    const hitPosAbs = /*[[${hitPositionsAbsolute}]]*/ [
+        [6.056345, 11.629703], [2.029581, 0.761582], [5.461438, 9.234698], [1.771344, 4.792683], [5.657664, 7.683718], [0.231709, 36.748337], [6.000701, 10.704187], [4.944635, 16.075148], [5.750863, 11.000015], [3.182934, 18.409226], [5.201930, 11.092348], [3.046876, 16.658050], [1.624561, 13.000000], [4.039570, 25.448390], [0.415945, 14.360010], [0.555110, 7.354602], [3.382145, 10.358575], [4.657584, 1.664336], [4.166951, 19.030775], [2.339390, 19.948448], [5.195112, 14.641367], [2.590772, 14.115251], [2.379600, 17.650209], [3.993122, 4.947718], [2.808835, 14.612341], [3.338987, 18.748885], [3.288674, 9.042687], [3.278401, 6.512298], [3.583298, 10.090102], [2.775023, 4.294185], [1.234117, 6.276927], [2.183333, 6.395315], [0.164630, 18.227991], [3.283490, 15.999985], [3.309925, 17.367771], [3.547966, 10.307791], [5.966673, 29.848499], [3.159270, 23.418368], [1.163304, 21.410748], [1.913014, 16.832392], [4.726766, 11.649885], [2.792821, 14.897646], [5.563435, 5.899994], [3.254031, 15.623722], [1.353683, 9.847851], [2.209442, 15.108290], [3.957031, 9.192368], [3.330566, 13.174584], [3.782890, 28.448535], [2.422010, 15.079131], [2.236844, 22.465957], [2.750844, 5.635604], [2.214877, 22.109735], [2.874464, 16.020631], [2.713551, 6.989264], [2.230636, 18.159302], [3.063875, 16.324830], [1.773036, 7.592746], [4.140593, 25.083276], [3.060936, 30.717599], [3.152231, 26.588702], [4.840214, 7.083787], [2.155143, 6.862224], [5.897998, 33.342468], [0.668407, 9.066972], [3.476602, 11.605620], [1.907470, 5.700892], [2.843093, 9.617706], [5.431529, 1.345353], [3.026246, 15.530946], [3.002785, 25.599991], [0.892298, 9.159148], [3.804497, 8.261974], [0.599972, 10.007988], [3.500613, 13.994675], [1.783362, 14.220077], [3.358536, 10.259152], [3.724565, 13.384312], [0.499896, 4.884660], [0.325533, 5.818086], [2.920116, 34.940663], [4.824963, 14.809774], [4.872821, 14.227095], [2.159115, 23.613561], [4.521095, 16.378329], [3.753505, 12.401622], [5.696002, 2.009975], [4.809965, 14.712241], [2.877788, 16.592150], [5.088715, 22.262294], [2.723287, 12.952256], [3.395932, 8.962710], [2.186137, 18.141691], [2.296614, 6.293650], [5.865924, 24.880898], [2.037943, 33.428278], [1.001747, 22.675309], [4.681948, 10.630151], [5.990473, 30.974172], [0.020188, 22.507967], [2.337178, 14.103189], [0.049658, 5.821530], [6.222823, 21.718635], [2.099896, 14.743472], [5.330897, 19.535842], [4.074068, 24.565204], [3.638560, 28.476305], [4.675685, 24.460804], [2.482377, 5.883048], [2.999601, 26.970359], [5.397034, 17.182842], [3.580484, 13.309398], [5.534217, 14.094330], [3.440267, 34.091788], [5.415288, 12.549490], [3.610047, 22.002030], [2.041340, 2.817808], [4.861291, 24.014182], [0.712098, 7.545184], [3.221191, 11.335789], [5.908138, 26.023054], [3.725641, 13.369011], [4.029222, 26.504712], [3.200442, 10.478546], [5.176535, 4.428315], [3.206491, 13.290971], [4.194515, 8.015612], [4.653630, 6.020820], [4.080535, 8.499994], [4.960564, 6.152225], [2.786245, 5.675384], [2.962492, 3.306065], [3.100433, 15.357413], [5.304033, 17.026128], [0.612316, 3.220247], [5.127959, 13.548408], [1.573610, 6.462196], [5.362985, 9.042661], [5.742516, 8.149229], [4.985518, 16.025280], [5.729292, 11.112599], [5.521593, 6.708190], [1.817530, 21.617806], [1.479273, 25.828850], [0.480056, 17.987749], [3.178994, 36.156617], [1.954069, 30.545875], [5.976863, 30.423699], [5.654870, 20.299992], [5.927002, 6.435054], [4.438184, 29.724907], [6.032743, 25.107782], [5.963547, 21.153245], [3.726650, 14.317821], [5.297920, 9.219542], [2.702926, 24.250796], [3.344289, 10.746626], [0.060173, 20.068393], [0.942087, 1.941615], [4.933634, 3.712153], [0.999498, 10.296095], [1.979384, 14.940219], [4.260380, 13.038405], [4.505428, 17.541095], [3.021334, 15.979047], [4.231126, 26.627242], [2.082413, 8.839130], [5.118297, 12.593662], [0.861763, 14.404503], [3.542723, 20.171770], [4.234457, 22.138209], [4.079328, 24.382377]
+    ];
+
+    const missPosAbs = /*[[${missPositionsAbsolute}]]*/ [
+        [3.581791, 40.933352], [3.427709, 38.473104], [4.645075, 41.900024], [1.496989, 38.525305]
+    ];
+
+    const accumAbs = Array.from({length: N}, () => new Array(N).fill(0));
+
+    for (const item of hitPosAbs) {
+        const theta = item[0];
+        const rVal = item[1];
+        const [x, y] = polarToCartesian(theta, rVal);
+        const xi = coordToIndexFloor(x);
+        const yi = coordToIndexFloor(y);
+        accumAbs[xi][yi] += 1;
+    }
+
+    const mappedGridDataAbs = [];
+    let maxDensityAbs = 0;
+
+    for (let i = 0; i < N; i++) {
+        for (let j = 0; j < N; j++) {
+            const v = accumAbs[i][j];
+            if (v > 0) {
+                mappedGridDataAbs.push([i, j, v]);
+                if (v > maxDensityAbs) maxDensityAbs = v;
+            }
+        }
+    }
+
+    const mappedMissDataAbs = missPosAbs.map(([theta, r]) => polarToCartesian(theta, r));
+
+    const aimGridChartAbs = echarts.init(document.getElementById('aimGridHeatmapOrig'), 'dark');
+
+    aimGridChartAbs.setOption({
+        backgroundColor: 'transparent',
+        animation: false,
+        grid: {left: '10%', right: '10%', top: '10%', bottom: '10%'},
+
+        xAxis: [
+            {
+                type: 'category',
+                data: gridIndices,
+                z: 10,
+                show: true,
+                axisLine: {
+                    show: true,
+                    lineStyle: {color: '#ffffff'},
+                    symbol: ['none', 'arrow']
+                },
+                axisTick: {show: false},
+                splitLine: {show: false},
+                axisLabel: {show: false}
+            },
+            {
+                type: 'value',
+                min: -radius * 1.25,
+                max: radius * 1.25,
+                show: false
+            }
+        ],
+        yAxis: [
+            {
+                type: 'category',
+                data: gridIndices,
+                show: true,
+                z: 9,
+                axisLine: {
+                    show: true,
+                    lineStyle: {color: '#ffffff'},
+                    symbol: ['none', 'arrow']
+                },
+                axisTick: {show: false},
+                splitLine: {show: false},
+                axisLabel: {show: false}
+            },
+            {
+                type: 'value',
+                min: -radius * 1.25,
+                max: radius * 1.25,
+                show: false
+            }
+        ],
+
+        visualMap: {
+            min: 0,
+            max: maxDensityAbs,
+            calculable: false,
+            show: false,
+            seriesIndex: 0,
+            inRange: {
+                color: ['#253630', '#3f8f7c', '#6affd5']
+            }
+        },
+
+        series: [
+            {
+                name: 'Hits',
+                type: 'heatmap',
+                xAxisIndex: 0,
+                yAxisIndex: 0,
+                data: mappedGridDataAbs,
+                itemStyle: {
+                    borderColor: 'rgba(0,0,0,0.1)',
+                    borderWidth: 1.5,
+                    borderRadius: 99
+                }
+            },
+            {
+                name: 'Misses',
+                type: 'scatter',
+                xAxisIndex: 1,
+                yAxisIndex: 1,
+                data: mappedMissDataAbs,
+                symbol: 'path://M10 10L90 90M90 10L10 90',
+                symbolSize: 6,
+                z: 10,
+                clip: true,
+                itemStyle: {
+                    color: 'transparent',
+                    borderColor: '#ff5555',
+                    borderWidth: 1.2,
+                },
+                silent: true
+            }
+        ]
+    });
+
+    drawAccessories(aimGridChartAbs, false);
+    window.addEventListener('resize', () => {
+        aimGridChartAbs.resize();
+        drawAccessories(aimGridChartAbs);
     });
 </script>
 

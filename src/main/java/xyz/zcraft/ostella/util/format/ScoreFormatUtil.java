@@ -13,20 +13,16 @@ public class ScoreFormatUtil {
         return MiscUtil.getRelativeTimeAgo(score.getEndedAt());
     }
 
-    public static String getWeightPP(Score score) {
+    public static String getScoreStatus(Score score) {
         if (score.getRanked() == false) {
             return "×";
         }
-        String prefix = "";
         if ("LOVED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
-            prefix = "❤";
+            return "❤";
         } else if ("RANKED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
-            prefix = "▲";
+            return "▲";
         }
-        if (!hasWeight(score)) {
-            return prefix;
-        }
-        return prefix + String.format("%d%% ↪%.1fpp", score.getWeight().getPercentage().intValue(), score.getWeight().getPp());
+        return "?";
     }
 
     public static boolean hasWeight(Score score) {
@@ -37,6 +33,22 @@ public class ScoreFormatUtil {
 
     public static String getRankColor(Score score) {
         return score == null ? "#d0d0d0" : Colors.getScoreRankColor(score.getRank());
+    }
+
+    public static String getRankBgColor(Score score) {
+        return score == null ? "#d0d0d0" : Colors.getScoreRankBgColor(score.getRank());
+    }
+
+    public static String getRankText(Score score) {
+        if ("XH".equalsIgnoreCase(score.getRank())) {
+            return "SS";
+        } else if ("X".equalsIgnoreCase(score.getRank())) {
+            return "SS";
+        } else if ("SH".equalsIgnoreCase(score.getRank())) {
+            return "S";
+        } else {
+            return score.getRank();
+        }
     }
 
     public static String getModString(Score score) {
@@ -51,6 +63,10 @@ public class ScoreFormatUtil {
         sb.append("]");
 
         return sb.toString();
+    }
+
+    public static String getHitResultString(Score score) {
+        return getGreatCount(score) + " / " + getOkCount(score) + " / " + getMehCount(score) + " / " + getMissCount(score);
     }
 
     public static long getGreatCount(Score score) {
