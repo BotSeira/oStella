@@ -15,6 +15,7 @@ import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Comparator;
 import java.util.stream.Collectors;
 
@@ -155,5 +156,22 @@ public class BeatmapsetController {
             }
             return null;
         }));
+    }
+
+    public void getBeatmapsetBg(@NotNull Context context) {
+        final long ms = requirePathLong(context, "beatmapsetId");
+        context.contentType("image/png");
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
+                .thenAccept(beatmapset -> {
+                    if (beatmapset != null) {
+                        context.header("X-Beatmapset-Id", beatmapset.getId().toString());
+                        final String cover = beatmapset.getCovers().getCover();
+                        try {
+                            context.result(URI.create(cover).toURL().openStream());
+                        } catch (IOException e) {
+                            context.status(500).result(Response.error("Failed to parse bg url", ErrorCode.IMAGE_FETCH_FAILED).toString());
+                        }
+                    }
+                }));
     }
 }
