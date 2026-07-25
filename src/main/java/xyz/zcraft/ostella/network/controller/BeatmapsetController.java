@@ -91,9 +91,18 @@ public class BeatmapsetController {
 
     public void renderBeatmapsetById(@NotNull Context context) {
         final long ms = requirePathLong(context, "beatmapsetId");
-        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
-                .thenApplyAsync(beatmapset -> finalizeBeatmapset(beatmapset, context), renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+
+        final String header = context.header("Accept");
+        if (header != null && header.contains("application/json")) {
+            context.future(
+                    () -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
+                            .thenAccept(beatmapset -> putResult(context, beatmapset))
+            );
+        } else {
+            context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
+                    .thenApplyAsync(beatmapset -> finalizeBeatmapset(beatmapset, context), renderer.getRenderExecutor())
+                    .thenAccept(bytes -> context.status(200).result(bytes)));
+        }
     }
 
     private void lookupBeatmapsetOfIdAsync(@NotNull Context context, long ms) {

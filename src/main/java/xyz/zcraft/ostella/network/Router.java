@@ -72,7 +72,7 @@ public class Router implements Closeable {
         LOG.info("Router created");
     }
 
-    protected void searchBeatmapSet(@NotNull Context context) {
+    protected void searchBeatmapset(@NotNull Context context) {
         final String query = requireString(context, "q");
 
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.searchBeatmapset(tokenManager.getTokenData(), query))
