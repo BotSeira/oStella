@@ -212,12 +212,7 @@ public class ReplayController {
                         .peek(router::ensurePp)
                         .collect(Collectors.toCollection(LinkedList::new))
                 )
-                .thenCompose(validScores -> {
-                    final double start = optionalDouble(context, "start");
-                    final double end = optionalDouble(context, "end");
-
-                    return renderShowcaseForAsync(context, validScores, start, end);
-                });
+                .thenCompose(validScores -> renderShowcaseForAsync(context, validScores));
     }
 
     private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end) {
@@ -265,7 +260,7 @@ public class ReplayController {
         });
     }
 
-    private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores, Double start, Double end) {
+    private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (scores.isEmpty()) {
@@ -310,7 +305,7 @@ public class ReplayController {
                             throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Render queue full!");
                         }
 
-                        final String jobId = replayService.queueRenderShowcase(String.valueOf(beatmapId), replays, start, end);
+                        final String jobId = replayService.queueRenderShowcase(String.valueOf(beatmapId), replays);
 
                         JsonObject obj = new JsonObject();
                         obj.addProperty("status", "queued");
