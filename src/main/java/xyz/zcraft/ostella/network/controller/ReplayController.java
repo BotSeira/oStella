@@ -204,16 +204,25 @@ public class ReplayController {
     }
 
     @NonNull
-    private CompletableFuture<?> finalizeShowcase(@NotNull Context context, List<CompletableFuture<Score>> scoreFutures) {
-        return CompletableFuture.allOf(scoreFutures.toArray(new CompletableFuture[0]))
-                .thenApply(_ -> scoreFutures.stream()
-                        .map(CompletableFuture::join)
-                        .filter(s -> s != null && s.getHasReplay())
-                        .distinct()
-                        .peek(router::ensurePp)
-                        .collect(Collectors.toCollection(LinkedList::new))
+    private CompletableFuture<?> finalizeShowcase(@NotNull Context context,
+                                                  List<CompletableFuture<Score>> scoreFutures) {
+        return CompletableFuture.allOf(
+                        scoreFutures.toArray(new CompletableFuture<?>[0])
                 )
-                .thenCompose(validScores -> renderShowcaseForAsync(context, validScores));
+                .thenApply(ignored -> {
+                    Set<Long> seenIds = new HashSet<>();
+
+                    return scoreFutures.stream()
+                            .map(CompletableFuture::join)
+                            .filter(Objects::nonNull)
+                            .filter(Score::getHasReplay)
+                            .filter(score -> seenIds.add(score.getId()))
+                            .peek(router::ensurePp)
+                            .collect(Collectors.toCollection(LinkedList::new));
+                })
+                .thenCompose(validScores ->
+                        renderShowcaseForAsync(context, validScores)
+                );
     }
 
     private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end) {
