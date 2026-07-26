@@ -19,10 +19,7 @@ import xyz.zcraft.osu.model.Score;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Collectors;
@@ -163,11 +160,13 @@ public class ReplayController {
         if (replayService == null) return;
 
         final ShowcaseRequest showcaseRequest = GSON.fromJson(context.body(), ShowcaseRequest.class);
-        final List<Long> scoreIds = showcaseRequest.ids();
+        final List<String> scoreIds = showcaseRequest.ids();
 
         context.future(() -> {
             List<CompletableFuture<Score>> scoreFutures = scoreIds.stream()
-                    .map(router::getScore).toList();
+                    .map(Long::parseLong)
+                    .map(router::getScore)
+                    .toList();
 
             return finalizeShowcase(context, scoreFutures);
         });
@@ -179,14 +178,26 @@ public class ReplayController {
         final ShowcaseRequest showcaseRequest = GSON.fromJson(context.body(), ShowcaseRequest.class);
 
         final long m = requirePathLong(context, "beatmapId");
-        final List<Long> userIds = showcaseRequest.ids();
+        final List<String> ids = showcaseRequest.ids();
+
+        final Set<Long> scoreIds = new HashSet<>();
+
+        ids.stream().filter(id -> id.startsWith("s")).map(id -> id.substring(1)).map(Long::parseLong).forEach(scoreIds::add);
 
         context.future(() -> {
-            LOG.info("Getting {} scores for showcase on map {}", userIds.size(), m);
+            LOG.info("Getting {} scores for showcase on map {}", ids.size(), m);
 
-            List<CompletableFuture<Score>> scoreFutures = userIds.stream()
-                    .map(userId -> executor.enqueueAsync(() ->
-                            OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m))).toList();
+            List<CompletableFuture<Score>> scoreFutures = new ArrayList<>(ids.stream()
+                    .filter(id -> !id.startsWith("s"))
+                    .map(id -> {
+                        if (id.startsWith("u")) return id.substring(1);
+                        return id;
+                    })
+                    .map(Long::parseLong)
+                    .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m)))
+                    .toList());
+
+            scoreFutures.addAll(scoreIds.stream().map(scoreId -> executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), scoreId))).toList());
 
             return finalizeShowcase(context, scoreFutures);
         });
@@ -313,6 +324,6 @@ public class ReplayController {
         });
     }
 
-    public record ShowcaseRequest(List<Long> ids) {
+    public record ShowcaseRequest(List<String> ids) {
     }
 }
