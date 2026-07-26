@@ -209,6 +209,7 @@ public class ReplayController {
                 .thenApply(_ -> scoreFutures.stream()
                         .map(CompletableFuture::join)
                         .filter(s -> s != null && s.getHasReplay())
+                        .distinct()
                         .peek(router::ensurePp)
                         .collect(Collectors.toCollection(LinkedList::new))
                 )
