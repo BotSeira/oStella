@@ -485,6 +485,7 @@ public class OsuAPI {
     }
 
     public static byte[] getReplayBytes(TokenData tokenData, long id) {
+        LOG.debug("Getting replay bytes for {}", id);
         try {
             final var request = newRequestBuilder(tokenData, "/scores/" + id + "/download")
                     .GET()
