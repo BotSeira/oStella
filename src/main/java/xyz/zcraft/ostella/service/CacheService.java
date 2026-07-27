@@ -292,16 +292,16 @@ public class CacheService {
     }
 
     public static Path getReplay(TokenData tokenData, long id) throws IOException {
-        Path beatmapsetPath = REPLAY_CACHE.resolve(id + ".osr");
+        Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
 
-        if (!Files.exists(beatmapsetPath)) {
+        if (!Files.exists(replayPath)) {
             LOG.debug("Caching replay {}", id);
-            Files.write(beatmapsetPath, executor.enqueueAsync(() -> OsuAPI.getReplayBytes(tokenData, id)).join());
+            Files.write(replayPath, executor.enqueueAsync(() -> OsuAPI.getReplayBytes(tokenData, id)).join());
         }
 
         LOG.debug("Replay {} is ready", id);
 
-        return beatmapsetPath;
+        return replayPath;
     }
 
     public static Path getDanserCache() {

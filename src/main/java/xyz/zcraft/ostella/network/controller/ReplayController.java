@@ -197,7 +197,7 @@ public class ReplayController {
                     .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m)))
                     .toList());
 
-            scoreFutures.addAll(scoreIds.stream().map(scoreId -> executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), scoreId))).toList());
+            scoreFutures.addAll(scoreIds.stream().map(router::getScore).toList());
 
             return finalizeShowcase(context, scoreFutures);
         });
@@ -237,14 +237,13 @@ public class ReplayController {
                 throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to cache beatmapset!");
             }
             return null;
-        }).thenCompose(_ ->
-                executor.enqueueAsync(() -> {
+        }).thenApply(_ -> {
                     try {
                         return CacheService.getReplay(tokenManager.getTokenData(), score.getId());
                     } catch (IOException e) {
                         throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, "Failed to cache replay for score id: " + score.getId(), e);
                     }
-                })
+                }
         ).thenAccept(replayPath -> {
             final int queueSize = replayService.getQueueSize() + 1;
 
