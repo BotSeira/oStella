@@ -20,6 +20,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -183,7 +185,7 @@ public class MissVisualizeService {
 
             drawNearbyCircles(hitObject, beatmap, circleRadius, g2d);
 
-            drawTargetCircle(circleRadius, g2d);
+            drawTargetObject(hitObject, circleRadius, g2d);
 
             drawCursorPath(hitObject, keyFrames, diff, g2d);
 
@@ -424,7 +426,11 @@ public class MissVisualizeService {
             g2d.setComposite(oldComp);
         }
 
-        private static void drawTargetCircle(double circleRadius, Graphics2D g2d) {
+        private static void drawTargetObject(HitObject hitObject, double circleRadius, Graphics2D g2d) {
+            if (hitObject.getObjectType() == HitObject.ObjectType.SLIDER) {
+                drawSlider(hitObject, circleRadius, g2d);
+            }
+
             Ellipse2D circle = new Ellipse2D.Double(
                     CANVAS_WIDTH * 0.5 - circleRadius * ZOOM_FACTOR,
                     CANVAS_HEIGHT * 0.5 - circleRadius * ZOOM_FACTOR,
@@ -435,6 +441,217 @@ public class MissVisualizeService {
             g2d.setColor(Color.BLACK);
             g2d.setStroke(new BasicStroke(1.5F));
             g2d.draw(circle);
+        }
+
+        private static void drawSlider(HitObject slider, double circleRadius, Graphics2D g2d) {
+            SliderPath sliderPath = new SliderPath(slider);
+            Path2D.Double path = new Path2D.Double();
+            int samples = Math.clamp((int) Math.ceil(sliderPath.expectedLength / 2), 1, 10000);
+
+            for (int i = 0; i <= samples; i++) {
+                Point point = sliderPath.positionAt((double) i / samples);
+                double x = (point.x - slider.getX()) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5;
+                double y = (point.y - slider.getY()) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
+                if (i == 0) path.moveTo(x, y);
+                else path.lineTo(x, y);
+            }
+
+            float bodyWidth = (float) (circleRadius * 2 * ZOOM_FACTOR);
+            g2d.setColor(new Color(0, 0, 0, 50));
+            g2d.setStroke(new BasicStroke(bodyWidth + 3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.draw(path);
+            g2d.setColor(Color.WHITE);
+            g2d.setStroke(new BasicStroke(bodyWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.draw(path);
+        }
+
+        private record Point(double x, double y) {}
+
+        /** Builds the geometric path osu! uses for each supported slider curve type. */
+        private static final class SliderPath {
+            private final List<Point> points = new ArrayList<>();
+            private final List<Double> cumulativeLength = new ArrayList<>();
+            private final double expectedLength;
+
+            private SliderPath(HitObject slider) {
+                expectedLength = Math.max(0, slider.getLength());
+                List<Point> controls = new ArrayList<>();
+                controls.add(new Point(slider.getX(), slider.getY()));
+                for (HitObject.ControlPoint point : slider.getControlPoints()) {
+                    controls.add(new Point(point.x(), point.y()));
+                }
+
+                switch (slider.getCurveType() == null ? "L" : slider.getCurveType()) {
+                    case "B" -> addBezierSegments(controls);
+                    case "C" -> addCatmull(controls);
+                    case "P" -> {
+                        if (controls.size() == 3 && !addPerfectCurve(controls)) addBezier(controls);
+                        else if (controls.size() != 3) addBezierSegments(controls);
+                    }
+                    default -> controls.forEach(this::addPoint);
+                }
+                if (points.isEmpty()) addPoint(new Point(slider.getX(), slider.getY()));
+                extendToExpectedLength();
+                calculateLengths();
+            }
+
+            private Point positionAt(double progress) {
+                if (points.size() == 1 || expectedLength <= 0) return points.getFirst();
+                double target = Math.clamp(progress, 0, 1) * expectedLength;
+                int index = Collections.binarySearch(cumulativeLength, target);
+                if (index >= 0) return points.get(index);
+                index = -index - 1;
+                if (index <= 0) return points.getFirst();
+                if (index >= points.size()) return points.getLast();
+                double from = cumulativeLength.get(index - 1);
+                double to = cumulativeLength.get(index);
+                if (to <= from) return points.get(index - 1);
+                return interpolate(points.get(index - 1), points.get(index), (target - from) / (to - from));
+            }
+
+            private void addBezierSegments(List<Point> controls) {
+                List<Point> segment = new ArrayList<>();
+                segment.add(controls.getFirst());
+                for (int i = 1; i < controls.size(); i++) {
+                    Point current = controls.get(i);
+                    segment.add(current);
+                    if (i < controls.size() - 1 && same(current, controls.get(i + 1))) {
+                        addBezier(segment);
+                        segment = new ArrayList<>();
+                        segment.add(current);
+                        i++;
+                    }
+                }
+                addBezier(segment);
+            }
+
+            private void addBezier(List<Point> controls) {
+                if (controls.isEmpty()) return;
+                if (controls.size() == 1) {
+                    addPoint(controls.getFirst());
+                    return;
+                }
+                double polygonLength = 0;
+                for (int i = 1; i < controls.size(); i++) {
+                    polygonLength += distance(controls.get(i - 1), controls.get(i));
+                }
+                int samples = Math.clamp((int) Math.ceil(polygonLength / 0.25), 25, 10000);
+                for (int i = 0; i <= samples; i++) {
+                    double t = (double) i / samples;
+                    List<Point> work = new ArrayList<>(controls);
+                    for (int level = work.size() - 1; level > 0; level--) {
+                        for (int p = 0; p < level; p++) {
+                            work.set(p, interpolate(work.get(p), work.get(p + 1), t));
+                        }
+                    }
+                    addPoint(work.getFirst());
+                }
+            }
+
+            private boolean addPerfectCurve(List<Point> controls) {
+                Point a = controls.get(0);
+                Point b = controls.get(1);
+                Point c = controls.get(2);
+                double determinant = 2 * (a.x * (b.y - c.y) + b.x * (c.y - a.y) + c.x * (a.y - b.y));
+                if (Math.abs(determinant) < 1e-7) return false;
+
+                double a2 = a.x * a.x + a.y * a.y;
+                double b2 = b.x * b.x + b.y * b.y;
+                double c2 = c.x * c.x + c.y * c.y;
+                Point center = new Point(
+                        (a2 * (b.y - c.y) + b2 * (c.y - a.y) + c2 * (a.y - b.y)) / determinant,
+                        (a2 * (c.x - b.x) + b2 * (a.x - c.x) + c2 * (b.x - a.x)) / determinant);
+                double start = Math.atan2(a.y - center.y, a.x - center.x);
+                double middle = Math.atan2(b.y - center.y, b.x - center.x);
+                double end = Math.atan2(c.y - center.y, c.x - center.x);
+                double sweep = positiveAngle(end - start);
+                if (positiveAngle(middle - start) > sweep) sweep -= Math.PI * 2;
+                double radius = distance(a, center);
+                int samples = Math.clamp((int) Math.ceil(Math.abs(sweep * radius) / 2), 25, 1000);
+                for (int i = 0; i <= samples; i++) {
+                    double angle = start + sweep * i / samples;
+                    addPoint(new Point(center.x + Math.cos(angle) * radius,
+                            center.y + Math.sin(angle) * radius));
+                }
+                return true;
+            }
+
+            private void addCatmull(List<Point> controls) {
+                if (controls.size() < 2) {
+                    controls.forEach(this::addPoint);
+                    return;
+                }
+                for (int i = 0; i < controls.size() - 1; i++) {
+                    Point p0 = controls.get(Math.max(0, i - 1));
+                    Point p1 = controls.get(i);
+                    Point p2 = controls.get(i + 1);
+                    Point p3 = controls.get(Math.min(controls.size() - 1, i + 2));
+                    for (int sample = 0; sample <= 50; sample++) {
+                        double t = sample / 50.0;
+                        double t2 = t * t;
+                        double t3 = t2 * t;
+                        double x = 0.5 * (2 * p1.x + (-p0.x + p2.x) * t
+                                + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2
+                                + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3);
+                        double y = 0.5 * (2 * p1.y + (-p0.y + p2.y) * t
+                                + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2
+                                + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3);
+                        addPoint(new Point(x, y));
+                    }
+                }
+            }
+
+            private void extendToExpectedLength() {
+                double currentLength = pathLength();
+                if (expectedLength <= currentLength || points.size() < 2) return;
+                int end = points.size() - 1;
+                while (end > 0 && same(points.get(end), points.get(end - 1))) end--;
+                if (end == 0) return;
+                Point previous = points.get(end - 1);
+                Point last = points.get(end);
+                double segmentLength = distance(previous, last);
+                if (segmentLength == 0) return;
+                double extension = expectedLength - currentLength;
+                addPoint(new Point(last.x + (last.x - previous.x) / segmentLength * extension,
+                        last.y + (last.y - previous.y) / segmentLength * extension));
+            }
+
+            private double pathLength() {
+                double length = 0;
+                for (int i = 1; i < points.size(); i++) {
+                    length += distance(points.get(i - 1), points.get(i));
+                }
+                return length;
+            }
+
+            private void calculateLengths() {
+                cumulativeLength.add(0.0);
+                for (int i = 1; i < points.size(); i++) {
+                    cumulativeLength.add(cumulativeLength.getLast() + distance(points.get(i - 1), points.get(i)));
+                }
+            }
+
+            private void addPoint(Point point) {
+                if (points.isEmpty() || !same(points.getLast(), point)) points.add(point);
+            }
+
+            private static Point interpolate(Point from, Point to, double weight) {
+                return new Point(from.x + (to.x - from.x) * weight,
+                        from.y + (to.y - from.y) * weight);
+            }
+
+            private static boolean same(Point a, Point b) {
+                return Math.abs(a.x - b.x) < 1e-7 && Math.abs(a.y - b.y) < 1e-7;
+            }
+
+            private static double distance(Point a, Point b) {
+                return Math.hypot(a.x - b.x, a.y - b.y);
+            }
+
+            private static double positiveAngle(double angle) {
+                angle %= Math.PI * 2;
+                return angle < 0 ? angle + Math.PI * 2 : angle;
+            }
         }
     }
 }
