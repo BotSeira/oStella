@@ -45,6 +45,7 @@ public class MissVisualizeService {
         final List<HitEvent> missEvents = replayAnalyze.events().stream()
                 .filter(hitEvent -> !hitEvent.wasHit())
                 .filter(hitEvent -> hitEvent.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
+                .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
                 .toList();
 
         if (missIndex <= 0 || missIndex > missEvents.size()) {
