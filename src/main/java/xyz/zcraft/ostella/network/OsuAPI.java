@@ -6,6 +6,7 @@ import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
 
@@ -510,7 +511,6 @@ public class OsuAPI {
     }
 
     public static byte[] getReplayBytes(TokenData tokenData, long id) {
-        LOG.debug("Getting replay bytes for {}", id);
         try {
             final var request = newRequestBuilder(tokenData, "/scores/" + id + "/download")
                     .GET()

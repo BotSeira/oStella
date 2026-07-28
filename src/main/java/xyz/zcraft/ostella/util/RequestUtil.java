@@ -3,7 +3,7 @@ package xyz.zcraft.ostella.util;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import io.javalin.http.Context;
-import xyz.zcraft.ostella.network.ApiException;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 

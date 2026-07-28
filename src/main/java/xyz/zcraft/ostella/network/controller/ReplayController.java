@@ -8,7 +8,12 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.config.AppConfig;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.exception.ReplayFetchException;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.ReplayService;
@@ -233,40 +238,35 @@ public class ReplayController {
         }
 
         return executor.enqueueAsync(() -> {
-            if (!CacheService.cacheBeatmapsetFile(score.getBeatmapset().getId())) {
-                throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to cache beatmapset!");
-            }
-            return null;
-        }).thenApply(_ -> {
-                    try {
-                        return CacheService.getReplay(tokenManager.getTokenData(), score.getId());
-                    } catch (IOException e) {
-                        throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, "Failed to cache replay for score id: " + score.getId(), e);
+                    if (!CacheService.cacheBeatmapsetFile(score.getBeatmapset().getId())) {
+                        throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to cache beatmapset!");
                     }
-                }
-        ).thenAccept(replayPath -> {
-            final int queueSize = replayService.getQueueSize() + 1;
+                    return null;
+                })
+                .thenCompose(_ -> router.replayController.getReplayFuture(score.getId()))
+                .thenAccept(replayPath -> {
+                    final int queueSize = replayService.getQueueSize() + 1;
 
-            if (queueSize > conf.replayRender().renderQueueSize()) {
-                throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full!");
-            }
+                    if (queueSize > conf.replayRender().renderQueueSize()) {
+                        throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full!");
+                    }
 
-            final String jobId = replayService.queueRender(replayPath, start, end);
+                    final String jobId = replayService.queueRender(replayPath, start, end);
 
-            score.getBeatmap().setBeatmapset(score.getBeatmapset());
+                    score.getBeatmap().setBeatmapset(score.getBeatmapset());
 
-            JsonObject obj = new JsonObject();
-            obj.addProperty("status", "queued");
-            obj.addProperty("position", queueSize);
-            obj.addProperty("id", jobId);
-            obj.add("beatmap", GSON.toJsonTree(score.getBeatmap()));
-            obj.add("scores", router.getScoresArr(List.of(score)));
+                    JsonObject obj = new JsonObject();
+                    obj.addProperty("status", "queued");
+                    obj.addProperty("position", queueSize);
+                    obj.addProperty("id", jobId);
+                    obj.add("beatmap", GSON.toJsonTree(score.getBeatmap()));
+                    obj.add("scores", router.getScoresArr(List.of(score)));
 
-            if (!Double.isNaN(start)) obj.addProperty("start", start);
-            if (!Double.isNaN(end)) obj.addProperty("end", end);
+                    if (!Double.isNaN(start)) obj.addProperty("start", start);
+                    if (!Double.isNaN(end)) obj.addProperty("end", end);
 
-            context.status(202).result(new Response(true, "Replay render queued!", obj).toString());
-        });
+                    context.status(202).result(new Response(true, "Replay render queued!", obj).toString());
+                });
     }
 
     private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores) {
@@ -292,14 +292,7 @@ public class ReplayController {
             if (beatmap == null) throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap!");
 
             List<CompletableFuture<Path>> replayFutures = scores.stream()
-                    .map(score -> executor.enqueueAsync(() -> {
-                        try {
-                            return CacheService.getReplay(tokenManager.getTokenData(), score.getId());
-                        } catch (IOException e) {
-                            LOG.error("Failed to cache replay for score id: {}", score.getId(), e);
-                            return null;
-                        }
-                    }))
+                    .map(score -> router.replayController.getReplayFuture(score.getId()))
                     .toList();
 
             return CompletableFuture.allOf(replayFutures.toArray(new CompletableFuture[0]))
@@ -326,6 +319,21 @@ public class ReplayController {
                         context.status(202).result(new Response(true, "Replay render queued!", obj).toString());
                     });
         });
+    }
+
+    public Path getReplay(long id) {
+        return getReplayFuture(id).join();
+    }
+
+    public CompletableFuture<Path> getReplayFuture(long id) {
+        final Optional<Path> replayCache = CacheService.getReplayCache(id);
+        return replayCache.map(CompletableFuture::completedFuture).orElseGet(() -> executor.enqueueAsync(() -> {
+            try {
+                return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+            } catch (IOException e) {
+                throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, "Failed to cache replay for score id: " + id, e);
+            }
+        }, AsyncService.Restriction.STRICTER));
     }
 
     public record ShowcaseRequest(List<String> ids) {

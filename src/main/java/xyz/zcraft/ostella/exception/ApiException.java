@@ -1,6 +1,7 @@
-package xyz.zcraft.ostella.network;
+package xyz.zcraft.ostella.exception;
 
 import lombok.Getter;
+import xyz.zcraft.ostella.network.ErrorCode;
 
 @Getter
 public class ApiException extends RuntimeException {

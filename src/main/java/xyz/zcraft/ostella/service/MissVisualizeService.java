@@ -1,6 +1,6 @@
 package xyz.zcraft.ostella.service;
 
-import xyz.zcraft.ostella.network.ApiException;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.HitObject;

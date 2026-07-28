@@ -5,7 +5,8 @@ import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
-import xyz.zcraft.ostella.network.ApiException;
+import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.exception.ReplayFetchException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
@@ -77,10 +78,10 @@ public class AnalyzeController {
 
                     final OsuReplay osuReplay;
                     try {
-                        osuReplay = ReplayParser.parseReplay(CacheService.getReplay(tokenManager.getTokenData(), score.getId()));
+                        osuReplay = ReplayParser.parseReplay(router.replayController.getReplay(scoreId));
                     } catch (ParseException e) {
                         throw new ApiException(ErrorCode.REPLAY_PARSE_FAILED, e);
-                    } catch (IOException e) {
+                    } catch (ReplayFetchException e) {
                         throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, e);
                     }
 
@@ -203,14 +204,14 @@ public class AnalyzeController {
 
         try {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(rosuPath);
-            final Path replay = CacheService.getReplay(tokenManager.getTokenData(), score.getId());
+            final Path replay = router.replayController.getReplay(score.getId());
             final OsuReplay osuReplay = ReplayParser.parseReplay(replay);
 
             return ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
         } catch (ParseException e) {
             throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-        } catch (IOException e) {
-            throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, e);
+        } catch (ReplayFetchException e) {
+            throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, e);
         }
     }
 

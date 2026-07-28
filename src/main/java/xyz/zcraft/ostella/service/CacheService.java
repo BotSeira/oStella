@@ -8,6 +8,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.exception.ReplayFetchException;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.osu.model.Score;
 
@@ -291,17 +292,25 @@ public class CacheService {
         return false;
     }
 
-    public static Path getReplay(TokenData tokenData, long id) throws IOException {
+    public static Path getReplayBlocking(TokenData tokenData, long id) throws IOException {
         Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
 
-        if (!Files.exists(replayPath)) {
-            LOG.debug("Caching replay {}", id);
-            Files.write(replayPath, executor.enqueueAsync(() -> OsuAPI.getReplayBytes(tokenData, id), true).join());
-        }
+        LOG.debug("Getting replay {}", id);
+
+        Files.write(replayPath, OsuAPI.getReplayBytes(tokenData, id));
 
         LOG.debug("Replay {} is ready", id);
 
         return replayPath;
+    }
+
+    public static Optional<Path> getReplayCache(long id) {
+        Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
+        if (Files.exists(replayPath)) {
+            return Optional.of(replayPath);
+        } else {
+            return Optional.empty();
+        }
     }
 
     public static Path getDanserCache() {

@@ -6,6 +6,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
@@ -33,7 +34,7 @@ public class Router implements Closeable {
     public final ReplayService replayService;
     public final AppConfig conf;
     final Gson GSON = new Gson();
-    final ReplayController replayController;
+    public final ReplayController replayController;
     final BeatmapController beatmapController;
     public final ScoreController scoreController;
     final BeatmapsetController beatmapsetController;
@@ -59,13 +60,8 @@ public class Router implements Closeable {
         this.multiplayerController = new MultiplayerController(this);
         this.userController = new UserController(this);
 
-        if (conf.replayRender().enabled()) {
-            this.replayService = new ReplayService(conf, CacheService.getDanserCache());
-            this.replayController = new ReplayController(this);
-        } else {
-            this.replayService = null;
-            this.replayController = null;
-        }
+        this.replayService = new ReplayService(conf, CacheService.getDanserCache());
+        this.replayController = new ReplayController(this);
 
         LOG.info("Router created");
     }
@@ -158,19 +154,17 @@ public class Router implements Closeable {
     }
 
     public CompletableFuture<Score> getScore(long id) {
-        return executor.enqueueAsync(() -> {
-            try {
-                final Optional<Score> scoreJsonCache = CacheService.getScoreJsonCache(id);
+        try {
+            final Optional<Score> scoreJsonCache = CacheService.getScoreJsonCache(id);
 
-                if (scoreJsonCache.isPresent()) {
-                    LOG.debug("Score {} found in cache", id);
-                    return scoreJsonCache.get();
-                }
-            } catch (IOException e) {
-                LOG.warn("Failed to get score from cache for score id {}: {}", id, e.getMessage());
+            if (scoreJsonCache.isPresent()) {
+                LOG.debug("Score {} found in cache", id);
+                return CompletableFuture.completedFuture(scoreJsonCache.get());
             }
+        } catch (IOException e) {
+            LOG.warn("Failed to get score from cache for score id {}: {}", id, e.getMessage());
+        }
 
-            return OsuAPI.getScore(tokenManager.getTokenData(), id);
-        });
+        return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id));
     }
 }

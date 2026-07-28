@@ -5,6 +5,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.util.TokenManager;
 
 import java.io.Closeable;
