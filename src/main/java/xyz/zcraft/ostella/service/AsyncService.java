@@ -28,17 +28,21 @@ public class AsyncService {
 
     public <T> CompletableFuture<T> enqueueAsync(Supplier<T> supplier, boolean limitConcurrent) {
         return CompletableFuture.supplyAsync(() -> {
-            if (limitConcurrent) {
-                try {
+            try {
+                if (limitConcurrent) {
                     semaphore.acquire();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException(e);
+                }
+                //noinspection UnstableApiUsage
+                rateLimiter.acquire();
+                return supplier.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            } finally {
+                if (limitConcurrent) {
+                    semaphore.release();
                 }
             }
-            //noinspection UnstableApiUsage
-            rateLimiter.acquire();
-            return supplier.get();
         }, executor);
     }
 
