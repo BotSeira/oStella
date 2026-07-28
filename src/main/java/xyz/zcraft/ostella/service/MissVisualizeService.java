@@ -30,7 +30,7 @@ public class MissVisualizeService {
 
     private static final int CANVAS_WIDTH = 512;
     private static final int CANVAS_HEIGHT = 384;
-    private static final double ZOOM_FACTOR = 1.5;
+    private static final double ZOOM_FACTOR = 1.3;
     private static final int WINDOW_MILLIS = 250;
 
     private static final List<Color> PATH_COLORS;
@@ -60,7 +60,7 @@ public class MissVisualizeService {
 
         return ImageHelper.drawMiss(
                 missIndex,
-                targetMiss.hitObject(),
+                targetMiss,
                 extractNearbyKeyFrames(keyFrames, targetMiss.hitObject()),
                 replayAnalyze.beatmap(),
                 replayAnalyze.calculatedDifficulty()
@@ -166,10 +166,11 @@ public class MissVisualizeService {
         }
 
         private static byte[] drawMiss(int missIndex,
-                                       HitObject hitObject,
+                                       HitEvent targetMiss,
                                        List<OsuReplay.TimedKeyFrame> keyFrames,
                                        OsuBeatmap beatmap,
                                        DifficultyAttribute diff) {
+            final HitObject hitObject = targetMiss.hitObject();
             final double circleRadius = diff.getCircleRadiusInPixel();
 
             final LinkedList<Long> hitTimes = new LinkedList<>();
@@ -191,7 +192,7 @@ public class MissVisualizeService {
 
             drawFramePoints(hitObject, keyFrames, g2d, hitTimes);
 
-            drawText(missIndex, hitObject, beatmap, g2d);
+            drawText(missIndex, targetMiss, beatmap, g2d);
 
             drawTimingIndicator(diff, g2d, hitTimes);
 
@@ -271,11 +272,11 @@ public class MissVisualizeService {
             ));
         }
 
-        private static void drawText(int missIndex, HitObject hitObject, OsuBeatmap beatmap, Graphics2D g2d) {
+        private static void drawText(int missIndex, HitEvent targetMiss, OsuBeatmap beatmap, Graphics2D g2d) {
             g2d.setColor(Color.BLACK);
 
-            final Duration duration = Duration.of(hitObject.getTime(), ChronoUnit.MILLIS);
-            String missInfo = "#" + missIndex + " Miss: " + hitObject.getObjectType() + " @" +
+            final Duration duration = Duration.of(targetMiss.hitObject().getTime(), ChronoUnit.MILLIS);
+            String missInfo = "#" + missIndex + " Miss: " + targetMiss.eventType() + " @" +
                     String.format("%02d:%02d.%03d", duration.toMinutesPart(), duration.toSecondsPart(), duration.toMillisPart());
 
             g2d.setFont(new Font("Dejavu Sans", Font.PLAIN, 20));
@@ -478,9 +479,12 @@ public class MissVisualizeService {
             g2d.draw(path);
         }
 
-        private record Point(double x, double y) {}
+        private record Point(double x, double y) {
+        }
 
-        /** Builds the geometric path osu! uses for each supported slider curve type. */
+        /**
+         * Builds the geometric path osu! uses for each supported slider curve type.
+         */
         private static final class SliderPath {
             private final List<Point> points = new ArrayList<>();
             private final List<Double> cumulativeLength = new ArrayList<>();
@@ -506,6 +510,24 @@ public class MissVisualizeService {
                 if (points.isEmpty()) addPoint(new Point(slider.getX(), slider.getY()));
                 extendToExpectedLength();
                 calculateLengths();
+            }
+
+            private static Point interpolate(Point from, Point to, double weight) {
+                return new Point(from.x + (to.x - from.x) * weight,
+                        from.y + (to.y - from.y) * weight);
+            }
+
+            private static boolean same(Point a, Point b) {
+                return Math.abs(a.x - b.x) < 1e-7 && Math.abs(a.y - b.y) < 1e-7;
+            }
+
+            private static double distance(Point a, Point b) {
+                return Math.hypot(a.x - b.x, a.y - b.y);
+            }
+
+            private static double positiveAngle(double angle) {
+                angle %= Math.PI * 2;
+                return angle < 0 ? angle + Math.PI * 2 : angle;
             }
 
             private Point positionAt(double progress) {
@@ -646,24 +668,6 @@ public class MissVisualizeService {
 
             private void addPoint(Point point) {
                 if (points.isEmpty() || !same(points.getLast(), point)) points.add(point);
-            }
-
-            private static Point interpolate(Point from, Point to, double weight) {
-                return new Point(from.x + (to.x - from.x) * weight,
-                        from.y + (to.y - from.y) * weight);
-            }
-
-            private static boolean same(Point a, Point b) {
-                return Math.abs(a.x - b.x) < 1e-7 && Math.abs(a.y - b.y) < 1e-7;
-            }
-
-            private static double distance(Point a, Point b) {
-                return Math.hypot(a.x - b.x, a.y - b.y);
-            }
-
-            private static double positiveAngle(double angle) {
-                angle %= Math.PI * 2;
-                return angle < 0 ? angle + Math.PI * 2 : angle;
             }
         }
     }
