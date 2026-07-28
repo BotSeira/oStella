@@ -41,7 +41,7 @@ Here are some demo:
 
 ### Miss Analysis
 
-<img width="400" alt="image" src="https://github.com/user-attachments/assets/fa18c6b7-1c4d-4215-898b-2f6556e5704e" />
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/dd9ab809-b7aa-44b2-a749-8a841781b30c" />
 
 ### Beatmapset Card
 
