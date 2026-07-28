@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.network.controller;
 
 import com.google.gson.*;
+import com.google.gson.annotations.SerializedName;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -178,5 +179,28 @@ public class UserController {
                 })
                 .thenAccept(arr -> context.status(200).result(new Response(true, "Success", arr).toString()))
         );
+    }
+
+    public void lookupUser(@NotNull Context context) {
+        final UserLookupBody body = GSON.fromJson(context.body(), UserLookupBody.class);
+
+        if (body.userName() == null || body.userName().isBlank()) {
+            context.status(400).result(Response.error("Missing 'user_name' in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        context.future(() -> executor
+                .enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), body.userName()))
+                .thenApply(u -> {
+                    if (u == null) throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found for the provided username!");
+                    return (User) u;
+                })
+                .thenAccept(u -> context.status(200).result(new Response(true, "Success", GSON.toJsonTree(u)).toString()))
+        );
+    }
+
+    public record UserLookupBody(
+            @SerializedName("user_name") String userName
+    ) {
     }
 }

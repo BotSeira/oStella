@@ -201,6 +201,31 @@ public class OsuAPI {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user id " + uid, e);
         }
     }
+    public static UserExtended getUser(TokenData tokenData, String username) {
+        LOG.debug("Fetching user with username {}", username);
+        try {
+            final var request = newRequestBuilder(tokenData, "/users/@" + username)
+                    .GET()
+                    .build();
+
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                return null;
+            }
+
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.USER_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for user @" + username
+                );
+            }
+
+            return GSON.fromJson(response.body(), UserExtended.class);
+        } catch (IOException | InterruptedException e) {
+            throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user @" + username, e);
+        }
+    }
 
     public static List<User> getUsers(TokenData tokenData, List<Long> uids) {
         LOG.debug("Fetching users with ids {}", () -> Arrays.toString(uids.toArray()));
