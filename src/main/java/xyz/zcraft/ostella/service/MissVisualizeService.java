@@ -183,7 +183,7 @@ public class MissVisualizeService {
             g2d.setColor(Color.WHITE);
             g2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-            drawNearbyCircles(hitObject, beatmap, circleRadius, g2d);
+            drawNearbyObjects(hitObject, beatmap, circleRadius, g2d);
 
             drawTargetObject(hitObject, circleRadius, g2d);
 
@@ -208,12 +208,16 @@ public class MissVisualizeService {
             return output.toByteArray();
         }
 
-        private static void drawNearbyCircles(HitObject hitObject, OsuBeatmap beatmap, double circleRadius, Graphics2D g2d) {
+        private static void drawNearbyObjects(HitObject hitObject, OsuBeatmap beatmap, double circleRadius, Graphics2D g2d) {
             beatmap.getHitObjects().stream()
                     .filter(obj -> obj.getObjectType() != HitObject.ObjectType.SPINNER)
                     .filter(obj -> obj.getTime() <= hitObject.getTime() + WINDOW_MILLIS
                             && obj.getTime() >= hitObject.getTime() - WINDOW_MILLIS)
                     .forEach(obj -> {
+                        if (obj.getObjectType() == HitObject.ObjectType.SLIDER) {
+                            drawSlider(obj, hitObject, circleRadius, g2d);
+                        }
+
                         Ellipse2D circle = new Ellipse2D.Double(
                                 (obj.getX() - hitObject.getX() - circleRadius) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5,
                                 (obj.getY() - hitObject.getY() - circleRadius) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5,
@@ -428,7 +432,7 @@ public class MissVisualizeService {
 
         private static void drawTargetObject(HitObject hitObject, double circleRadius, Graphics2D g2d) {
             if (hitObject.getObjectType() == HitObject.ObjectType.SLIDER) {
-                drawSlider(hitObject, circleRadius, g2d);
+                drawSlider(hitObject, hitObject, circleRadius, g2d);
             }
 
             Ellipse2D circle = new Ellipse2D.Double(
@@ -443,25 +447,34 @@ public class MissVisualizeService {
             g2d.draw(circle);
         }
 
-        private static void drawSlider(HitObject slider, double circleRadius, Graphics2D g2d) {
+        private static void drawSlider(HitObject slider,
+                                       HitObject focusObject,
+                                       double circleRadius,
+                                       Graphics2D g2d) {
             SliderPath sliderPath = new SliderPath(slider);
             Path2D.Double path = new Path2D.Double();
             int samples = Math.clamp((int) Math.ceil(sliderPath.expectedLength / 2), 1, 10000);
 
             for (int i = 0; i <= samples; i++) {
                 Point point = sliderPath.positionAt((double) i / samples);
-                double x = (point.x - slider.getX()) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5;
-                double y = (point.y - slider.getY()) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
+                double x = (point.x - focusObject.getX()) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5;
+                double y = (point.y - focusObject.getY()) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
                 if (i == 0) path.moveTo(x, y);
                 else path.lineTo(x, y);
             }
 
             float bodyWidth = (float) (circleRadius * 2 * ZOOM_FACTOR);
+
             g2d.setColor(new Color(0, 0, 0, 50));
             g2d.setStroke(new BasicStroke(bodyWidth + 3, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             g2d.draw(path);
+
             g2d.setColor(Color.WHITE);
             g2d.setStroke(new BasicStroke(bodyWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2d.draw(path);
+
+            g2d.setColor(new Color(0, 0, 0, 50));
+            g2d.setStroke(new BasicStroke(1.5F));
             g2d.draw(path);
         }
 
