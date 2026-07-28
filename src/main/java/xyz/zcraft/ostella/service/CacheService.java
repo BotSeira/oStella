@@ -296,7 +296,7 @@ public class CacheService {
 
         if (!Files.exists(replayPath)) {
             LOG.debug("Caching replay {}", id);
-            Files.write(replayPath, executor.enqueueAsync(() -> OsuAPI.getReplayBytes(tokenData, id)).join());
+            Files.write(replayPath, executor.enqueueAsync(() -> OsuAPI.getReplayBytes(tokenData, id), true).join());
         }
 
         LOG.debug("Replay {} is ready", id);
