@@ -1,10 +1,12 @@
 package xyz.zcraft.ostella.network.controller;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import xyz.zcraft.ostella.data.SearchResultItem;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
@@ -17,6 +19,7 @@ import xyz.zcraft.osu.model.Beatmapset;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Comparator;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
@@ -64,7 +67,7 @@ public class BeatmapsetController {
     }
 
     private void lookupBeatmapsetFromSomeScore(@NonNull Context context) {
-        context.future(() -> router.getScoreFromRefAsync(context)
+        context.future(() -> router.scoreController.getScoreFromRefAsync(context)
                 .thenCompose(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     return executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmapset().getId()));
@@ -182,5 +185,25 @@ public class BeatmapsetController {
                         }
                     }
                 }));
+    }
+
+    private static final Gson GSON = new Gson();
+
+    public void searchBeatmapset(@NotNull Context context) {
+        final String query = requireString(context, "q");
+
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.searchBeatmapset(tokenManager.getTokenData(), query))
+                .thenApply(result -> {
+                    if (result == null || result.isEmpty()) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
+                    final List<SearchResultItem> list = result.stream().map(SearchResultItem::fromBeatmapset).toList();
+                    final var ids = list.stream().map(SearchResultItem::beatmapsetId).map(String::valueOf).toList();
+                    context.header("X-Beatmapset-Ids", String.join(",", ids));
+                    return list;
+                })
+                .thenAccept(
+                        result -> context.status(200).result(
+                                new Response(true, "Query successful", GSON.toJsonTree(result)).toString()
+                        )
+                ));
     }
 }

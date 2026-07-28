@@ -149,7 +149,7 @@ public class AnalyzeController {
                 .thenApply(analyze -> {
                     var misses = analyze.events().stream()
                             .filter(hitEvent -> !hitEvent.wasHit())
-                            .filter(e -> e.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
+                            .filter(e -> e.eventType() == HitEvent.EventType.SLIDER_HEAD || e.eventType() == HitEvent.EventType.HIT_CIRCLE)
                             .toList();
                     return getMissArr(misses);
                 })

@@ -37,7 +37,7 @@ public class WebServer implements Closeable {
                     .post("/beatmaps/{beatmapId}/leaderboards", router.leaderboardController::getMapLeaderboard)
 
                     .get("/beatmapsets/lookup", router.beatmapsetController::lookupBeatmapset)
-                    .get("/beatmapsets/search", router::searchBeatmapset)
+                    .get("/beatmapsets/search", router.beatmapsetController::searchBeatmapset)
                     .get("/beatmapsets/{beatmapsetId}", router.beatmapsetController::renderBeatmapsetById)
                     .get("/beatmapsets/{beatmapsetId}/background", router.beatmapsetController::getBeatmapsetBg)
                     .get("/beatmapsets/{beatmapsetId}/download", router.beatmapsetController::downloadBeatmapset)
@@ -49,15 +49,15 @@ public class WebServer implements Closeable {
                     .get("/scores/{scoreId}/misses", router.analyzeController::getMisses)
                     .get("/scores/{scoreId}/misses/{missIndex}/visualize", router.analyzeController::visualizeMiss)
 
-                    .get("/multiplayer/rooms/current", router::getCurrentRoom)
-                    .get("/multiplayer/rooms/current/item", router::getCurrentRoomItem)
+                    .get("/multiplayer/rooms/current", router.multiplayerController::getCurrentRoom)
+                    .get("/multiplayer/rooms/current/item", router.multiplayerController::getCurrentRoomItem)
 
-                    .post("/users", router::getUsers)
-                    .get("/users/me", router::getSelf)
-                    .get("/users/me/friends", router::getFriends)
+                    .post("/users", router.userController::getUsers)
+                    .get("/users/me", router.userController::getSelf)
+                    .get("/users/me/friends", router.userController::getFriends)
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)
-                    .get("/users/{userId}/scores/bestof", router::getBestOfN)
-                    .get("/users/{userId}/scores/recent", router::getRecentScores)
+                    .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
+                    .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
 
                     .get("/daily", router::getDaily)
                     .get("/health", router::getServerStatus)
