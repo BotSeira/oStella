@@ -2,6 +2,10 @@
 ostella:
   # Maximum number of requests per second to send to the osu! API
   requestPerSecond: 10
+  # Minimum delay between replay download requests in milliseconds
+  replayRequestIntervalMillis: 2500
+  # Maximum number of replay downloads allowed at the same time
+  replayMaxConcurrent: 1
   # Number of worker threads for rendering images
   renderWorkers: 4
   # Enable debug endpoints, not recommended for production use

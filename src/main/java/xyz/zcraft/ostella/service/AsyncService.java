@@ -4,46 +4,45 @@ import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 public class AsyncService {
-    private final ExecutorService executor;
+    private final ExecutorService requestExecutor;
+    private final ExecutorService replayExecutor;
+    private final StrictRateGate requestRateGate;
+    private final StrictRateGate replayRateGate;
+    private final Semaphore replaySemaphore;
 
-    private final Object rateLock = new Object();
-    private final long requestIntervalNanos;
-    private long nextRequestNanos;
-
-    private final Semaphore semaphore = new Semaphore(1, true);
-
-    public AsyncService(int requestPerSecond) {
-        executor = Executors.newVirtualThreadPerTaskExecutor();
-        requestIntervalNanos = TimeUnit.SECONDS.toNanos(1) / Math.max(1, requestPerSecond);
-        nextRequestNanos = System.nanoTime();
-    }
-
-    private void acquireStrictRatePermit(Restriction restriction) throws InterruptedException {
-        synchronized (rateLock) {
-            long waitNanos = nextRequestNanos - System.nanoTime();
-
-            if (waitNanos > 0) {
-                TimeUnit.NANOSECONDS.sleep(waitNanos);
-            }
-
-            nextRequestNanos = System.nanoTime() + requestIntervalNanos * (restriction == Restriction.STRICTER ? 5 : 1);
-        }
+    public AsyncService(int requestPerSecond, int replayRequestIntervalMillis, int replayMaxConcurrent) {
+        requestExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        replayExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        requestRateGate = new StrictRateGate(
+                TimeUnit.SECONDS.toNanos(1) / Math.max(1, requestPerSecond));
+        replayRateGate = new StrictRateGate(
+                TimeUnit.MILLISECONDS.toNanos(Math.max(1, replayRequestIntervalMillis)));
+        replaySemaphore = new Semaphore(Math.max(1, replayMaxConcurrent), true);
     }
 
     public <T> CompletableFuture<T> enqueueAsync(Supplier<T> supplier) {
-        return enqueueAsync(supplier, Restriction.NORMAL);
+        return enqueueAsync(supplier, requestExecutor, requestRateGate, null);
     }
 
-    public <T> CompletableFuture<T> enqueueAsync(Supplier<T> supplier, Restriction restriction) {
+    public <T> CompletableFuture<T> enqueueReplayAsync(Supplier<T> supplier) {
+        return enqueueAsync(supplier, replayExecutor, replayRateGate, replaySemaphore);
+    }
+
+    private <T> CompletableFuture<T> enqueueAsync(
+            Supplier<T> supplier,
+            ExecutorService targetExecutor,
+            StrictRateGate rateGate,
+            Semaphore concurrencyLimit
+    ) {
         return CompletableFuture.supplyAsync(() -> {
             boolean acquired = false;
 
             try {
-                if (restriction == Restriction.STRICTER) {
-                    semaphore.acquire();
+                if (concurrencyLimit != null) {
+                    concurrencyLimit.acquire();
                     acquired = true;
                 }
-                acquireStrictRatePermit(restriction);
+                rateGate.acquire();
 
                 return supplier.get();
             } catch (InterruptedException e) {
@@ -51,17 +50,31 @@ public class AsyncService {
                 throw new CompletionException(e);
             } finally {
                 if (acquired) {
-                    semaphore.release();
+                    concurrencyLimit.release();
                 }
             }
-        }, executor);
+        }, targetExecutor);
     }
 
     public void close() {
-        executor.shutdown();
+        requestExecutor.shutdown();
+        replayExecutor.shutdown();
     }
 
-    public enum Restriction {
-        NORMAL, STRICTER
+    private static final class StrictRateGate {
+        private final long intervalNanos;
+        private long nextRequestNanos = System.nanoTime();
+
+        private StrictRateGate(long intervalNanos) {
+            this.intervalNanos = intervalNanos;
+        }
+
+        private synchronized void acquire() throws InterruptedException {
+            long waitNanos;
+            while ((waitNanos = nextRequestNanos - System.nanoTime()) > 0) {
+                TimeUnit.NANOSECONDS.sleep(waitNanos);
+            }
+            nextRequestNanos = System.nanoTime() + intervalNanos;
+        }
     }
 }

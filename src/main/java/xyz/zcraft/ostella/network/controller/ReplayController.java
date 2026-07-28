@@ -9,7 +9,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.exception.ReplayFetchException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.network.Response;
@@ -27,6 +26,8 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.optionalDouble;
@@ -40,6 +41,7 @@ public class ReplayController {
     private final AppConfig conf;
     private final Router router;
     private final Gson GSON = new Gson();
+    private final ConcurrentMap<Long, CompletableFuture<Path>> replayFetches = new ConcurrentHashMap<>();
 
     public ReplayController(Router router) {
         this.router = router;
@@ -327,13 +329,40 @@ public class ReplayController {
 
     public CompletableFuture<Path> getReplayFuture(long id) {
         final Optional<Path> replayCache = CacheService.getReplayCache(id);
-        return replayCache.map(CompletableFuture::completedFuture).orElseGet(() -> executor.enqueueAsync(() -> {
+        if (replayCache.isPresent()) {
+            return CompletableFuture.completedFuture(replayCache.get());
+        }
+
+        final CompletableFuture<Path> pending = new CompletableFuture<>();
+        final CompletableFuture<Path> existing = replayFetches.putIfAbsent(id, pending);
+        if (existing != null) {
+            return existing;
+        }
+
+        executor.enqueueReplayAsync(() -> {
+            final Optional<Path> cacheAfterQueue = CacheService.getReplayCache(id);
+            if (cacheAfterQueue.isPresent()) {
+                return cacheAfterQueue.get();
+            }
+
             try {
                 return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
             } catch (IOException e) {
                 throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, "Failed to cache replay for score id: " + id, e);
             }
-        }, AsyncService.Restriction.STRICTER));
+        }).whenComplete((path, error) -> {
+            try {
+                if (error == null) {
+                    pending.complete(path);
+                } else {
+                    pending.completeExceptionally(error);
+                }
+            } finally {
+                replayFetches.remove(id, pending);
+            }
+        });
+
+        return pending;
     }
 
     public record ShowcaseRequest(List<String> ids) {

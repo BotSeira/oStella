@@ -8,7 +8,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.TokenData;
-import xyz.zcraft.ostella.exception.ReplayFetchException;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.osu.model.Score;
 
