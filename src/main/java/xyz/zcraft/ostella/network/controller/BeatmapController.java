@@ -6,7 +6,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
@@ -217,5 +220,37 @@ public class BeatmapController {
                     }
                 }, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    public void getBackground(@NotNull Context context) {
+        final long m = requirePathLong(context, "beatmapId");
+
+        context.future(() ->
+                executor.enqueueAsync(() -> CacheService.getBeatmapPath(m))
+                        .thenApply(p -> {
+                            try {
+                                return BeatmapParser.parseBeatmap(p);
+                            } catch (ParseException e) {
+                                throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+                            }
+                        })
+                        .thenApply(b -> {
+                            final OsuBeatmap.Event.BackgroundEvent bg = (OsuBeatmap.Event.BackgroundEvent) b.getBgAndVideoEvents().stream().filter(e -> e.getType() == OsuBeatmap.Event.Type.BACKGROUND)
+                                    .findFirst()
+                                    .orElseThrow(() -> new ApiException(ErrorCode.NO_BACKGROUND_FOUND, "No background found"));
+
+                            context.header("X-Beatmap-Id", String.valueOf(b.getBeatmapId()));
+                            context.header("X-Beatmapset-Id", String.valueOf(b.getBeatmapSetId()));
+
+                            String fileName = bg.getFileName();
+                            if (fileName.startsWith("\"") && fileName.endsWith("\"")) {
+                                fileName = fileName.substring(1, fileName.length() - 1);
+                            }
+
+                            return CacheService.getBeatmapBg(b.getBeatmapSetId(), fileName)
+                                    .orElseThrow(() -> new ApiException(ErrorCode.NO_BACKGROUND_FOUND, "No background found"));
+                        })
+                        .thenAccept(bytes -> context.status(200).result(bytes))
+        );
     }
 }

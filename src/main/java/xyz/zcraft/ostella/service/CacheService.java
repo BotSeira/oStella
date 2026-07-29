@@ -333,4 +333,16 @@ public class CacheService {
     public static boolean hasReplayCache(Long id) {
         return Files.exists(REPLAY_CACHE.resolve(id + ".osr"));
     }
+
+    public static Optional<byte[]> getBeatmapBg(Long beatmapSetId, String bgFileName) {
+        final Path resolve = DANSER_SONG_CACHE.resolve(String.valueOf(beatmapSetId), bgFileName);
+        if (Files.exists(resolve)) {
+            try {
+                return Optional.of(Files.readAllBytes(resolve));
+            } catch (IOException e) {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
+    }
 }
