@@ -19,6 +19,9 @@ import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.parser.ReplayParser;
+import xyz.zcraft.osu.parser.data.replay.OsuReplay;
+import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -143,7 +146,7 @@ public class ReplayController {
         return renderScoreForAsync(context, score, start, end);
     }
 
-    public void queueReplayRenderOfIdAsync(@NotNull Context context) {
+    public void queueReplayRenderOfId(@NotNull Context context) {
         long scoreId = requirePathLong(context, "scoreId");
         context.future(() ->
                 router.getScore(scoreId).thenCompose(score -> {
@@ -158,12 +161,12 @@ public class ReplayController {
 
     public void getReplayRenderOverview(@NotNull Context context) {
         context.status(200).result(String.valueOf(new Response(true, "", GSON.toJsonTree(Map.of(
-                "enabled", replayService != null,
+                "enabled", conf.replayRender().enabled(),
                 "queue", replayService != null ? replayService.getQueueSize() : 0
         )))));
     }
 
-    public void renderShowcaseOfIdsAsync(@NotNull Context context) {
+    public void renderShowcaseOfIds(@NotNull Context context) {
         if (replayService == null) return;
 
         final ShowcaseRequest showcaseRequest = GSON.fromJson(context.body(), ShowcaseRequest.class);
@@ -179,7 +182,7 @@ public class ReplayController {
         });
     }
 
-    public void renderShowcaseOfUsersAsync(@NotNull Context context) {
+    public void renderShowcaseOfUsers(@NotNull Context context) {
         if (replayService == null) return;
 
         final ShowcaseRequest showcaseRequest = GSON.fromJson(context.body(), ShowcaseRequest.class);
@@ -222,7 +225,7 @@ public class ReplayController {
                     return scoreFutures.stream()
                             .map(CompletableFuture::join)
                             .filter(Objects::nonNull)
-                            .filter(Score::getHasReplay)
+                            .filter(score -> CacheService.hasReplayCache(score.getId()) || score.getHasReplay())
                             .filter(score -> seenIds.add(score.getId()))
                             .peek(router::ensurePp)
                             .collect(Collectors.toCollection(LinkedList::new));
@@ -235,7 +238,7 @@ public class ReplayController {
     private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
-        if (!score.getHasReplay()) {
+        if (!CacheService.hasReplayCache(score.getId()) && !score.getHasReplay()) {
             throw new ApiException(ErrorCode.REPLAY_UNAVAILABLE, "Replay unavailable!");
         }
 
@@ -363,6 +366,48 @@ public class ReplayController {
         });
 
         return pending;
+    }
+
+    public void uploadReplay(@NotNull Context context) {
+        try {
+            final byte[] bytes = context.bodyAsBytes();
+            final OsuReplay osuReplay = ReplayParser.parseReplay(bytes);
+
+            context.future(() ->
+                    executor.enqueueAsync(() -> {
+                                if (osuReplay.replayInfo() == null) {
+                                    if (osuReplay.legacyScoreId() > 0) {
+                                        return OsuAPI.getLegacyScore(tokenManager.getTokenData(), osuReplay.legacyScoreId());
+                                    } else throw new ApiException(ErrorCode.NO_SCORE_FOUND, "Replay does not match any score ID");
+                                } else {
+                                    return OsuAPI.getScore(tokenManager.getTokenData(), osuReplay.replayInfo().onlineId());
+                                }
+                            })
+                            .thenAccept(score -> {
+                                if (score == null) {
+                                    throw new ApiException(ErrorCode.NO_SCORE_FOUND, "Replay does not match any score ID");
+                                }
+
+                                try {
+                                    CacheService.transferReplay(score.getId(), bytes);
+                                } catch (IOException e) {
+                                    throw new ApiException(ErrorCode.REPLAY_UPLOAD_FAILED, "Failed to upload replay", e);
+                                }
+
+                                context.result(new Response(true, "Replay uploaded successfully!", GSON.toJsonTree(Map.of(
+                                        "scoreId", score.getId(),
+                                        "beatmapId", score.getBeatmap().getId(),
+                                        "beatmapsetId", score.getBeatmap().getBeatmapsetId(),
+                                        "userId", score.getUserId(),
+                                        "username", score.getUser().getUsername()
+                                ))).toString());
+
+                                LOG.debug("Replay uploaded successfully for score id {}", score.getId());
+                            })
+            );
+        } catch (ParseException e) {
+            throw new ApiException(ErrorCode.REPLAY_PARSE_FAILED, "Failed to parse replay", e);
+        }
     }
 
     public record ShowcaseRequest(List<String> ids) {

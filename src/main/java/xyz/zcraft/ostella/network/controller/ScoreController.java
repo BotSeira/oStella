@@ -55,8 +55,8 @@ public class ScoreController {
     }
 
     public void renderScoreById(@NotNull Context context) {
-
         final long scoreId = requirePathLong(context, "scoreId");
+
         context.future(() -> router.getScore(scoreId)
                 .thenApplyAsync(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -76,7 +76,9 @@ public class ScoreController {
                             LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
                         }
 
-                        return renderer.renderScore(score, diffSpec, calPp);
+                        final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
+
+                        return renderer.renderScore(score, diffSpec, calPp, replayPresent);
                     } catch (ParseException e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
                     } catch (AnalyzeException e) {

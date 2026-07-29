@@ -63,15 +63,16 @@ public class WebServer implements Closeable {
 
                     .get("/daily", router::getDaily)
                     .get("/health", router::getServerStatus)
+
+                    .get("/replays/status", router.replayController::getReplayRenderOverview)
+                    .post("/replays/upload", router.replayController::uploadReplay)
             ;
 
             if (conf.replayRender().enabled()) {
                 cfg.routes
-                        .get("/replays/status", router.replayController::getReplayRenderOverview)
-
-                        .post("/replays/renders/score/{scoreId}", router.replayController::queueReplayRenderOfIdAsync)
-                        .post("/replays/renders/showcase/scores", router.replayController::renderShowcaseOfIdsAsync)
-                        .post("/replays/renders/showcase/{beatmapId}", router.replayController::renderShowcaseOfUsersAsync)
+                        .post("/replays/renders/score/{scoreId}", router.replayController::queueReplayRenderOfId)
+                        .post("/replays/renders/showcase/scores", router.replayController::renderShowcaseOfIds)
+                        .post("/replays/renders/showcase/{beatmapId}", router.replayController::renderShowcaseOfUsers)
 
                         .get("/replays/{jobId}/status", router.replayController::getReplayRenderStatus)
                         .get("/replays/{jobId}/video", router.replayController::getReplayRenderResultStream)

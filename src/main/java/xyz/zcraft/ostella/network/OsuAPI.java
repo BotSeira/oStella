@@ -85,6 +85,28 @@ public class OsuAPI {
         }
     }
 
+    public static Score getLegacyScore(TokenData tokenData, long legacyScoreId) {
+        LOG.debug("Fetching legacy score with id {}", legacyScoreId);
+
+        try {
+            final var request = newRequestBuilder(tokenData, "/scores/osu/" + legacyScoreId)
+                    .GET()
+                    .build();
+
+            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+
+            if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
+                return null;
+            }
+
+            // Not cached for now
+
+            return GSON.fromJson(body, Score.class);
+        } catch (JsonSyntaxException | InterruptedException | IOException e) {
+            throw new ApiException(ErrorCode.SCORE_FETCH_FAILED, "Failed to get score id " + legacyScoreId, e);
+        }
+    }
+
     public static List<Score> getUserScores(TokenData tokenData, long uid, ScoreType mode, int limit) {
         LOG.debug("Fetching {} scores for user id {} in mode {}", mode.name().toLowerCase(), uid, mode.name().toLowerCase());
         try {
@@ -96,7 +118,8 @@ public class OsuAPI {
                 case RECENT_PASS, BEST -> false;
                 case RECENT -> true;
             };
-            final var request = newRequestBuilder(tokenData, String.format("/users/%s/scores/%s?mode=osu&limit=%d&include_fails=%d", uid, type, limit, fail ? 1 : 0))
+            final String url = "/users/%s/scores/%s?mode=osu&limit=%d&include_fails=%d";
+            final var request = newRequestBuilder(tokenData, String.format(url, uid, type, limit, fail ? 1 : 0))
                     .GET()
                     .build();
 
@@ -118,7 +141,8 @@ public class OsuAPI {
     public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
         LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
         try {
-            final var request = newRequestBuilder(tokenData, String.format("/beatmaps/%s/scores/users/%s", beatmapId, uid))
+            final String url = "/beatmaps/%s/scores/users/%s";
+            final var request = newRequestBuilder(tokenData, String.format(url, beatmapId, uid))
                     .GET()
                     .build();
 
@@ -202,6 +226,7 @@ public class OsuAPI {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user id " + uid, e);
         }
     }
+
     public static UserExtended getUser(TokenData tokenData, String username) {
         LOG.debug("Fetching user with username {}", username);
         try {

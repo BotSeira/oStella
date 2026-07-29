@@ -55,6 +55,7 @@ public class ApiException extends RuntimeException {
             case ROOM_FETCH_FAILED -> "Room fetch failed";
             case IMAGE_FETCH_FAILED -> "Image fetch failed";
             case TOKEN_FETCH_FAILED -> "Token fetch failed";
+            case REPLAY_UPLOAD_FAILED -> "Replay upload failed";
             case null -> "Unknown error";
         };
     }
