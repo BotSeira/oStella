@@ -284,6 +284,8 @@ public class RenderService implements AutoCloseable {
 
                 Page page = context.newPage();
 
+                page.setDefaultTimeout(60 * 1000);
+
                 return new RenderWorkerState(playwright, browser, context, page);
             } catch (Exception e) {
                 playwright.close();
