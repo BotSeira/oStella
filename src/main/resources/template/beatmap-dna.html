@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <title>oStella - Beatmap DNA</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script>
+        window.__OSTELLA_RENDER_READY__ = false;
+    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -276,7 +279,7 @@
     <span>Generated with oStella</span>
 </div>
 
-<script th:inline="javascript">
+<script>
     // Thymeleaf injection
     const aimPct = /*[[${dna.getAimPercent()}]]*/ 65;
     const streamPct = /*[[${dna.getStreamPercent()}]]*/ 20;
@@ -317,7 +320,7 @@
     }
 </script>
 
-<script th:inline="javascript">
+<script>
     // Inject the List<Double> or List<Integer> representing strain points over time
     const strainData = /*[[${dna.getStrainPoints()}]]*/ [10, 15, 12, 18, 25, 20, 22, 95, 100, 85, 20, 15];
     const strainLabels = strainData.map((_, index) => index); // Arbitrary X-axis
@@ -360,6 +363,9 @@
             ]
         });
     }
+
+    window.__OSTELLA_RENDER_READY__ = true;
+
 </script>
 
 </body>

@@ -160,6 +160,50 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 | GET    | `/daily`  | Current daily challenge room summary | none               | JSON     |
 | GET    | `/health` | Service health and osu! API health   | none               | JSON     |
 
+### Custom Templates
+
+| Method | Path                               | Response |
+|--------|------------------------------------|----------|
+| POST   | `/templates/{templateName}/render` | PNG      |
+
+To render custom templates, you can use this endpoint. 
+Put your template file under `templates/` directory, 
+and call the endpoint with the filename without `.html` as the template name.
+
+#### POST Body Structure
+
+You can POST a JSON body with the following structure:
+
+```json
+{
+  "@score": 12345678,
+  "@beatmap": 12345,
+  "@beatmapset": 56789,
+  "@user": 12345678,
+  "key1": "value1",
+  "key2": "value2"
+}
+```
+
+If `@score`, `@beatmap`, `@beatmapset`, or `@user` are provided,
+the corresponding data will be fetched and made available in the template context.
+The rest of key-value pairs will be  available as direct variables in the template.
+
+Template rendering is powered by [Thymeleaf](https://www.thymeleaf.org/), 
+and you can use Thymeleaf syntax in your templates to access the data.
+
+#### External Assets
+
+To use external assets, put them under `templates/assets/` directory,
+and reference them in your template with `http://local-asset/` + relative paths.
+
+For example, if you have `templates/assets/image.png`,
+you can reference it in your template as:
+
+```html
+<img src="http://local-asset/image.png"  alt="Image"/>
+```
+
 ### Lookup Params
 
 #### Looking up beatmaps, beatmapsets, or scores by explicit ID:

@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.__OSTELLA_RENDER_READY__ = false;
+    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -623,7 +626,7 @@
     <span>Generated with oStella</span>
 </div>
 
-<script th:inline="javascript">
+<script>
     const historyData = /*[[${user.rankHistory.data}]]*/ [12345, 12222, 11111, 10000, 9876];
 
     let max = 0;
@@ -664,6 +667,8 @@
             }
         }
     });
+
+    window.__OSTELLA_RENDER_READY__ = true;
 </script>
 
 </body>

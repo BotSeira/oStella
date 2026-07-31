@@ -170,4 +170,85 @@ public class Router implements Closeable {
 
         return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id));
     }
+
+    public void renderCustomTemplate(@NotNull Context context) {
+        final String s = context.pathParam("templateName");
+
+        final JsonObject data = JsonParser.parseString(context.body()).getAsJsonObject();
+
+        final HashMap<String, CompletableFuture<Object>> variablesFuture = new HashMap<>();
+
+        final JsonElement score = data.remove("@score");
+        if (score != null) {
+            final long scoreId = score.getAsLong();
+            variablesFuture.put(
+                    "score",
+                    executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), scoreId))
+            );
+        }
+
+        final JsonElement user = data.remove("@user");
+        if (user != null) {
+            final long userId = user.getAsLong();
+            variablesFuture.put(
+                    "user",
+                    executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+            );
+        }
+
+        final JsonElement beatmap = data.remove("@beatmap");
+        if (beatmap != null) {
+            final long beatmapId = beatmap.getAsLong();
+            variablesFuture.put(
+                    "beatmap",
+                    executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), beatmapId))
+            );
+        }
+
+        final JsonElement beatmapset = data.remove("@beatmapset");
+        if (beatmapset != null) {
+            final long beatmapsetId = beatmapset.getAsLong();
+            variablesFuture.put(
+                    "beatmapset",
+                    executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), beatmapsetId))
+            );
+        }
+
+        data.entrySet().forEach(entry -> {
+            final String key = entry.getKey();
+            final JsonElement value = entry.getValue();
+            final Object obj;
+            if (value.isJsonArray()) {
+                obj = value.getAsJsonArray();
+            } else if (value.isJsonObject()) {
+                obj = value.getAsJsonObject();
+            } else {
+                final JsonPrimitive prim = value.getAsJsonPrimitive();
+                if (prim.isBoolean()) {
+                    obj = prim.getAsBoolean();
+                } else if (prim.isNumber()) {
+                    obj = prim.getAsNumber();
+                } else {
+                    obj = prim.getAsString();
+                }
+            }
+            variablesFuture.put(key, CompletableFuture.completedFuture(obj));
+        });
+
+        context.future(() -> CompletableFuture.allOf(variablesFuture.values().toArray(new CompletableFuture[0]))
+                .thenApply(_ -> {
+                    HashMap<String, Object> variables = new HashMap<>();
+                    for (Map.Entry<String, CompletableFuture<Object>> entry : variablesFuture.entrySet()) {
+                        try {
+                            variables.put(entry.getKey(), entry.getValue().get());
+                        } catch (Exception e) {
+                            throw new RuntimeException("Failed to get variable " + entry.getKey(), e);
+                        }
+                    }
+                    return variables;
+                })
+                .thenApplyAsync(variables -> renderer.renderCustomTemplate(s, variables), renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).result(bytes))
+        );
+    }
 }

@@ -123,7 +123,13 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final HttpResponse<String> send = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (send.statusCode() == 404) {
+                throw new ApiException(ErrorCode.NO_USER_FOUND, "User not found for uid" + uid);
+            }
+
+            final String body = send.body();
 
             final LinkedList<Score> scores = new LinkedList<>();
             JsonParser.parseString(body).getAsJsonArray().forEach(s -> {
