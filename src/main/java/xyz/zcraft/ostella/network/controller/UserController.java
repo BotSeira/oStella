@@ -12,10 +12,12 @@ import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -135,6 +137,48 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 
+    public void getRecentScoresBatch(@NotNull Context context) {
+        final RecentScoresBatchBody body = GSON.fromJson(context.body(), RecentScoresBatchBody.class);
+
+        if (body.userIds() == null || body.userIds().isEmpty()) {
+            context.status(400).result(Response.error("Missing 'user_ids' array in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        final HashMap<Long, CompletableFuture<List<Score>>> scoreFutures = new HashMap<>();
+        for (Long userId : body.userIds()) {
+            scoreFutures.put(userId, executor.enqueueAsync(() -> OsuAPI.getUserScores(
+                    tokenManager.getTokenData(), userId, body.includeFails() ? ScoreType.RECENT : ScoreType.RECENT_PASS, body.limit())
+            ));
+        }
+
+        context.future(() -> CompletableFuture.allOf(scoreFutures.values().toArray(new CompletableFuture[0]))
+                .thenApply(_ -> {
+                    JsonObject result = new JsonObject();
+                    for (var entry : scoreFutures.entrySet()) {
+                        try {
+                            List<Score> scores = entry.getValue().join();
+                            JsonArray scoresArr = new JsonArray();
+                            for (Score score : scores) {
+                                scoresArr.add(GSON.toJsonTree(BatchScore.fromScore(score)));
+                            }
+                            result.add(String.valueOf(entry.getKey()), scoresArr);
+                        } catch (CompletionException e) {
+                            if (e.getCause() instanceof ApiException apiEx && apiEx.getErrorCode() == ErrorCode.NO_SCORE_FOUND) {
+                                LOG.warn("No recent scores found for user id {}: {}", entry.getKey(), apiEx.getMessage());
+                                result.add(String.valueOf(entry.getKey()), new JsonArray());
+                            } else {
+                                LOG.error("Error fetching recent scores for user id {}", entry.getKey(), e);
+                                result.add(String.valueOf(entry.getKey()), new JsonArray());
+                            }
+                        }
+                    }
+                    return result;
+                })
+                .thenAccept(result -> context.status(200).result(new Response(true, "Success", result).toString()))
+        );
+    }
+
     public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
         final int n = requireInt(context, "n");
@@ -203,5 +247,45 @@ public class UserController {
     public record UserLookupBody(
             @SerializedName("user_name") String userName
     ) {
+    }
+
+    public record RecentScoresBatchBody(
+            @SerializedName("user_ids") List<Long> userIds,
+            @SerializedName("limit") int limit,
+            @SerializedName("include_fails") boolean includeFails
+    ) {}
+
+    public record BatchScore(
+            @SerializedName("beatmap_id") long beatmapId,
+            @SerializedName("beatmapset_id") long beatmapsetId,
+            @SerializedName("score_id") long scoreId,
+            @SerializedName("user_id") long userId,
+            @SerializedName("full_name") String fullName,
+            @SerializedName("total_score") long totalScore,
+            @SerializedName("rank") String rank,
+            @SerializedName("accuracy") double accuracy,
+            @SerializedName("max_combo") long maxCombo,
+            @SerializedName("pp") double pp,
+            @SerializedName("mods") String mods
+    ) {
+        public static BatchScore fromScore(Score score) {
+            return new BatchScore(
+                    score.getBeatmapId(),
+                    score.getBeatmapset().getId(),
+                    score.getId(),
+                    score.getUserId(),
+                    "%s - %s [%.2f★ %s]".formatted(
+                            score.getBeatmapset().getArtist(),
+                            score.getBeatmapset().getTitle(),
+                            score.getBeatmap().getDifficultyRating(),
+                            score.getBeatmap().getVersion()),
+                    score.getTotalScore(),
+                    score.getRank(),
+                    score.getAccuracy(),
+                    score.getMaxCombo(),
+                    score.getPp() != null ? score.getPp() : 0.0,
+                    score.getMods().stream().map(Mod::getAcronym).collect(Collectors.joining(""))
+            );
+        }
     }
 }
