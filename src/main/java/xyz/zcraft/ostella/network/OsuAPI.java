@@ -230,7 +230,7 @@ public class OsuAPI {
     public static UserExtended getUser(TokenData tokenData, String username) {
         LOG.debug("Fetching user with username {}", username);
         try {
-            final var request = newRequestBuilder(tokenData, "/users/@" + username)
+            final var request = newRequestBuilder(tokenData, "/users/@" + URLEncoder.encode(username, StandardCharsets.UTF_8))
                     .GET()
                     .build();
 
