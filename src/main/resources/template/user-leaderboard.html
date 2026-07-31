@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>oStella - Leaderboard</title>
+    <script>
+        window.__OSTELLA_RENDER_READY__ = false;
+    </script>
     <style>
         * {
             box-sizing: border-box;
@@ -248,6 +251,8 @@
     <span th:text="${'Data collected in ' + time}">Data collected in 2026-04-11T23:30:27Z</span>
     <span>Generated with oStella</span>
 </div>
-
+<script>
+    window.__OSTELLA_RENDER_READY__ = true;
+</script>
 </body>
 </html>

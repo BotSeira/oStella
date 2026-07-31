@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.__OSTELLA_RENDER_READY__ = false;
+    </script>
     <title>oStella - Beatmap</title>
     <style>
         * {
@@ -772,7 +775,7 @@
     </div>
 </div>
 
-<script th:inline="javascript">
+<script>
     function mapToPercentage(dataArray) {
         const maxIndex = dataArray.length - 1;
         if (maxIndex <= 0) return dataArray.map(y => ({x: 50, y}));
@@ -884,6 +887,8 @@
             interaction: {mode: 'index', intersect: false}
         }
     });
+
+    window.__OSTELLA_RENDER_READY__ = true;
 </script>
 
 </body>

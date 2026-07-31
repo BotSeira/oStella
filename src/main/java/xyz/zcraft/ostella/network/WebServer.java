@@ -66,6 +66,8 @@ public class WebServer implements Closeable {
                     .get("/daily", router::getDaily)
                     .get("/health", router::getServerStatus)
 
+                    .post("/templates/{templateName}/render", router::renderCustomTemplate)
+
                     .get("/replays/status", router.replayController::getReplayRenderOverview)
                     .post("/replays/upload", router.replayController::uploadReplay)
             ;
