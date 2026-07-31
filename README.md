@@ -3,7 +3,7 @@
 `oStella` is a Java service that fetches osu! data and exposes simple HTTP endpoints for status,
 multiplayer info, and rendered osu! images.
 
-It is the backend for [Seira](https://github.com/ZayrexDev/Seira) bot,
+It is the backend for [Seira](https://github.com/BotSeira/SeiraCore) bot,
 and also provides a standalone API for other clients to consume.
 
 ## What You Get
