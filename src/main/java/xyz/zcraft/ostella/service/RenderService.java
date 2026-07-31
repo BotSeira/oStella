@@ -64,6 +64,8 @@ public class RenderService implements AutoCloseable {
         FileTemplateResolver resolverLocal = new FileTemplateResolver();
         resolver.setTemplateMode(TemplateMode.HTML);
         resolver.setSuffix(".html");
+        resolver.setCacheable(false);
+        resolver.setCheckExistence(true);
 
         templateEngineLocal = new TemplateEngine();
         templateEngineLocal.setTemplateResolver(resolverLocal);
