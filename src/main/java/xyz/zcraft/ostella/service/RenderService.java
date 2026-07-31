@@ -323,7 +323,7 @@ public class RenderService implements AutoCloseable {
 
         @Override
         public void close() {
-            closeSafely("BrowserContext", context::close);
+//            closeSafely("BrowserContext", context::close);
             closeSafely("Browser", browser::close);
             closeSafely("Playwright", playwright::close);
 
