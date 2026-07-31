@@ -22,7 +22,6 @@ import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.ReplayAnalyzer;
 import xyz.zcraft.osu.parser.ReplayParser;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
-import xyz.zcraft.osu.parser.data.beatmap.HitObject;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.HitEvent;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
@@ -90,12 +89,13 @@ public class AnalyzeController {
 
                     final List<Long> hitErrors = analyze.events().stream()
                             .filter(HitEvent::wasHit)
+                            .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
                             .map(HitEvent::hitTimeOffset)
                             .toList();
 
                     final List<HitEvent.AimBias> aimBiasAbs = analyze.events().stream()
                             .filter(HitEvent::wasHit)
-                            .filter(e -> e.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
+                            .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
                             .map(HitEvent::aimBias)
                             .filter(Objects::nonNull)
                             .toList();
@@ -111,7 +111,7 @@ public class AnalyzeController {
 
                     final List<HitEvent.AimBias> misses = analyze.events().stream()
                             .filter(hitEvent -> !hitEvent.wasHit())
-                            .filter(e -> e.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
+                            .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
                             .map(HitEvent::aimBias)
                             .filter(Objects::nonNull)
                             .filter(b -> b.distance() < diffSpec.getDifficulty().getCircleRadiusInPixel() * 1.2).toList();
