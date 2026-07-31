@@ -8,23 +8,29 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.config.AppConfig;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.parser.ReplayParser;
+import xyz.zcraft.osu.parser.data.replay.OsuReplay;
+import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.optionalDouble;
@@ -38,6 +44,7 @@ public class ReplayController {
     private final AppConfig conf;
     private final Router router;
     private final Gson GSON = new Gson();
+    private final ConcurrentMap<Long, CompletableFuture<Path>> replayFetches = new ConcurrentHashMap<>();
 
     public ReplayController(Router router) {
         this.router = router;
@@ -139,7 +146,7 @@ public class ReplayController {
         return renderScoreForAsync(context, score, start, end);
     }
 
-    public void queueReplayRenderOfIdAsync(@NotNull Context context) {
+    public void queueReplayRenderOfId(@NotNull Context context) {
         long scoreId = requirePathLong(context, "scoreId");
         context.future(() ->
                 router.getScore(scoreId).thenCompose(score -> {
@@ -154,107 +161,120 @@ public class ReplayController {
 
     public void getReplayRenderOverview(@NotNull Context context) {
         context.status(200).result(String.valueOf(new Response(true, "", GSON.toJsonTree(Map.of(
-                "enabled", replayService != null,
+                "enabled", conf.replayRender().enabled(),
                 "queue", replayService != null ? replayService.getQueueSize() : 0
         )))));
     }
 
-    public void renderShowcaseOfIdsAsync(@NotNull Context context) {
+    public void renderShowcaseOfIds(@NotNull Context context) {
         if (replayService == null) return;
 
         final ShowcaseRequest showcaseRequest = GSON.fromJson(context.body(), ShowcaseRequest.class);
-        final List<Long> scoreIds = showcaseRequest.ids();
+        final List<String> scoreIds = showcaseRequest.ids();
 
         context.future(() -> {
             List<CompletableFuture<Score>> scoreFutures = scoreIds.stream()
-                    .map(router::getScore).toList();
+                    .map(Long::parseLong)
+                    .map(router::getScore)
+                    .toList();
 
             return finalizeShowcase(context, scoreFutures);
         });
     }
 
-    public void renderShowcaseOfUsersAsync(@NotNull Context context) {
+    public void renderShowcaseOfUsers(@NotNull Context context) {
         if (replayService == null) return;
 
         final ShowcaseRequest showcaseRequest = GSON.fromJson(context.body(), ShowcaseRequest.class);
 
         final long m = requirePathLong(context, "beatmapId");
-        final List<Long> userIds = showcaseRequest.ids();
+        final List<String> ids = showcaseRequest.ids();
+
+        final Set<Long> scoreIds = new HashSet<>();
+
+        ids.stream().filter(id -> id.startsWith("s")).map(id -> id.substring(1)).map(Long::parseLong).forEach(scoreIds::add);
 
         context.future(() -> {
-            LOG.info("Getting {} scores for showcase on map {}", userIds.size(), m);
+            LOG.info("Getting {} scores for showcase on map {}", ids.size(), m);
 
-            List<CompletableFuture<Score>> scoreFutures = userIds.stream()
-                    .map(userId -> executor.enqueueAsync(() ->
-                            OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m))).toList();
+            List<CompletableFuture<Score>> scoreFutures = new ArrayList<>(ids.stream()
+                    .filter(id -> !id.startsWith("s"))
+                    .map(id -> {
+                        if (id.startsWith("u")) return id.substring(1);
+                        return id;
+                    })
+                    .map(Long::parseLong)
+                    .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m)))
+                    .toList());
+
+            scoreFutures.addAll(scoreIds.stream().map(router::getScore).toList());
 
             return finalizeShowcase(context, scoreFutures);
         });
     }
 
     @NonNull
-    private CompletableFuture<?> finalizeShowcase(@NotNull Context context, List<CompletableFuture<Score>> scoreFutures) {
-        return CompletableFuture.allOf(scoreFutures.toArray(new CompletableFuture[0]))
-                .thenApply(_ -> scoreFutures.stream()
-                        .map(CompletableFuture::join)
-                        .filter(s -> s != null && s.getHasReplay())
-                        .peek(router::ensurePp)
-                        .collect(Collectors.toCollection(LinkedList::new))
+    private CompletableFuture<?> finalizeShowcase(@NotNull Context context,
+                                                  List<CompletableFuture<Score>> scoreFutures) {
+        return CompletableFuture.allOf(
+                        scoreFutures.toArray(new CompletableFuture<?>[0])
                 )
-                .thenCompose(validScores -> {
-                    final double start = optionalDouble(context, "start");
-                    final double end = optionalDouble(context, "end");
+                .thenApply(ignored -> {
+                    Set<Long> seenIds = new HashSet<>();
 
-                    return renderShowcaseForAsync(context, validScores, start, end);
-                });
+                    return scoreFutures.stream()
+                            .map(CompletableFuture::join)
+                            .filter(Objects::nonNull)
+                            .filter(score -> CacheService.hasReplayCache(score.getId()) || score.getHasReplay())
+                            .filter(score -> seenIds.add(score.getId()))
+                            .peek(router::ensurePp)
+                            .collect(Collectors.toCollection(LinkedList::new));
+                })
+                .thenCompose(validScores ->
+                        renderShowcaseForAsync(context, validScores)
+                );
     }
 
     private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
-        if (!score.getHasReplay()) {
+        if (!CacheService.hasReplayCache(score.getId()) && !score.getHasReplay()) {
             throw new ApiException(ErrorCode.REPLAY_UNAVAILABLE, "Replay unavailable!");
         }
 
         return executor.enqueueAsync(() -> {
-            if (!CacheService.cacheBeatmapsetFile(score.getBeatmapset().getId())) {
-                throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to cache beatmapset!");
-            }
-            return null;
-        }).thenCompose(_ ->
-                executor.enqueueAsync(() -> {
-                    try {
-                        return CacheService.getReplay(tokenManager.getTokenData(), score.getId());
-                    } catch (IOException e) {
-                        throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, "Failed to cache replay for score id: " + score.getId(), e);
+                    if (!CacheService.cacheBeatmapsetFile(score.getBeatmapset().getId())) {
+                        throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to cache beatmapset!");
                     }
+                    return null;
                 })
-        ).thenAccept(replayPath -> {
-            final int queueSize = replayService.getQueueSize() + 1;
+                .thenCompose(_ -> router.replayController.getReplayFuture(score.getId()))
+                .thenAccept(replayPath -> {
+                    final int queueSize = replayService.getQueueSize() + 1;
 
-            if (queueSize > conf.replayRender().renderQueueSize()) {
-                throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full!");
-            }
+                    if (queueSize > conf.replayRender().renderQueueSize()) {
+                        throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full!");
+                    }
 
-            final String jobId = replayService.queueRender(replayPath, start, end);
+                    final String jobId = replayService.queueRender(replayPath, start, end);
 
-            score.getBeatmap().setBeatmapset(score.getBeatmapset());
+                    score.getBeatmap().setBeatmapset(score.getBeatmapset());
 
-            JsonObject obj = new JsonObject();
-            obj.addProperty("status", "queued");
-            obj.addProperty("position", queueSize);
-            obj.addProperty("id", jobId);
-            obj.add("beatmap", GSON.toJsonTree(score.getBeatmap()));
-            obj.add("scores", router.getScoresArr(List.of(score)));
+                    JsonObject obj = new JsonObject();
+                    obj.addProperty("status", "queued");
+                    obj.addProperty("position", queueSize);
+                    obj.addProperty("id", jobId);
+                    obj.add("beatmap", GSON.toJsonTree(score.getBeatmap()));
+                    obj.add("scores", router.getScoresArr(List.of(score)));
 
-            if (!Double.isNaN(start)) obj.addProperty("start", start);
-            if (!Double.isNaN(end)) obj.addProperty("end", end);
+                    if (!Double.isNaN(start)) obj.addProperty("start", start);
+                    if (!Double.isNaN(end)) obj.addProperty("end", end);
 
-            context.status(202).result(new Response(true, "Replay render queued!", obj).toString());
-        });
+                    context.status(202).result(new Response(true, "Replay render queued!", obj).toString());
+                });
     }
 
-    private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores, Double start, Double end) {
+    private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (scores.isEmpty()) {
@@ -277,14 +297,7 @@ public class ReplayController {
             if (beatmap == null) throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap!");
 
             List<CompletableFuture<Path>> replayFutures = scores.stream()
-                    .map(score -> executor.enqueueAsync(() -> {
-                        try {
-                            return CacheService.getReplay(tokenManager.getTokenData(), score.getId());
-                        } catch (IOException e) {
-                            LOG.error("Failed to cache replay for score id: {}", score.getId(), e);
-                            return null;
-                        }
-                    }))
+                    .map(score -> router.replayController.getReplayFuture(score.getId()))
                     .toList();
 
             return CompletableFuture.allOf(replayFutures.toArray(new CompletableFuture[0]))
@@ -299,7 +312,7 @@ public class ReplayController {
                             throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Render queue full!");
                         }
 
-                        final String jobId = replayService.queueRenderShowcase(String.valueOf(beatmapId), replays, start, end);
+                        final String jobId = replayService.queueRenderShowcase(String.valueOf(beatmapId), replays);
 
                         JsonObject obj = new JsonObject();
                         obj.addProperty("status", "queued");
@@ -313,6 +326,90 @@ public class ReplayController {
         });
     }
 
-    public record ShowcaseRequest(List<Long> ids) {
+    public Path getReplay(long id) {
+        return getReplayFuture(id).join();
+    }
+
+    public CompletableFuture<Path> getReplayFuture(long id) {
+        final Optional<Path> replayCache = CacheService.getReplayCache(id);
+        if (replayCache.isPresent()) {
+            return CompletableFuture.completedFuture(replayCache.get());
+        }
+
+        final CompletableFuture<Path> pending = new CompletableFuture<>();
+        final CompletableFuture<Path> existing = replayFetches.putIfAbsent(id, pending);
+        if (existing != null) {
+            return existing;
+        }
+
+        executor.enqueueReplayAsync(() -> {
+            final Optional<Path> cacheAfterQueue = CacheService.getReplayCache(id);
+            if (cacheAfterQueue.isPresent()) {
+                return cacheAfterQueue.get();
+            }
+
+            try {
+                return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+            } catch (IOException e) {
+                throw new ApiException(ErrorCode.REPLAY_FETCH_FAILED, "Failed to cache replay for score id: " + id, e);
+            }
+        }).whenComplete((path, error) -> {
+            try {
+                if (error == null) {
+                    pending.complete(path);
+                } else {
+                    pending.completeExceptionally(error);
+                }
+            } finally {
+                replayFetches.remove(id, pending);
+            }
+        });
+
+        return pending;
+    }
+
+    public void uploadReplay(@NotNull Context context) {
+        try {
+            final byte[] bytes = context.bodyAsBytes();
+            final OsuReplay osuReplay = ReplayParser.parseReplay(bytes);
+
+            context.future(() ->
+                    executor.enqueueAsync(() -> {
+                                if (osuReplay.replayInfo() == null) {
+                                    if (osuReplay.legacyScoreId() > 0) {
+                                        return OsuAPI.getLegacyScore(tokenManager.getTokenData(), osuReplay.legacyScoreId());
+                                    } else throw new ApiException(ErrorCode.NO_SCORE_FOUND, "Replay does not match any score ID");
+                                } else {
+                                    return OsuAPI.getScore(tokenManager.getTokenData(), osuReplay.replayInfo().onlineId());
+                                }
+                            })
+                            .thenAccept(score -> {
+                                if (score == null) {
+                                    throw new ApiException(ErrorCode.NO_SCORE_FOUND, "Replay does not match any score ID");
+                                }
+
+                                try {
+                                    CacheService.transferReplay(score.getId(), bytes);
+                                } catch (IOException e) {
+                                    throw new ApiException(ErrorCode.REPLAY_UPLOAD_FAILED, "Failed to upload replay", e);
+                                }
+
+                                context.result(new Response(true, "Replay uploaded successfully!", GSON.toJsonTree(Map.of(
+                                        "scoreId", score.getId(),
+                                        "beatmapId", score.getBeatmap().getId(),
+                                        "beatmapsetId", score.getBeatmap().getBeatmapsetId(),
+                                        "userId", score.getUserId(),
+                                        "username", score.getUser().getUsername()
+                                ))).toString());
+
+                                LOG.debug("Replay uploaded successfully for score id {}", score.getId());
+                            })
+            );
+        } catch (ParseException e) {
+            throw new ApiException(ErrorCode.REPLAY_PARSE_FAILED, "Failed to parse replay", e);
+        }
+    }
+
+    public record ShowcaseRequest(List<String> ids) {
     }
 }

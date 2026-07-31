@@ -20,10 +20,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -291,17 +288,25 @@ public class CacheService {
         return false;
     }
 
-    public static Path getReplay(TokenData tokenData, long id) throws IOException {
-        Path beatmapsetPath = REPLAY_CACHE.resolve(id + ".osr");
+    public static Path getReplayBlocking(TokenData tokenData, long id) throws IOException {
+        Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
 
-        if (!Files.exists(beatmapsetPath)) {
-            LOG.debug("Caching replay {}", id);
-            Files.write(beatmapsetPath, executor.enqueueAsync(() -> OsuAPI.getReplayBytes(tokenData, id)).join());
-        }
+        LOG.debug("Getting replay {}", id);
+
+        Files.write(replayPath, OsuAPI.getReplayBytes(tokenData, id));
 
         LOG.debug("Replay {} is ready", id);
 
-        return beatmapsetPath;
+        return replayPath;
+    }
+
+    public static Optional<Path> getReplayCache(long id) {
+        Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
+        if (Files.exists(replayPath)) {
+            return Optional.of(replayPath);
+        } else {
+            return Optional.empty();
+        }
     }
 
     public static Path getDanserCache() {
@@ -319,5 +324,25 @@ public class CacheService {
 
     public static void cacheScoreJson(Score score) throws IOException {
         Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
+    }
+
+    public static void transferReplay(Long id, byte[] bytes) throws IOException {
+        Files.write(REPLAY_CACHE.resolve(id + ".osr"), bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+    }
+
+    public static boolean hasReplayCache(Long id) {
+        return Files.exists(REPLAY_CACHE.resolve(id + ".osr"));
+    }
+
+    public static Optional<byte[]> getBeatmapBg(Long beatmapSetId, String bgFileName) {
+        final Path resolve = DANSER_SONG_CACHE.resolve(String.valueOf(beatmapSetId), bgFileName);
+        if (Files.exists(resolve)) {
+            try {
+                return Optional.of(Files.readAllBytes(resolve));
+            } catch (IOException e) {
+                return Optional.empty();
+            }
+        }
+        return Optional.empty();
     }
 }

@@ -1,16 +1,28 @@
 # === Config for oStella ===
 ostella:
-  requestPerSecond: 10 # Maximum number of requests per second to send to the osu! API
-  renderWorkers: 4 # Number of worker threads for rendering images
-  debugMode: false # Enable debug endpoints, not recommended for production use
-  safeFlags: false # Hides specific sensitive flags
+  # Maximum number of requests per second to send to the osu! API
+  requestPerSecond: 10
+  # Minimum delay between replay download requests in milliseconds
+  replayRequestIntervalMillis: 2500
+  # Maximum number of replay downloads allowed at the same time
+  replayMaxConcurrent: 1
+  # Number of worker threads for rendering images
+  renderWorkers: 4
+  # Enable debug endpoints, not recommended for production use
+  debugMode: false
+  # Hides specific sensitive flags
+  safeFlags: false
 
 # === Config for Javalin webserver ===
 webserver:
-  port: 8721 # Port to run the server on
-  maxThreads: 10 # Max number of threads for handling web requests
-  minThreads: 2 # Min number of threads for handling web requests
-  idleTimeout: 60000 # Idle timeout for web server threads in milliseconds
+  # Port to run the server on
+  port: 8721
+  # Max number of threads for handling web requests
+  maxThreads: 10
+  # Min number of threads for handling web requests
+  minThreads: 2
+  # Idle timeout for web server threads in milliseconds
+  idleTimeout: 60000
 
 # === Config for osu! API credentials ===
 # Get your own credentials by creating an application
@@ -24,12 +36,18 @@ osu:
 # which allows you to render osu! replays as videos using danser.
 replayRender:
   enabled: true
-  danserPath: "danser/danser-cli" # Path to the danser CLI executable, will be used to locate settings folder for danser
-  configPath: "" # Optional path to danser's config file, if not set default config will be used
-  renderQueueSize: 5 # Maximum number of replays to render waiting in queue
-  renderThreads: 1 # Maximum number of replays to render at the same time
+  # Path to the danser CLI executable, will be used to locate settings folder for danser
+  danserPath: "danser/danser-cli"
+  # Optional path to danser's config file, if not set default config will be used
+  configPath: ""
+  # Maximum number of replays to render waiting in queue
+  renderQueueSize: 5
+  # Maximum number of replays to render at the same time
+  renderThreads: 1
 
 # === Optional configuration for performance+ ===
 performancePlus:
-  enabled: true # Enable performance+ endpoints, which provide more detailed performance calculations
-  endpoint: "http://localhost:5000/api" # URL of the performance+ API, make sure to set this to your actual performance+ API URL if you have it running
+  # Enable performance+ endpoints, which provide more detailed performance calculations
+  enabled: true
+  # URL of the performance+ API, make sure to set this to your actual performance+ API URL if you have it running
+  endpoint: "http://localhost:5000/api"

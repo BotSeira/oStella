@@ -115,10 +115,10 @@ public class ReplayService implements Closeable {
         return jobId;
     }
 
-    public String queueRenderShowcase(String beatmapId, List<Path> osrPaths, double start, double end) {
+    public String queueRenderShowcase(String beatmapId, List<Path> osrPaths) {
         final String jobId = UUID.randomUUID().toString();
         jobProgress.put(jobId, new JobProgress(JobStatus.QUEUED));
-        executor.submit(() -> renderShowcase(beatmapId, osrPaths, jobId, start, end));
+        executor.submit(() -> renderShowcase(beatmapId, osrPaths, jobId));
         return jobId;
     }
 
@@ -160,7 +160,7 @@ public class ReplayService implements Closeable {
         }
     }
 
-    private void renderShowcase(String beatmapId, List<Path> osrPaths, String jobId, double start, double end) {
+    private void renderShowcase(String beatmapId, List<Path> osrPaths, String jobId) {
         jobProgress.put(jobId, new JobProgress(JobStatus.RENDERING));
         Path tempSettingsFile = null;
         try {
@@ -180,14 +180,6 @@ public class ReplayService implements Closeable {
 
             if (System.getProperty("os.name").toLowerCase().contains("win")) {
                 replayList = replayList.replace("\"", "\\\"");
-            }
-
-            if (!Double.isNaN(start)) {
-                c.add("-start=" + start);
-            }
-
-            if (!Double.isNaN(end)) {
-                c.add("-end=" + end);
             }
 
             c.add("-knockout2=" + replayList);

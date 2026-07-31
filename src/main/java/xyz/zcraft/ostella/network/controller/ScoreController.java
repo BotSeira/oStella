@@ -5,6 +5,8 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
@@ -20,8 +22,11 @@ import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
-import static xyz.zcraft.ostella.util.RequestUtil.requireLong;
-import static xyz.zcraft.ostella.util.RequestUtil.requirePathLong;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class ScoreController {
     private static final Logger LOG = LogManager.getLogger(ScoreController.class);
@@ -51,6 +56,7 @@ public class ScoreController {
 
     public void renderScoreById(@NotNull Context context) {
         final long scoreId = requirePathLong(context, "scoreId");
+
         context.future(() -> router.getScore(scoreId)
                 .thenApplyAsync(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -70,7 +76,9 @@ public class ScoreController {
                             LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
                         }
 
-                        return renderer.renderScore(score, diffSpec, calPp);
+                        final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
+
+                        return renderer.renderScore(score, diffSpec, calPp, replayPresent);
                     } catch (ParseException e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
                     } catch (AnalyzeException e) {
@@ -114,7 +122,7 @@ public class ScoreController {
     }
 
     private void lookupScoreOfRefAsync(@NotNull Context context) {
-        context.future(() -> router.getScoreFromRefAsync(context)
+        context.future(() -> getScoreFromRefAsync(context)
                 .thenApply(Score::getId)
                 .thenCompose(router::getScore)
                 .thenAccept(score -> context.status(200).result(
@@ -140,11 +148,63 @@ public class ScoreController {
         return data;
     }
 
+    public CompletableFuture<Score> getScoreFromBeatmapsetAsync(@NotNull Context context) {
+        final long ms = requireLong(context, "ms");
+        final int i = requireInt(context, "i");
+        final long u = requireLong(context, "u");
+
+        return executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
+                .thenCompose(beatmapset -> {
+                    if (beatmapset == null) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
+
+                    final List<BeatmapExtended> beatmaps = beatmapset.getBeatmaps();
+
+                    if (beatmaps.size() < i) throw new ApiException(ErrorCode.NO_BEATMAP_FOUND);
+
+                    beatmaps.sort(Comparator.comparingDouble(BeatmapExtended::getDifficultyRating));
+                    final BeatmapExtended beatmap = beatmaps.get(i - 1);
+                    beatmap.setBeatmapset(beatmapset);
+                    context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
+                    return executor
+                            .enqueueAsync(() ->
+                                    OsuAPI.getUserScore(tokenManager.getTokenData(), u, beatmap.getId())
+                            )
+                            .thenApply(score -> {
+                                score.setBeatmap(beatmap);
+                                score.setBeatmapset(beatmapset);
+                                return score;
+                            });
+                });
+
+    }
 
     private void lookupScoreOfBeatmapsetAsync(@NotNull Context context) {
-        context.future(() -> router.getScoreFromBeatmapsetAsync(context)
+        context.future(() -> getScoreFromBeatmapsetAsync(context)
                 .thenAccept(score -> context.status(200).result(
                         new Response(true, "Success", scoreLookupData(score)).toString()
                 )));
+    }
+
+    public CompletableFuture<Score> getScoreFromRefAsync(@NotNull Context context) {
+        final String of = requireStringFrom(context, "of", "rs", "bo", "rp");
+        final long u = requireLong(context, "u");
+        final int i = requirePositiveInt(context, "i");
+
+        final ScoreType type = switch (of.toLowerCase()) {
+            case "rs" -> ScoreType.RECENT;
+            case "rp" -> ScoreType.RECENT_PASS;
+            case "bo" -> ScoreType.BEST;
+            default -> throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score type: " + of);
+        };
+
+        return executor
+                .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, type, i))
+                .thenApply(scores -> {
+                    if (scores.isEmpty() || scores.size() < i) {
+                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores found for user!");
+                    }
+
+                    return scores.get(i - 1);
+                });
     }
 }

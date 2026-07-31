@@ -1,33 +1,80 @@
 package xyz.zcraft.ostella.service;
 
-import com.google.common.util.concurrent.RateLimiter;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 public class AsyncService {
-    private final ExecutorService executor;
+    private final ExecutorService requestExecutor;
+    private final ExecutorService replayExecutor;
+    private final StrictRateGate requestRateGate;
+    private final StrictRateGate replayRateGate;
+    private final Semaphore replaySemaphore;
 
-    @SuppressWarnings("UnstableApiUsage")
-    private final RateLimiter rateLimiter;
-
-    public AsyncService(int requestPerSecond) {
-        executor = Executors.newVirtualThreadPerTaskExecutor();
-        //noinspection UnstableApiUsage
-        this.rateLimiter = RateLimiter.create(Math.max(1, requestPerSecond));
+    public AsyncService(int requestPerSecond, int replayRequestIntervalMillis, int replayMaxConcurrent) {
+        requestExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        replayExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        requestRateGate = new StrictRateGate(
+                TimeUnit.SECONDS.toNanos(1) / Math.max(1, requestPerSecond));
+        replayRateGate = new StrictRateGate(
+                TimeUnit.MILLISECONDS.toNanos(Math.max(1, replayRequestIntervalMillis)));
+        replaySemaphore = new Semaphore(Math.max(1, replayMaxConcurrent), true);
     }
 
     public <T> CompletableFuture<T> enqueueAsync(Supplier<T> supplier) {
+        return enqueueAsync(supplier, requestExecutor, requestRateGate, null);
+    }
+
+    public <T> CompletableFuture<T> enqueueReplayAsync(Supplier<T> supplier) {
+        return enqueueAsync(supplier, replayExecutor, replayRateGate, replaySemaphore);
+    }
+
+    private <T> CompletableFuture<T> enqueueAsync(
+            Supplier<T> supplier,
+            ExecutorService targetExecutor,
+            StrictRateGate rateGate,
+            Semaphore concurrencyLimit
+    ) {
         return CompletableFuture.supplyAsync(() -> {
-            //noinspection UnstableApiUsage
-            rateLimiter.acquire();
-            return supplier.get();
-        }, executor);
+            boolean acquired = false;
+
+            try {
+                if (concurrencyLimit != null) {
+                    concurrencyLimit.acquire();
+                    acquired = true;
+                }
+                rateGate.acquire();
+
+                return supplier.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new CompletionException(e);
+            } finally {
+                if (acquired) {
+                    concurrencyLimit.release();
+                }
+            }
+        }, targetExecutor);
     }
 
     public void close() {
-        executor.shutdown();
+        requestExecutor.shutdown();
+        replayExecutor.shutdown();
+    }
+
+    private static final class StrictRateGate {
+        private final long intervalNanos;
+        private long nextRequestNanos = System.nanoTime();
+
+        private StrictRateGate(long intervalNanos) {
+            this.intervalNanos = intervalNanos;
+        }
+
+        private synchronized void acquire() throws InterruptedException {
+            long waitNanos;
+            while ((waitNanos = nextRequestNanos - System.nanoTime()) > 0) {
+                TimeUnit.NANOSECONDS.sleep(waitNanos);
+            }
+            nextRequestNanos = System.nanoTime() + intervalNanos;
+        }
     }
 }

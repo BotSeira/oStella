@@ -1,13 +1,36 @@
 package xyz.zcraft.ostella.util;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import io.javalin.http.Context;
-import xyz.zcraft.ostella.network.ApiException;
+import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.Response;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 
 public class RequestUtil {
+    private final static Gson GSON = new Gson();
+
+    public static void putResult(Context context, Object result) {
+        context.status(200);
+        JsonElement data;
+
+        if (result instanceof JsonElement) {
+            data = (JsonElement) result;
+        } else {
+            data = GSON.toJsonTree(result);
+        }
+
+        context.result(new Response(true, "Success", data).toString());
+    }
+
+    public static void putResult(Context context, String key, String val) {
+        putResult(context, Map.of(key, val));
+    }
+
     public static int requireInt(Context context, String param) throws ApiException {
         try {
             return Integer.parseInt(Objects.requireNonNull(context.queryParam(param)));
