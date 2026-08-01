@@ -117,15 +117,17 @@ public class RenderService implements AutoCloseable {
         Page page = workerState.page();
 
         page.setContent(html, new Page.SetContentOptions().setWaitUntil(WaitUntilState.LOAD));
-
-        page.waitForFunction("""
-        () => document.fonts.status === 'loaded'
-            && Array.from(document.images).every(img => img.complete)
-            && (
-                window.__OSTELLA_RENDER_READY__ === undefined
-                || window.__OSTELLA_RENDER_READY__ === true
-            )
-        """);
+        page.waitForLoadState(LoadState.NETWORKIDLE);
+        page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
+            
+        // page.waitForFunction("""
+        // () => document.fonts.status === 'loaded'
+        //    && Array.from(document.images).every(img => img.complete)
+        //    && (
+        //        window.__OSTELLA_RENDER_READY__ === undefined
+        //        || window.__OSTELLA_RENDER_READY__ === true
+        //    )
+        // """);
 
         return page.locator("body").screenshot();
     }
