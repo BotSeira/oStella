@@ -2,6 +2,7 @@ package xyz.zcraft.ostella.service;
 
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.WaitUntilState;
+import com.microsoft.playwright.options.LoadState;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -64,6 +65,8 @@ public class RenderService implements AutoCloseable {
         FileTemplateResolver resolverLocal = new FileTemplateResolver();
         resolver.setTemplateMode(TemplateMode.HTML);
         resolver.setSuffix(".html");
+        resolver.setCacheable(false);
+        resolver.setCheckExistence(true);
 
         templateEngineLocal = new TemplateEngine();
         templateEngineLocal.setTemplateResolver(resolverLocal);
@@ -115,15 +118,17 @@ public class RenderService implements AutoCloseable {
         Page page = workerState.page();
 
         page.setContent(html, new Page.SetContentOptions().setWaitUntil(WaitUntilState.LOAD));
-
-        page.waitForFunction("""
-        () => document.fonts.status === 'loaded'
-            && Array.from(document.images).every(img => img.complete)
-            && (
-                window.__OSTELLA_RENDER_READY__ === undefined
-                || window.__OSTELLA_RENDER_READY__ === true
-            )
-        """);
+        page.waitForLoadState(LoadState.NETWORKIDLE);
+        page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
+            
+        // page.waitForFunction("""
+        // () => document.fonts.status === 'loaded'
+        //    && Array.from(document.images).every(img => img.complete)
+        //    && (
+        //        window.__OSTELLA_RENDER_READY__ === undefined
+        //        || window.__OSTELLA_RENDER_READY__ === true
+        //    )
+        // """);
 
         return page.locator("body").screenshot();
     }
@@ -282,6 +287,8 @@ public class RenderService implements AutoCloseable {
 
                 Page page = context.newPage();
 
+                page.setDefaultTimeout(60 * 1000);
+
                 return new RenderWorkerState(playwright, browser, context, page);
             } catch (Exception e) {
                 playwright.close();
@@ -319,7 +326,7 @@ public class RenderService implements AutoCloseable {
 
         @Override
         public void close() {
-            closeSafely("BrowserContext", context::close);
+//            closeSafely("BrowserContext", context::close);
             closeSafely("Browser", browser::close);
             closeSafely("Playwright", playwright::close);
 
