@@ -115,11 +115,39 @@ public class RenderService implements AutoCloseable {
             throw new IllegalStateException("Image rendering must run on RenderService's executor");
         }
 
-        Page page = workerState.page();
+        var browser = workerState.browser();
+        
+        try (BrowserContext context = browser.newContext(new Browser.NewContextOptions());
+             Page page = context.newPage()) {
+            page.route("http://ostella-cache/**", route -> {
+                String url = route.request().url();
+                String filename = url.substring(url.lastIndexOf("/") + 1);
+                
+                Path imagePath = CacheService.getImagePathFromFilename(filename);
+                
+                route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+            });
 
-        page.setContent(html, new Page.SetContentOptions().setWaitUntil(WaitUntilState.LOAD));
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
+            page.route("http://local-asset/**", route -> {
+                String url = route.request().url();
+                String filename = url.substring("http://local-asset/".length());
+
+                Path filePath = LOCAL_ASSETS_PATH.resolve(filename);
+
+                route.fulfill(new Route.FulfillOptions().setPath(filePath));
+            });
+
+            page.setContent(html);
+            page.waitForLoadState(LoadState.NETWORKIDLE);
+            page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
+            return page.locator("body").screenshot();
+        }
+
+        // Page page = workerState.page();
+
+        // page.setContent(html, new Page.SetContentOptions().setWaitUntil(WaitUntilState.LOAD));
+        // page.waitForLoadState(LoadState.NETWORKIDLE);
+        // page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
             
         // page.waitForFunction("""
         // () => document.fonts.status === 'loaded'
@@ -130,7 +158,7 @@ public class RenderService implements AutoCloseable {
         //    )
         // """);
 
-        return page.locator("body").screenshot();
+        // return page.locator("body").screenshot();
     }
 
     private Context createContext() {
