@@ -775,7 +775,7 @@
     </div>
 </div>
 
-<script>
+<script th:inline="javascript">
     function mapToPercentage(dataArray) {
         const maxIndex = dataArray.length - 1;
         if (maxIndex <= 0) return dataArray.map(y => ({x: 50, y}));
