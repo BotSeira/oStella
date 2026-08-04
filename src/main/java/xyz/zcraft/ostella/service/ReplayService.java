@@ -1,8 +1,11 @@
 package xyz.zcraft.ostella.service;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.util.MiscUtil;
 
 import java.io.*;
 import java.nio.file.Files;
@@ -108,10 +111,10 @@ public class ReplayService implements Closeable {
         gobblerThread.start();
     }
 
-    public String queueRender(Path osrPath, double start, double end) {
+    public String queueRender(Path osrPath, double start, double end, boolean obscured) {
         final String jobId = UUID.randomUUID().toString();
         jobProgress.put(jobId, new JobProgress(JobStatus.QUEUED));
-        executor.submit(() -> render(osrPath, jobId, start, end));
+        executor.submit(() -> render(osrPath, jobId, start, end, obscured));
         return jobId;
     }
 
@@ -126,14 +129,14 @@ public class ReplayService implements Closeable {
         return executor.getQueue().size();
     }
 
-    private void render(Path osrPath, String jobId, double start, double end) {
+    private void render(Path osrPath, String jobId, double start, double end, boolean obscured) {
         jobProgress.put(jobId, new JobProgress(JobStatus.RENDERING));
         Path tempSettingsFile = null;
         try {
             final List<String> c = new LinkedList<>();
             final String fileName = "replay_" + jobId;
 
-            tempSettingsFile = prepareDanser(c);
+            tempSettingsFile = prepareDanser(c, obscured);
 
             if (!Double.isNaN(start)) {
                 c.add("-start=" + start);
@@ -201,6 +204,10 @@ public class ReplayService implements Closeable {
     }
 
     private Path prepareDanser(List<String> c) throws IOException {
+        return prepareDanser(c, false);
+    }
+
+    private Path prepareDanser(List<String> c, boolean obscured) throws IOException {
         boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
 
         if (!isWindows) {
@@ -215,13 +222,23 @@ public class ReplayService implements Closeable {
 
         String safeSongPath = songPath.toAbsolutePath().toString().replace("\\", "/");
 
-        try (InputStream templateStream = getConfigAsStream()) {
-            if (templateStream == null) {
-                throw new RuntimeException("Could not find danser-config.json in resources!");
+        try (var templateStream = getConfigAsStream();
+        var obscuredTemplateStream = getClass().getResourceAsStream("/danser-config-patch-obscured.json")) {
+            if (templateStream == null || (obscuredTemplateStream == null && obscured)) {
+                throw new RuntimeException("Could not find required danser config file in resources!");
             }
 
             String jsonTemplate = new String(templateStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
             String finalJsonContent = jsonTemplate.replace("{{OSU_SONGS_DIR}}", safeSongPath);
+
+            if (obscured) {
+                String obscuredJson = new String(obscuredTemplateStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                final JsonObject conf = JsonParser.parseString(finalJsonContent).getAsJsonObject();
+                final JsonObject patch = JsonParser.parseString(obscuredJson).getAsJsonObject();
+                final JsonObject result = MiscUtil.deepMergeJson(conf, patch);
+
+                finalJsonContent = result.toString();
+            }
 
             Path settingsDir = danserPath.getParent().resolve("settings");
             Files.createDirectories(settingsDir);

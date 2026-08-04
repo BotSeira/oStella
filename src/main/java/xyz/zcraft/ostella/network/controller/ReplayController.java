@@ -33,8 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
-import static xyz.zcraft.ostella.util.RequestUtil.optionalDouble;
-import static xyz.zcraft.ostella.util.RequestUtil.requirePathLong;
+import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class ReplayController {
     private static final Logger LOG = LogManager.getLogger(ReplayController.class);
@@ -140,10 +139,11 @@ public class ReplayController {
     private CompletionStage<Void> finalizeReplay(@NotNull Context context, Score score) {
         final double start = optionalDouble(context, "start");
         final double end = optionalDouble(context, "end");
+        final boolean obscured = optionalBoolean(context, "obscured", false);
 
         router.ensurePp(score);
 
-        return renderScoreForAsync(context, score, start, end);
+        return renderScoreForAsync(context, score, start, end, obscured);
     }
 
     public void queueReplayRenderOfId(@NotNull Context context) {
@@ -235,7 +235,7 @@ public class ReplayController {
                 );
     }
 
-    private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end) {
+    private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end, boolean obscured) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (!CacheService.hasReplayCache(score.getId()) && !score.getHasReplay()) {
@@ -256,7 +256,7 @@ public class ReplayController {
                         throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full!");
                     }
 
-                    final String jobId = replayService.queueRender(replayPath, start, end);
+                    final String jobId = replayService.queueRender(replayPath, start, end, obscured);
 
                     score.getBeatmap().setBeatmapset(score.getBeatmapset());
 
