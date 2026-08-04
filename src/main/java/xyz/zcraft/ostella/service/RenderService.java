@@ -1,7 +1,6 @@
 package xyz.zcraft.ostella.service;
 
 import com.microsoft.playwright.*;
-import com.microsoft.playwright.options.WaitUntilState;
 import com.microsoft.playwright.options.LoadState;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
@@ -115,39 +114,14 @@ public class RenderService implements AutoCloseable {
             throw new IllegalStateException("Image rendering must run on RenderService's executor");
         }
 
-        var browser = workerState.browser();
+        var context = workerState.context();
         
-        try (BrowserContext context = browser.newContext(new Browser.NewContextOptions());
-             Page page = context.newPage()) {
-            page.route("http://ostella-cache/**", route -> {
-                String url = route.request().url();
-                String filename = url.substring(url.lastIndexOf("/") + 1);
-                
-                Path imagePath = CacheService.getImagePathFromFilename(filename);
-                
-                route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-            });
-
-            page.route("http://local-asset/**", route -> {
-                String url = route.request().url();
-                String filename = url.substring("http://local-asset/".length());
-
-                Path filePath = LOCAL_ASSETS_PATH.resolve(filename);
-
-                route.fulfill(new Route.FulfillOptions().setPath(filePath));
-            });
-
+        try (Page page = context.newPage()) {
             page.setContent(html);
             page.waitForLoadState(LoadState.NETWORKIDLE);
             page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
             return page.locator("body").screenshot();
         }
-
-        // Page page = workerState.page();
-
-        // page.setContent(html, new Page.SetContentOptions().setWaitUntil(WaitUntilState.LOAD));
-        // page.waitForLoadState(LoadState.NETWORKIDLE);
-        // page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
             
         // page.waitForFunction("""
         // () => document.fonts.status === 'loaded'
@@ -157,8 +131,6 @@ public class RenderService implements AutoCloseable {
         //        || window.__OSTELLA_RENDER_READY__ === true
         //    )
         // """);
-
-        // return page.locator("body").screenshot();
     }
 
     private Context createContext() {
@@ -300,8 +272,7 @@ public class RenderService implements AutoCloseable {
     private record RenderWorkerState(
             Playwright playwright,
             Browser browser,
-            BrowserContext context,
-            Page page
+            BrowserContext context
     ) implements AutoCloseable {
         static RenderWorkerState create() {
             Playwright playwright = Playwright.create();
@@ -313,11 +284,7 @@ public class RenderService implements AutoCloseable {
 
                 setupRoutes(context);
 
-                Page page = context.newPage();
-
-                page.setDefaultTimeout(60 * 1000);
-
-                return new RenderWorkerState(playwright, browser, context, page);
+                return new RenderWorkerState(playwright, browser, context);
             } catch (Exception e) {
                 playwright.close();
                 throw e;
@@ -355,7 +322,7 @@ public class RenderService implements AutoCloseable {
         @Override
         public void close() {
 //            closeSafely("BrowserContext", context::close);
-            closeSafely("Browser", browser::close);
+//            closeSafely("Browser", browser::close);
             closeSafely("Playwright", playwright::close);
 
             LOG.info(
