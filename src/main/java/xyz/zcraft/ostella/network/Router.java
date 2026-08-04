@@ -13,6 +13,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.util.VersionInfo;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
@@ -78,6 +79,7 @@ public class Router implements Closeable {
                                 "Server is running!",
                                 GSON.toJsonTree(Map.of(
                                         "ostella", true,
+                                        "ostella_version", VersionInfo.getVersion(),
                                         "osu-api", r
                                 ))).toString())));
 
