@@ -5,6 +5,7 @@
     },
     "ScoreBoard": {
       "Show": false
-    }
+    },
+    "ShowResultsScreen": false
   }
 }
