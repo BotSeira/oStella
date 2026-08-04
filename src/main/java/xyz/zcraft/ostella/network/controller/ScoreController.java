@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.network.controller;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
@@ -7,7 +8,10 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
@@ -22,14 +26,19 @@ import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class ScoreController {
     private static final Logger LOG = LogManager.getLogger(ScoreController.class);
+    private static final Gson GSON = new Gson();
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -205,6 +214,65 @@ public class ScoreController {
                     }
 
                     return scores.get(i - 1);
+                });
+    }
+
+    public void randomScore(@NotNull Context context) {
+        context.future(() ->
+                executor.enqueueAsync(() -> OsuAPI.getLatestPassedScores(tokenManager.getTokenData()))
+                        .thenApply(scores -> {
+                            List<Long> userIds = scores.stream()
+                                    .map(Score::getUserId)
+                                    .distinct()
+                                    .collect(Collectors.toCollection(ArrayList::new));
+
+                            Collections.shuffle(userIds, ThreadLocalRandom.current());
+                            return userIds;
+                        })
+                        .thenCompose(userIds -> findAvailableScore(userIds, 0))
+                        .thenCompose(score ->
+                                executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), score.getUserId()))
+                                        .thenApply(user -> {
+                                            JsonObject result = new JsonObject();
+                                            result.add("user", GSON.toJsonTree(user));
+                                            result.add("score", GSON.toJsonTree(score));
+                                            return result;
+                                        })
+                        )
+                        .thenAccept(result ->
+                                context.status(200).result(new Response(true, "Success", result).toString())
+                        )
+        );
+    }
+
+    private CompletableFuture<Score> findAvailableScore(List<Long> userIds, int index) {
+        if (index >= userIds.size()) {
+            return CompletableFuture.failedFuture(
+                    new ApiException(ErrorCode.NO_SCORE_FOUND, "No available scores found!")
+            );
+        }
+
+        long userId = userIds.get(index);
+
+        return executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 10))
+                .thenCompose(scores -> {
+                    if (scores.size() < 8) {
+                        return findAvailableScore(userIds, index + 1);
+                    }
+
+                    List<Score> candidates = scores.subList(3, 8).stream()
+                            .filter(Score::getHasReplay)
+                            .toList();
+
+                    if (candidates.isEmpty()) {
+                        return findAvailableScore(userIds, index + 1);
+                    }
+
+                    Score selected = candidates.get(
+                            ThreadLocalRandom.current().nextInt(candidates.size())
+                    );
+
+                    return CompletableFuture.completedFuture(selected);
                 });
     }
 }
