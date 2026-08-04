@@ -80,7 +80,7 @@ public class Router implements Closeable {
                                 GSON.toJsonTree(Map.of(
                                         "ostella", true,
                                         "ostella_version", VersionInfo.getVersion(),
-                                        "osu-api", r
+                                        "osu_api", r
                                 ))).toString())));
 
     }
