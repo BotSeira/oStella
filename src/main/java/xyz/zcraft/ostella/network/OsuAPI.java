@@ -211,7 +211,7 @@ public class OsuAPI {
     public static UserExtended getUser(TokenData tokenData, long uid) {
         LOG.debug("Fetching user with id {}", uid);
         try {
-            final var request = newRequestBuilder(tokenData, "/users/" + uid)
+            final var request = newRequestBuilder(tokenData, "/users/" + uid + "/osu")
                     .GET()
                     .build();
 
