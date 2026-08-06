@@ -249,7 +249,8 @@ public class ReplayController {
                                 "Failed to prepare beatmapset for osuRenderer", e);
                     }
                     final ReplayService.QueuedJob queued =
-                            replayService.queueRender(replayPath, beatmapset, start, end, obscured);
+                            replayService.queueRender(score.getId(), replayPath,
+                                    score.getBeatmapset().getId(), beatmapset, start, end, obscured);
 
                     score.getBeatmap().setBeatmapset(score.getBeatmapset());
 
@@ -289,13 +290,14 @@ public class ReplayController {
             BeatmapExtended beatmap = beatmapFuture.join();
             if (beatmap == null) throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap!");
 
-            List<CompletableFuture<Path>> replayFutures = scores.stream()
-                    .map(score -> router.replayController.getReplayFuture(score.getId()))
+            List<CompletableFuture<ReplayService.ReplayInput>> replayFutures = scores.stream()
+                    .map(score -> router.replayController.getReplayFuture(score.getId())
+                            .thenApply(path -> path == null ? null : new ReplayService.ReplayInput(score.getId(), path)))
                     .toList();
 
             return CompletableFuture.allOf(replayFutures.toArray(new CompletableFuture[0]))
                     .thenAccept(_ -> {
-                        LinkedList<Path> replays = replayFutures.stream()
+                        LinkedList<ReplayService.ReplayInput> replays = replayFutures.stream()
                                 .map(CompletableFuture::join)
                                 .filter(Objects::nonNull)
                                 .collect(Collectors.toCollection(LinkedList::new));
@@ -308,7 +310,7 @@ public class ReplayController {
                                     "Failed to prepare beatmapset for osuRenderer", e);
                         }
                         final ReplayService.QueuedJob queued = replayService.queueRenderShowcase(
-                                String.valueOf(beatmapId), replays, beatmapset);
+                                String.valueOf(beatmapId), beatmapsetId, replays, beatmapset);
 
                         JsonObject obj = new JsonObject();
                         obj.addProperty("status", "queued");

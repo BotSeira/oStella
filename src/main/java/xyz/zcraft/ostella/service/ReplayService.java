@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.service;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
@@ -21,12 +22,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 public final class ReplayService implements Closeable {
     private static final Logger LOG = LogManager.getLogger(ReplayService.class);
+    private static final Gson GSON = new Gson();
     private final AppConfig config;
     private final HttpClient client;
     private final URI rendererUri;
@@ -40,12 +44,16 @@ public final class ReplayService implements Closeable {
                 .build();
     }
 
-    public QueuedJob queueRender(Path replay, Path beatmapset, double start, double end, boolean obscured) {
-        return upload("single", null, List.of(replay), beatmapset, start, end, obscured);
+    public QueuedJob queueRender(long scoreId, Path replay, long beatmapsetId, Path beatmapset,
+                                  double start, double end, boolean obscured) {
+        return upload("single", null, beatmapsetId, beatmapset,
+                List.of(new ReplayInput(scoreId, replay)), start, end, obscured);
     }
 
-    public QueuedJob queueRenderShowcase(String beatmapId, List<Path> replays, Path beatmapset) {
-        return upload("showcase", beatmapId, replays, beatmapset, Double.NaN, Double.NaN, false);
+    public QueuedJob queueRenderShowcase(String beatmapId, long beatmapsetId,
+                                          List<ReplayInput> replays, Path beatmapset) {
+        return upload("showcase", beatmapId, beatmapsetId, beatmapset,
+                replays, Double.NaN, Double.NaN, false);
     }
 
     public JobProgress getJobProgress(String jobId) {
@@ -114,11 +122,22 @@ public final class ReplayService implements Closeable {
         }
     }
 
-    private QueuedJob upload(String mode, String beatmapId, List<Path> replays, Path beatmapset,
+    private QueuedJob upload(String mode, String beatmapId, long beatmapsetId, Path beatmapset,
+                             List<ReplayInput> replays,
                              double start, double end, boolean obscured) {
         try {
+            List<Long> replayIds = replays.stream().map(ReplayInput::scoreId).toList();
+            CacheStatus cacheStatus = getCacheStatus(Set.of(beatmapsetId), new LinkedHashSet<>(replayIds));
+            List<ReplayInput> missingReplays = replays.stream()
+                    .filter(replay -> !cacheStatus.replayIds().contains(replay.scoreId()))
+                    .toList();
+
             MultipartBody multipart = new MultipartBody();
             multipart.text("mode", mode);
+            multipart.text("beatmapsetId", String.valueOf(beatmapsetId));
+            multipart.text("replayIds", GSON.toJson(replayIds));
+            multipart.text("replayUploadIds", GSON.toJson(
+                    missingReplays.stream().map(ReplayInput::scoreId).toList()));
             if (beatmapId != null) {
                 multipart.text("beatmapId", beatmapId);
             }
@@ -129,9 +148,13 @@ public final class ReplayService implements Closeable {
                 multipart.text("end", String.valueOf(end));
             }
             multipart.bytes("config", "danser-config.json", "application/json", buildDanserConfig(obscured));
-            multipart.file("beatmapset", beatmapset.getFileName().toString(), "application/octet-stream", beatmapset);
-            for (Path replay : replays) {
-                multipart.file("replays", replay.getFileName().toString(), "application/octet-stream", replay);
+            if (!cacheStatus.beatmapsetIds().contains(beatmapsetId)) {
+                multipart.file("beatmapset", beatmapset.getFileName().toString(),
+                        "application/octet-stream", beatmapset);
+            }
+            for (ReplayInput replay : missingReplays) {
+                multipart.file("replays", replay.path().getFileName().toString(),
+                        "application/octet-stream", replay.path());
             }
 
             HttpResponse<String> response = sendString(request("renders")
@@ -152,6 +175,28 @@ public final class ReplayService implements Closeable {
                 throw apiException;
             }
             throw unavailable("Invalid response from osuRenderer", e);
+        }
+    }
+
+    private CacheStatus getCacheStatus(Set<Long> beatmapsetIds, Set<Long> replayIds) {
+        JsonObject body = new JsonObject();
+        body.add("beatmapsetIds", GSON.toJsonTree(beatmapsetIds));
+        body.add("replayIds", GSON.toJsonTree(replayIds));
+        HttpResponse<String> response = sendString(request("cache/status")
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                .build());
+        requireSuccess(response.statusCode(), response.body());
+        try {
+            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            Set<Long> cachedBeatmapsets = new LinkedHashSet<>();
+            Set<Long> cachedReplays = new LinkedHashSet<>();
+            json.getAsJsonArray("beatmapsetIds").forEach(id -> cachedBeatmapsets.add(id.getAsLong()));
+            json.getAsJsonArray("replayIds").forEach(id -> cachedReplays.add(id.getAsLong()));
+            return new CacheStatus(Set.copyOf(cachedBeatmapsets), Set.copyOf(cachedReplays));
+        } catch (RuntimeException e) {
+            throw unavailable("osuRenderer returned an invalid cache status", e);
         }
     }
 
@@ -244,6 +289,17 @@ public final class ReplayService implements Closeable {
     }
 
     public record QueuedJob(String id, int position) {
+    }
+
+    public record ReplayInput(long scoreId, Path path) {
+        public ReplayInput {
+            if (scoreId <= 0 || path == null) {
+                throw new IllegalArgumentException("Replay input requires a positive score id and a file");
+            }
+        }
+    }
+
+    private record CacheStatus(Set<Long> beatmapsetIds, Set<Long> replayIds) {
     }
 
     static final class MultipartBody {

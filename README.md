@@ -144,6 +144,10 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 ### Replays (enabled when `replayRender.enabled` is true)
 
+For video jobs, oStella batch-checks osuRenderer's persistent asset cache using
+the beatmapset ID and score IDs. Only missing `.osz` and `.osr` files are uploaded;
+the public replay endpoints below remain unchanged.
+
 | Method | Path                                    | Purpose                                | Params / POST Body                                | Response    |
 |--------|-----------------------------------------|----------------------------------------|---------------------------------------------------|-------------|
 | GET    | `/replays/status`                       | Replay renderer overview               | none                                              | JSON        |
