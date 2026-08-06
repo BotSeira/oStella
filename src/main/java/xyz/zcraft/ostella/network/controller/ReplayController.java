@@ -24,7 +24,6 @@ import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -55,7 +54,8 @@ public class ReplayController {
 
     public void getReplayRenderStatus(@NotNull Context context) {
         String jobId = context.pathParam("jobId");
-        ReplayService.JobStatus status = replayService.getJobStatus(jobId);
+        ReplayService.JobProgress jobProgress = replayService.getJobProgress(jobId);
+        ReplayService.JobStatus status = jobProgress.status();
 
         switch (status) {
             case ReplayService.JobStatus.DONE -> context.status(200).result(
@@ -83,7 +83,6 @@ public class ReplayController {
                                     "id", jobId
                             ))).toString());
             case ReplayService.JobStatus.RENDERING -> {
-                final ReplayService.JobProgress jobProgress = replayService.getJobProgress(jobId);
                 JsonObject obj = new JsonObject();
                 obj.addProperty("status", "rendering");
                 obj.addProperty("id", jobId);
@@ -101,10 +100,10 @@ public class ReplayController {
 
     public void getReplayRenderResultStream(@NotNull Context context) throws IOException {
         String jobId = context.pathParam("jobId");
-        Path video = replayService.getJobResult(jobId);
+        var video = replayService.openJobResult(jobId);
 
-        if (video != null && Files.exists(video)) {
-            context.writeSeekableStream(Files.newInputStream(video), "video/mp4");
+        if (video != null) {
+            context.contentType("video/mp4").result(video);
         } else {
             context.status(404).result("Video expired or not found");
         }
@@ -112,10 +111,10 @@ public class ReplayController {
 
     public void getReplayRenderResultFile(@NotNull Context context) throws IOException {
         String jobId = context.pathParam("jobId");
-        Path video = replayService.getJobResult(jobId);
+        var video = replayService.openJobResult(jobId);
 
-        if (video != null && Files.exists(video)) {
-            context.result(Files.newInputStream(video));
+        if (video != null) {
+            context.contentType("video/mp4").result(video);
         } else {
             context.status(404).result("Video expired or not found");
         }
@@ -123,16 +122,7 @@ public class ReplayController {
 
     public void deleteReplayRenderResult(@NotNull Context context) throws IOException {
         String jobId = context.pathParam("jobId");
-
-        Path video = replayService.getJobResult(jobId);
-
-        replayService.removeJobProgress(jobId);
-        replayService.removeJobResult(jobId);
-
-        if (video != null && Files.exists(video)) {
-            Files.deleteIfExists(video);
-        }
-
+        replayService.deleteJob(jobId);
         context.status(200).result("Job cleaned up successfully");
     }
 
@@ -160,9 +150,10 @@ public class ReplayController {
     }
 
     public void getReplayRenderOverview(@NotNull Context context) {
+        int queueSize = conf.replayRender().enabled() ? replayService.getQueueSize() : 0;
         context.status(200).result(String.valueOf(new Response(true, "", GSON.toJsonTree(Map.of(
                 "enabled", conf.replayRender().enabled(),
-                "queue", replayService != null ? replayService.getQueueSize() : 0
+                "queue", queueSize
         )))));
     }
 
@@ -250,20 +241,22 @@ public class ReplayController {
                 })
                 .thenCompose(_ -> router.replayController.getReplayFuture(score.getId()))
                 .thenAccept(replayPath -> {
-                    final int queueSize = replayService.getQueueSize() + 1;
-
-                    if (queueSize > conf.replayRender().renderQueueSize()) {
-                        throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full!");
+                    final Path beatmapset;
+                    try {
+                        beatmapset = CacheService.getBeatmapsetArchivePath(score.getBeatmapset().getId());
+                    } catch (IOException e) {
+                        throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED,
+                                "Failed to prepare beatmapset for osuRenderer", e);
                     }
-
-                    final String jobId = replayService.queueRender(replayPath, start, end, obscured);
+                    final ReplayService.QueuedJob queued =
+                            replayService.queueRender(replayPath, beatmapset, start, end, obscured);
 
                     score.getBeatmap().setBeatmapset(score.getBeatmapset());
 
                     JsonObject obj = new JsonObject();
                     obj.addProperty("status", "queued");
-                    obj.addProperty("position", queueSize);
-                    obj.addProperty("id", jobId);
+                    obj.addProperty("position", queued.position());
+                    obj.addProperty("id", queued.id());
                     obj.add("beatmap", GSON.toJsonTree(score.getBeatmap()));
                     obj.add("scores", router.getScoresArr(List.of(score)));
 
@@ -307,17 +300,20 @@ public class ReplayController {
                                 .filter(Objects::nonNull)
                                 .collect(Collectors.toCollection(LinkedList::new));
 
-                        final int queueSize = replayService.getQueueSize() + 1;
-                        if (queueSize > conf.replayRender().renderQueueSize()) {
-                            throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Render queue full!");
+                        final Path beatmapset;
+                        try {
+                            beatmapset = CacheService.getBeatmapsetArchivePath(beatmapsetId);
+                        } catch (IOException e) {
+                            throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED,
+                                    "Failed to prepare beatmapset for osuRenderer", e);
                         }
-
-                        final String jobId = replayService.queueRenderShowcase(String.valueOf(beatmapId), replays);
+                        final ReplayService.QueuedJob queued = replayService.queueRenderShowcase(
+                                String.valueOf(beatmapId), replays, beatmapset);
 
                         JsonObject obj = new JsonObject();
                         obj.addProperty("status", "queued");
-                        obj.addProperty("position", queueSize);
-                        obj.addProperty("id", jobId);
+                        obj.addProperty("position", queued.position());
+                        obj.addProperty("id", queued.id());
                         obj.add("beatmap", GSON.toJsonTree(beatmap));
                         obj.add("scores", router.getScoresArr(scores));
 

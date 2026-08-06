@@ -64,7 +64,7 @@ public class Router implements Closeable {
         this.multiplayerController = new MultiplayerController(this);
         this.userController = new UserController(this);
 
-        this.replayService = new ReplayService(conf, CacheService.getDanserCache());
+        this.replayService = new ReplayService(conf);
         this.replayController = new ReplayController(this);
 
         LOG.info("Router created");

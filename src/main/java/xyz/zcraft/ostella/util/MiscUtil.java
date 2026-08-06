@@ -41,6 +41,8 @@ public class MiscUtil {
                 if (merged.has(key)) {
                     if (merged.get(key).isJsonObject() && other.get(key).isJsonObject()) {
                         merged.add(key, deepMergeJson(merged.getAsJsonObject(key), other.getAsJsonObject(key)));
+                    } else {
+                        merged.add(key, other.get(key));
                     }
                 } else {
                     merged.add(key, other.get(key));

@@ -105,7 +105,9 @@ public class WebServer implements Closeable {
                                  ErrorCode.BEATMAPSET_FETCH_FAILED,
                                  ErrorCode.SCORE_FETCH_FAILED,
                                  ErrorCode.USER_FETCH_FAILED,
-                                 ErrorCode.RENDER_QUEUE_FULL -> ctx.status(500);
+                                 ErrorCode.RENDER_QUEUE_FULL -> ctx.status(429);
+
+                            case ErrorCode.RENDERER_UNAVAILABLE -> ctx.status(502);
 
                             default -> ctx.status(500);
                         }

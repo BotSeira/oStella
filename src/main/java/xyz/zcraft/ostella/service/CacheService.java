@@ -44,7 +44,7 @@ public class CacheService {
 //    private static final Path BEATMAP_JSON_CACHE = JSON_CACHE.resolve("beatmap");
 //    private static final Path BEATMAPSET_JSON_CACHE = JSON_CACHE.resolve("beatmapset");
 
-    private static final Path DANSER_SONG_CACHE = CACHE_PATH.resolve("danser", "songs");
+    private static final Path BEATMAPSET_CACHE = CACHE_PATH.resolve("danser", "songs");
 
     private static final Gson GSON = new Gson();
     private static AsyncService executor = null;
@@ -57,7 +57,7 @@ public class CacheService {
         Files.createDirectories(BEATMAP_CACHE);
         Files.createDirectories(IMAGE_CACHE);
         Files.createDirectories(REPLAY_CACHE);
-        Files.createDirectories(DANSER_SONG_CACHE);
+        Files.createDirectories(BEATMAPSET_CACHE);
         Files.createDirectories(SCORE_JSON_CACHE);
 //        Files.createDirectories(BEATMAP_JSON_CACHE);
 //        Files.createDirectories(BEATMAPSET_JSON_CACHE);
@@ -161,7 +161,7 @@ public class CacheService {
     }
 
     public static boolean cacheBeatmapsetFile(long id) {
-        try (Stream<Path> list = Files.list(DANSER_SONG_CACHE)) {
+        try (Stream<Path> list = Files.list(BEATMAPSET_CACHE)) {
             if (list.map(Path::getFileName)
                     .map(Path::toString)
                     .anyMatch(p -> p.equals(String.valueOf(id)) || p.startsWith(id + " ") || p.equals(id + ".osz"))
@@ -173,7 +173,7 @@ public class CacheService {
             throw new RuntimeException(e);
         }
 
-        Path beatmapsetPath = DANSER_SONG_CACHE.resolve(id + ".osz");
+        Path beatmapsetPath = BEATMAPSET_CACHE.resolve(id + ".osz");
 
         LOG.debug("Downloading beatmapset {} via Sayobot", id);
         if (!downloadSayobot(id, beatmapsetPath)) {
@@ -192,16 +192,16 @@ public class CacheService {
             return;
         }
 
-        final Path oszPath = DANSER_SONG_CACHE.resolve(id + ".osz");
+        final Path oszPath = BEATMAPSET_CACHE.resolve(id + ".osz");
 
         if (Files.exists(oszPath)) {
             Files.copy(oszPath, out);
             return;
         }
 
-        final Path folderPath = DANSER_SONG_CACHE.resolve(String.valueOf(id));
+        final Path folderPath = findExtractedBeatmapset(id).orElse(null);
 
-        if (Files.exists(folderPath) && Files.isDirectory(folderPath)) {
+        if (folderPath != null) {
             try (ZipOutputStream zos = new ZipOutputStream(out);
                  Stream<Path> files = Files.walk(folderPath)) {
                 zos.setLevel(Deflater.BEST_COMPRESSION);
@@ -220,6 +220,64 @@ public class CacheService {
             }
         }
 
+    }
+
+    /**
+     * Returns a transportable .osz archive for osuRenderer. Older caches may already
+     * have been extracted by a local Danser installation, so those are archived once
+     * and then reused for subsequent remote renders.
+     */
+    public static Path getBeatmapsetArchivePath(long id) throws IOException {
+        if (!cacheBeatmapsetFile(id)) {
+            throw new IOException("Failed to cache beatmapset " + id);
+        }
+
+        Path archive = BEATMAPSET_CACHE.resolve(id + ".osz");
+        if (Files.isRegularFile(archive)) {
+            return archive;
+        }
+
+        Path folder = findExtractedBeatmapset(id).orElse(null);
+        if (folder == null) {
+            throw new IOException("Cached beatmapset " + id + " has no archive or directory");
+        }
+
+        Path temporary = Files.createTempFile(BEATMAPSET_CACHE, id + "-", ".osz.tmp");
+        try (OutputStream output = Files.newOutputStream(temporary);
+             ZipOutputStream zip = new ZipOutputStream(output);
+             Stream<Path> files = Files.walk(folder)) {
+            zip.setLevel(Deflater.BEST_COMPRESSION);
+            files.filter(Files::isRegularFile).forEach(path -> {
+                try {
+                    zip.putNextEntry(new ZipEntry(folder.relativize(path).toString().replace('\\', '/')));
+                    Files.copy(path, zip);
+                    zip.closeEntry();
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        } catch (UncheckedIOException e) {
+            Files.deleteIfExists(temporary);
+            throw e.getCause();
+        }
+        try {
+            return Files.move(temporary, archive, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            return Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private static Optional<Path> findExtractedBeatmapset(long id) throws IOException {
+        String exactName = String.valueOf(id);
+        try (Stream<Path> entries = Files.list(BEATMAPSET_CACHE)) {
+            return entries
+                    .filter(Files::isDirectory)
+                    .filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.equals(exactName) || name.startsWith(exactName + " ");
+                    })
+                    .findFirst();
+        }
     }
 
     private static boolean downloadNekoha(long id, Path beatmapsetPath) {
@@ -309,10 +367,6 @@ public class CacheService {
         }
     }
 
-    public static Path getDanserCache() {
-        return DANSER_SONG_CACHE;
-    }
-
     public static Optional<Score> getScoreJsonCache(long id) throws IOException {
         if (!Files.exists(SCORE_JSON_CACHE.resolve(id + ".json"))) {
             return Optional.empty();
@@ -335,13 +389,17 @@ public class CacheService {
     }
 
     public static Optional<byte[]> getBeatmapBg(Long beatmapSetId, String bgFileName) {
-        final Path resolve = DANSER_SONG_CACHE.resolve(String.valueOf(beatmapSetId), bgFileName);
-        if (Files.exists(resolve)) {
-            try {
+        try {
+            Optional<Path> folder = findExtractedBeatmapset(beatmapSetId);
+            if (folder.isPresent()) {
+                Path resolve = folder.get().resolve(bgFileName).normalize();
+                if (!resolve.startsWith(folder.get()) || !Files.exists(resolve)) {
+                    return Optional.empty();
+                }
                 return Optional.of(Files.readAllBytes(resolve));
-            } catch (IOException e) {
-                return Optional.empty();
             }
+        } catch (IOException e) {
+            return Optional.empty();
         }
         return Optional.empty();
     }

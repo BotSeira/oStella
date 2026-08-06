@@ -31,19 +31,16 @@ osu:
   clientId: ""
   clientSecret: ""
 
-# === Optional configuration for danser ===
-# Enable this if you want to use the replay render functionality,
-# which allows you to render osu! replays as videos using danser.
+# === Optional remote replay renderer ===
+# oStella downloads beatmapsets and replays and constructs the Danser settings,
+# then uploads those inputs to a separately deployable osuRenderer instance.
 replayRender:
   enabled: true
-  # Path to the danser CLI executable, will be used to locate settings folder for danser
-  danserPath: "danser/danser-cli"
-  # Optional path to danser's config file, if not set default config will be used
+  rendererUrl: "http://localhost:8722"
+  # Must match renderer.apiKey in osuRenderer. Use a secret when crossing hosts.
+  apiKey: ""
+  # Optional local Danser config template. It is constructed here and sent with each job.
   configPath: ""
-  # Maximum number of replays to render waiting in queue
-  renderQueueSize: 5
-  # Maximum number of replays to render at the same time
-  renderThreads: 1
 
 # === Optional configuration for performance+ ===
 performancePlus:

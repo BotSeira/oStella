@@ -31,7 +31,8 @@ public enum ErrorCode {
     REPLAY_PARSE_FAILED(4004),
     REPLAY_UPLOAD_FAILED(4005),
 
-    RENDER_QUEUE_FULL(5001);
+    RENDER_QUEUE_FULL(5001),
+    RENDERER_UNAVAILABLE(5002);
 
     private final int code;
 

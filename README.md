@@ -11,7 +11,7 @@ and also provides a standalone API for other clients to consume.
 - PNG score panels for best and recent scores, beatmap, beatmapset, and so on!
 - PNG score analysis for a specific score
 - PNG player comparison leaderboard endpoint (`/maplb`, `/leaderboard`)
-- Replay video generation for solo and multiplayer replay showcases (`/replay`)
+- Replay video orchestration for solo and multiplayer showcases via a separate osuRenderer service (`/replay`)
 - Current multiplayer room info endpoint (`/mp`)
 - Current daily challenge endpoint (`/daily`)
 - Health endpoint (`/status`)
@@ -57,6 +57,7 @@ Here are some demo:
 - JDK 25
 - Maven 3.9+
 - osu! OAuth app credentials (`client_id`, `client_secret`)
+- A reachable osuRenderer instance when replay video endpoints are enabled
 
 ## Quick Start
 
@@ -141,7 +142,7 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 | GET    | `/users/{userId}/scores/bestof` | Best-of-N scores image    | path `userId`, query `n` (count) | PNG      |
 | GET    | `/users/{userId}/scores/recent` | Recent scores image       | path `userId`, query `n` (count) | PNG      |
 
-### Replays (enabled only when `danserPath` is configured)
+### Replays (enabled when `replayRender.enabled` is true)
 
 | Method | Path                                    | Purpose                                | Params / POST Body                                | Response    |
 |--------|-----------------------------------------|----------------------------------------|---------------------------------------------------|-------------|
@@ -270,14 +271,14 @@ when first started, Playwright will attempt to download them.
 ## Performance & Requirements
 
 oStella is designed to be highly concurrent, but its resource usage scales directly
-with how you configure its rendering features. The core web server is incredibly lightweight,
-but image (Playwright/Chromium) and video (Danser) rendering require careful hardware consideration.
+with how you configure image rendering. Danser CPU and memory usage now belongs to the
+separately deployed osuRenderer instance.
 
 ### Minimum System Requirements
 
-* **CPU:** 2+ Cores (4+ Cores heavily recommended if video rendering is enabled)
-* **RAM:** 2 GB minimum (4 GB recommended for stable multi-worker rendering)
-* **Storage:** 5+ GB free space (for caching osu! beatmaps, replays, and rendered videos)
+* **CPU:** 2+ Cores
+* **RAM:** 2 GB minimum
+* **Storage:** 5+ GB free space for cached osu! beatmaps, beatmapsets, and replays
 
 ### RAM Usage
 
@@ -288,23 +289,20 @@ but image (Playwright/Chromium) and video (Danser) rendering require careful har
 * **Core Java Server:** ~250MB - 500MB (depending on JVM garbage collection and cache size).
 * **Image Rendering (Playwright/Chromium):** ~100MB - 150MB per active worker.
   If you configure `ostella.renderWorkers: 4`, expect Chromium to reserve up to ~600MB of RAM under peak load.
-* **Video Rendering (Danser):** ~200MB - 300MB per active Danser instance during an active render.
 
 ### CPU Usage
 
 * **API Routing & Network:** Near 0% CPU impact. Asynchronous request handling allows the server to idle efficiently.
 * **Image Rendering:** Moderate, bursty CPU usage. Chromium utilizes separate OS processes for rendering,
   meaning concurrent image requests will actively utilize multiple CPU cores for brief moments.
-* **Video Rendering (Replays):** **Extreme CPU usage.** Software encoding (e.g., `libx264`) will easily pin your CPU to
-  100%.
 
 ### Low Resource Environments?
 
 If you are running oStella on a low-resource environment (e.g., 2GB RAM, 2 CPU cores), it is crucial to:
 
 1. Limit your Playwright worker pool to `2` or `3` to prevent memory exhaustion.
-2. Avoid enabling video rendering or limit it to a single worker with hardware encoding.
-3. Monitor your server's resource usage closely, especially under load, to ensure it remains responsive
+2. Deploy osuRenderer on a separate worker host for replay rendering.
+3. Monitor resource usage under load to ensure the service remains responsive.
 
 ## Logs
 
@@ -312,7 +310,6 @@ Log files are written to `logs/`:
 
 - `latest.log` (application logs)
 - `javalin-server.log` (Javalin/Jetty logs)
-- `danser.log` (Danser-CLI logs)
 - rolled `*.log.gz` archives
 
 ## License

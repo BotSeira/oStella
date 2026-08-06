@@ -5,306 +5,227 @@ import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.util.MiscUtil;
 
-import java.io.*;
+import java.io.Closeable;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
-public class ReplayService implements Closeable {
+public final class ReplayService implements Closeable {
     private static final Logger LOG = LogManager.getLogger(ReplayService.class);
-    private static final Logger DANSER_LOG = LogManager.getLogger("danser");
-    private static final Pattern DANSER_PROGRESS_PATTERN =
-            Pattern.compile("Progress: (\\d+)%, Speed: ([\\d.]+)x, ETA: (.+)");
-    private final Path danserPath;
-    private final Path songPath;
-    private final Path configPath;
-    private final ThreadPoolExecutor executor;
-    private final ScheduledExecutorService cleanUpExecutor = Executors.newSingleThreadScheduledExecutor();
-    private final ConcurrentHashMap<String, JobProgress> jobProgress = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Path> jobResults = new ConcurrentHashMap<>();
+    private final AppConfig config;
+    private final HttpClient client;
+    private final URI rendererUri;
 
-    public ReplayService(AppConfig conf, Path danserSongPath) {
-        this.executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(Math.max(1, conf.replayRender().renderThreads()));
-        this.danserPath = Path.of(conf.replayRender().danserPath());
-        this.songPath = danserSongPath;
+    public ReplayService(AppConfig config) {
+        this.config = config;
+        this.rendererUri = URI.create(config.replayRender().rendererUrl() + "/");
+        this.client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
+    }
 
-        if (conf.replayRender().configPath() != null && !conf.replayRender().configPath().isEmpty()) {
-            this.configPath = Path.of(conf.replayRender().configPath());
-        } else {
-            this.configPath = null;
-        }
+    public QueuedJob queueRender(Path replay, Path beatmapset, double start, double end, boolean obscured) {
+        return upload("single", null, List.of(replay), beatmapset, start, end, obscured);
+    }
 
-        cleanUpExecutor.scheduleAtFixedRate(() -> {
-            try {
-                long fifteenMinutesAgo = System.currentTimeMillis() - (15 * 60 * 1000);
-
-                Iterator<Map.Entry<String, Path>> iterator = jobResults.entrySet().iterator();
-
-                while (iterator.hasNext()) {
-                    Map.Entry<String, Path> entry = iterator.next();
-                    String jobId = entry.getKey();
-                    Path video = entry.getValue();
-
-                    if (video != null
-                            && (!Files.exists(video) || Files.getLastModifiedTime(video).toMillis() < fifteenMinutesAgo)) {
-                        Files.deleteIfExists(video);
-                        jobProgress.remove(jobId);
-                        iterator.remove();
-                        LOG.info("Garbage Collector wiped stale job: {}", jobId);
-                    }
-                }
-            } catch (IOException e) {
-                LOG.error("Error during garbage collection of rendered videos", e);
-            }
-        }, 5, 5, TimeUnit.MINUTES);
+    public QueuedJob queueRenderShowcase(String beatmapId, List<Path> replays, Path beatmapset) {
+        return upload("showcase", beatmapId, replays, beatmapset, Double.NaN, Double.NaN, false);
     }
 
     public JobProgress getJobProgress(String jobId) {
-        return jobProgress.getOrDefault(jobId, new JobProgress(JobStatus.UNKNOWN));
-    }
-
-    public JobStatus getJobStatus(String jobId) {
-        return jobProgress.getOrDefault(jobId, new JobProgress(JobStatus.UNKNOWN)).status();
-    }
-
-    public void removeJobProgress(String jobId) {
-        jobProgress.remove(jobId);
-    }
-
-    public void removeJobResult(String jobId) {
-        jobResults.remove(jobId);
-    }
-
-    public Path getJobResult(String jobId) {
-        return jobResults.get(jobId);
-    }
-
-    private void consumeDanserOutput(InputStream inputStream, String jobId) {
-        Thread gobblerThread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Matcher matcher = DANSER_PROGRESS_PATTERN.matcher(line);
-
-                    if (matcher.find()) {
-                        int progress = Integer.parseInt(matcher.group(1));
-                        double speed = Double.parseDouble(matcher.group(2));
-                        String eta = matcher.group(3);
-
-                        jobProgress.put(jobId, new JobProgress(JobStatus.RENDERING, progress + "%", speed + "x", eta));
-                        LOG.debug("Danser progress: {}% {}x ETA:{}", progress, speed, eta);
-                    }
-
-                    DANSER_LOG.info(line);
-                }
-            } catch (NumberFormatException | IOException e) {
-                DANSER_LOG.error("Failed to read Danser stream", e);
-            }
-        });
-
-        gobblerThread.setDaemon(true);
-        gobblerThread.start();
-    }
-
-    public String queueRender(Path osrPath, double start, double end, boolean obscured) {
-        final String jobId = UUID.randomUUID().toString();
-        jobProgress.put(jobId, new JobProgress(JobStatus.QUEUED));
-        executor.submit(() -> render(osrPath, jobId, start, end, obscured));
-        return jobId;
-    }
-
-    public String queueRenderShowcase(String beatmapId, List<Path> osrPaths) {
-        final String jobId = UUID.randomUUID().toString();
-        jobProgress.put(jobId, new JobProgress(JobStatus.QUEUED));
-        executor.submit(() -> renderShowcase(beatmapId, osrPaths, jobId));
-        return jobId;
+        HttpResponse<String> response = sendString(request("renders/" + jobId + "/status").GET().build());
+        if (response.statusCode() == 404) {
+            return new JobProgress(JobStatus.UNKNOWN);
+        }
+        requireSuccess(response.statusCode(), response.body());
+        JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+        JobStatus status;
+        try {
+            status = JobStatus.valueOf(json.get("status").getAsString().toUpperCase(Locale.ROOT));
+        } catch (RuntimeException e) {
+            throw unavailable("osuRenderer returned an invalid job status", e);
+        }
+        return new JobProgress(
+                status,
+                stringOrNull(json, "progress"),
+                stringOrNull(json, "speed"),
+                stringOrNull(json, "eta"),
+                stringOrNull(json, "error"));
     }
 
     public int getQueueSize() {
-        return executor.getQueue().size();
+        HttpResponse<String> response = sendString(request("renders/status").GET().build());
+        requireSuccess(response.statusCode(), response.body());
+        try {
+            return JsonParser.parseString(response.body()).getAsJsonObject().get("queue").getAsInt();
+        } catch (RuntimeException e) {
+            throw unavailable("osuRenderer returned an invalid queue status", e);
+        }
     }
 
-    private void render(Path osrPath, String jobId, double start, double end, boolean obscured) {
-        jobProgress.put(jobId, new JobProgress(JobStatus.RENDERING));
-        Path tempSettingsFile = null;
+    public InputStream openJobResult(String jobId) {
         try {
-            final List<String> c = new LinkedList<>();
-            final String fileName = "replay_" + jobId;
-
-            tempSettingsFile = prepareDanser(c, obscured);
-
-            if (!Double.isNaN(start)) {
-                c.add("-start=" + start);
+            HttpResponse<InputStream> response = client.send(
+                    request("renders/" + jobId + "/video")
+                            .timeout(Duration.ofMinutes(5))
+                            .GET()
+                            .build(),
+                    HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() == 404) {
+                response.body().close();
+                return null;
             }
-
-            if (!Double.isNaN(end)) {
-                c.add("-end=" + end);
-            }
-
-            c.add("-replay=" + osrPath.toAbsolutePath());
-            c.add("-out=" + fileName);
-
-            runDanser(jobId, fileName, c);
-        } catch (IOException | InterruptedException e) {
-            jobProgress.put(jobId, new JobProgress(JobStatus.FAILED));
-            LOG.error("Danser failed to render video", e);
-        } finally {
-            if (tempSettingsFile != null) {
-                try {
-                    Files.deleteIfExists(tempSettingsFile);
-                } catch (IOException ignored) {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String message;
+                try (InputStream body = response.body()) {
+                    message = new String(body.readAllBytes(), StandardCharsets.UTF_8);
                 }
+                requireSuccess(response.statusCode(), message);
             }
-        }
-    }
-
-    private void renderShowcase(String beatmapId, List<Path> osrPaths, String jobId) {
-        jobProgress.put(jobId, new JobProgress(JobStatus.RENDERING));
-        Path tempSettingsFile = null;
-        try {
-            final List<String> c = new LinkedList<>();
-            final String fileName = "showcase_" + jobId;
-
-            tempSettingsFile = prepareDanser(c);
-
-            StringBuilder sb = new StringBuilder();
-            sb.append("[");
-            for (Path osrPath : osrPaths) {
-                String safePath = osrPath.toAbsolutePath().toString().replace("\\", "/");
-                sb.append("\"").append(safePath).append("\"").append(",");
-            }
-            sb.deleteCharAt(sb.length() - 1).append("]");
-            String replayList = sb.toString();
-
-            if (System.getProperty("os.name").toLowerCase().contains("win")) {
-                replayList = replayList.replace("\"", "\\\"");
-            }
-
-            c.add("-knockout2=" + replayList);
-            c.add("-id=" + beatmapId);
-            c.add("-out=" + fileName);
-
-            runDanser(jobId, fileName, c);
-        } catch (IOException | InterruptedException e) {
-            jobProgress.put(jobId, new JobProgress(JobStatus.FAILED));
-            LOG.error("Danser failed to render showcase", e);
-        } finally {
-            if (tempSettingsFile != null) {
-                try {
-                    Files.deleteIfExists(tempSettingsFile);
-                } catch (IOException ignored) {
-                }
-            }
-        }
-    }
-
-    private Path prepareDanser(List<String> c) throws IOException {
-        return prepareDanser(c, false);
-    }
-
-    private Path prepareDanser(List<String> c, boolean obscured) throws IOException {
-        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-
-        if (!isWindows) {
-            c.add("xvfb-run");
-            c.add("-a");
-        }
-
-        c.add(danserPath.toAbsolutePath().toString());
-        c.add("-noupdatecheck");
-        c.add("-quickstart");
-        c.add("-record");
-
-        String safeSongPath = songPath.toAbsolutePath().toString().replace("\\", "/");
-
-        try (var templateStream = getConfigAsStream();
-        var obscuredTemplateStream = getClass().getResourceAsStream("/danser-config-patch-obscured.json")) {
-            if (templateStream == null || (obscuredTemplateStream == null && obscured)) {
-                throw new RuntimeException("Could not find required danser config file in resources!");
-            }
-
-            String jsonTemplate = new String(templateStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            String finalJsonContent = jsonTemplate.replace("{{OSU_SONGS_DIR}}", safeSongPath);
-
-            if (obscured) {
-                String obscuredJson = new String(obscuredTemplateStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-                final JsonObject conf = JsonParser.parseString(finalJsonContent).getAsJsonObject();
-                final JsonObject patch = JsonParser.parseString(obscuredJson).getAsJsonObject();
-                final JsonObject result = MiscUtil.deepMergeJson(conf, patch);
-
-                finalJsonContent = result.toString();
-            }
-
-            Path settingsDir = danserPath.getParent().resolve("settings");
-            Files.createDirectories(settingsDir);
-            String tempProfileName = "ostella_temp_" + UUID.randomUUID().toString().substring(0, 8);
-            Path tempSettingsFile = settingsDir.resolve(tempProfileName + ".json");
-            Files.writeString(tempSettingsFile, finalJsonContent);
-
-            c.add("-settings=" + tempProfileName);
-
-            return tempSettingsFile;
-        }
-    }
-
-    private InputStream getConfigAsStream() throws IOException {
-        if (configPath != null) {
-            if (Files.exists(configPath)) {
-                return Files.newInputStream(configPath);
-            } else {
-                LOG.warn("Custom danser config file does not exist at '{}', default config will be used.",
-                        configPath.toAbsolutePath().normalize());
-            }
-        }
-
-        return getClass().getResourceAsStream("/danser-config.json");
-    }
-
-    private void runDanser(String jobId, String fileName, List<String> c) throws IOException, InterruptedException {
-        final Path videoPath = danserPath.resolve("..", "videos", fileName + ".mp4").normalize().toAbsolutePath();
-
-        ProcessBuilder builder = new ProcessBuilder(c);
-        builder.redirectErrorStream(true);
-        LOG.info("Render started for {}", jobId);
-
-        Process process = builder.start();
-
-        consumeDanserOutput(process.getInputStream(), jobId);
-
-        try {
-            boolean finished = process.waitFor(10, TimeUnit.MINUTES);
-            if (!finished) {
-                jobProgress.put(jobId, new JobProgress(JobStatus.TIMEOUT));
-                process.destroyForcibly();
-                LOG.error("Danser timed out and was killed.");
-                return;
-            }
+            return response.body();
+        } catch (IOException e) {
+            throw unavailable("Failed to download video from osuRenderer", e);
         } catch (InterruptedException e) {
-            jobProgress.put(jobId, new JobProgress(JobStatus.FAILED));
-            process.destroyForcibly();
-            throw e;
+            Thread.currentThread().interrupt();
+            throw unavailable("Interrupted while downloading video from osuRenderer", e);
+        }
+    }
+
+    public void deleteJob(String jobId) {
+        HttpResponse<String> response = sendString(request("renders/" + jobId).DELETE().build());
+        if (response.statusCode() != 404) {
+            requireSuccess(response.statusCode(), response.body());
+        }
+    }
+
+    private QueuedJob upload(String mode, String beatmapId, List<Path> replays, Path beatmapset,
+                             double start, double end, boolean obscured) {
+        try {
+            MultipartBody multipart = new MultipartBody();
+            multipart.text("mode", mode);
+            if (beatmapId != null) {
+                multipart.text("beatmapId", beatmapId);
+            }
+            if (!Double.isNaN(start)) {
+                multipart.text("start", String.valueOf(start));
+            }
+            if (!Double.isNaN(end)) {
+                multipart.text("end", String.valueOf(end));
+            }
+            multipart.bytes("config", "danser-config.json", "application/json", buildDanserConfig(obscured));
+            multipart.file("beatmapset", beatmapset.getFileName().toString(), "application/octet-stream", beatmapset);
+            for (Path replay : replays) {
+                multipart.file("replays", replay.getFileName().toString(), "application/octet-stream", replay);
+            }
+
+            HttpResponse<String> response = sendString(request("renders")
+                    .timeout(Duration.ofMinutes(5))
+                    .header("Content-Type", "multipart/form-data; boundary=" + multipart.boundary())
+                    .POST(multipart.publisher())
+                    .build());
+            if (response.statusCode() == 429) {
+                throw new ApiException(ErrorCode.RENDER_QUEUE_FULL, "Replay rendering queue is full");
+            }
+            requireSuccess(response.statusCode(), response.body());
+            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            return new QueuedJob(json.get("id").getAsString(), json.get("position").getAsInt());
+        } catch (IOException e) {
+            throw unavailable("Failed to prepare files for osuRenderer", e);
+        } catch (RuntimeException e) {
+            if (e instanceof ApiException apiException) {
+                throw apiException;
+            }
+            throw unavailable("Invalid response from osuRenderer", e);
+        }
+    }
+
+    byte[] buildDanserConfig(boolean obscured) throws IOException {
+        String json;
+        String customPath = config.replayRender().configPath();
+        if (customPath != null && !customPath.isBlank() && Files.isRegularFile(Path.of(customPath))) {
+            json = Files.readString(Path.of(customPath), StandardCharsets.UTF_8);
+        } else {
+            if (customPath != null && !customPath.isBlank()) {
+                LOG.warn("Custom Danser config '{}' does not exist; using the bundled default", customPath);
+            }
+            try (InputStream input = ReplayService.class.getResourceAsStream("/danser-config.json")) {
+                if (input == null) {
+                    throw new IOException("Default Danser config is missing");
+                }
+                json = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            }
         }
 
-        if (!Files.exists(videoPath)) {
-            jobProgress.put(jobId, new JobProgress(JobStatus.FAILED));
-            LOG.error("Danser exited but no video rendered");
-            throw new RuntimeException("Danser exited but no video rendered");
+        JsonObject result = JsonParser.parseString(json).getAsJsonObject();
+        if (obscured) {
+            try (InputStream input = ReplayService.class.getResourceAsStream("/danser-config-patch-obscured.json")) {
+                if (input == null) {
+                    throw new IOException("Obscured Danser config patch is missing");
+                }
+                JsonObject patch = JsonParser.parseString(
+                        new String(input.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+                result = MiscUtil.deepMergeJson(result, patch);
+            }
         }
+        return result.toString().getBytes(StandardCharsets.UTF_8);
+    }
 
-        LOG.info("Danser finished rendering video: {}", fileName + ".mp4");
-        jobProgress.put(jobId, new JobProgress(JobStatus.DONE));
-        jobResults.put(jobId, videoPath);
+    private HttpRequest.Builder request(String relativePath) {
+        HttpRequest.Builder request = HttpRequest.newBuilder(rendererUri.resolve(relativePath));
+        if (!config.replayRender().apiKey().isBlank()) {
+            request.header("Authorization", "Bearer " + config.replayRender().apiKey());
+        }
+        return request;
+    }
+
+    private HttpResponse<String> sendString(HttpRequest request) {
+        try {
+            return client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        } catch (IOException e) {
+            throw unavailable("Cannot connect to osuRenderer", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw unavailable("Interrupted while contacting osuRenderer", e);
+        }
+    }
+
+    private static String stringOrNull(JsonObject json, String name) {
+        return json.has(name) && !json.get(name).isJsonNull() ? json.get(name).getAsString() : null;
+    }
+
+    private static void requireSuccess(int statusCode, String body) {
+        if (statusCode >= 200 && statusCode < 300) {
+            return;
+        }
+        String suffix = body == null || body.isBlank() ? "" : ": " + body;
+        throw new ApiException(ErrorCode.RENDERER_UNAVAILABLE,
+                "osuRenderer returned HTTP " + statusCode + suffix);
+    }
+
+    private static ApiException unavailable(String message, Exception error) {
+        LOG.warn(message, error);
+        return new ApiException(ErrorCode.RENDERER_UNAVAILABLE, message, error);
     }
 
     @Override
     public void close() {
-        executor.shutdownNow();
-        cleanUpExecutor.shutdownNow();
+        // HttpClient owns no application executor in this configuration.
     }
 
     public enum JobStatus {
@@ -316,9 +237,56 @@ public class ReplayService implements Closeable {
         DONE
     }
 
-    public record JobProgress(JobStatus status, String progress, String speed, String eta) {
+    public record JobProgress(JobStatus status, String progress, String speed, String eta, String error) {
         public JobProgress(JobStatus status) {
-            this(status, null, null, null);
+            this(status, null, null, null, null);
+        }
+    }
+
+    public record QueuedJob(String id, int position) {
+    }
+
+    static final class MultipartBody {
+        private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.UTF_8);
+        private final String boundary = "ostella-" + UUID.randomUUID();
+        private final List<HttpRequest.BodyPublisher> parts = new ArrayList<>();
+
+        String boundary() {
+            return boundary;
+        }
+
+        void text(String name, String value) {
+            header("Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n");
+            parts.add(HttpRequest.BodyPublishers.ofString(value, StandardCharsets.UTF_8));
+            parts.add(HttpRequest.BodyPublishers.ofByteArray(CRLF));
+        }
+
+        void bytes(String name, String filename, String contentType, byte[] bytes) {
+            fileHeader(name, filename, contentType);
+            parts.add(HttpRequest.BodyPublishers.ofByteArray(bytes));
+            parts.add(HttpRequest.BodyPublishers.ofByteArray(CRLF));
+        }
+
+        void file(String name, String filename, String contentType, Path path) throws IOException {
+            fileHeader(name, filename, contentType);
+            parts.add(HttpRequest.BodyPublishers.ofFile(path));
+            parts.add(HttpRequest.BodyPublishers.ofByteArray(CRLF));
+        }
+
+        HttpRequest.BodyPublisher publisher() {
+            parts.add(HttpRequest.BodyPublishers.ofString("--" + boundary + "--\r\n", StandardCharsets.UTF_8));
+            return HttpRequest.BodyPublishers.concat(parts.toArray(HttpRequest.BodyPublisher[]::new));
+        }
+
+        private void fileHeader(String name, String filename, String contentType) {
+            String safeFilename = filename.replace("\"", "_").replace("\r", "_").replace("\n", "_");
+            header("Content-Disposition: form-data; name=\"" + name + "\"; filename=\""
+                    + safeFilename + "\"\r\nContent-Type: " + contentType + "\r\n\r\n");
+        }
+
+        private void header(String value) {
+            parts.add(HttpRequest.BodyPublishers.ofString("--" + boundary + "\r\n" + value,
+                    StandardCharsets.UTF_8));
         }
     }
 }
