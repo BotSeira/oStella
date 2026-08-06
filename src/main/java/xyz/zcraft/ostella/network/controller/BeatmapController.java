@@ -249,7 +249,7 @@ public class BeatmapController {
 
                             CacheService.cacheBeatmapsetFile(b.getBeatmapSetId());
 
-                            return CacheService.getBeatmapBg(b.getBeatmapSetId(), fileName)
+                            return CacheService.extractFile(b.getBeatmapSetId(), fileName)
                                     .orElseThrow(() -> new ApiException(ErrorCode.NO_BACKGROUND_FOUND, "No background found"));
                         })
                         .thenAccept(bytes -> context.status(200).result(bytes))

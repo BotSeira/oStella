@@ -14,7 +14,6 @@ import xyz.zcraft.osu.model.Score;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -24,11 +23,13 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 public class CacheService {
@@ -192,78 +193,64 @@ public class CacheService {
             return;
         }
 
-        final Path oszPath = BEATMAPSET_CACHE.resolve(id + ".osz");
-
-        if (Files.exists(oszPath)) {
-            Files.copy(oszPath, out);
-            return;
+        Optional<Path> archive = prepareBeatmapsetArchive(id);
+        if (archive.isPresent()) {
+            Files.copy(archive.get(), out);
         }
-
-        final Path folderPath = findExtractedBeatmapset(id).orElse(null);
-
-        if (folderPath != null) {
-            try (ZipOutputStream zos = new ZipOutputStream(out);
-                 Stream<Path> files = Files.walk(folderPath)) {
-                zos.setLevel(Deflater.BEST_COMPRESSION);
-
-                files.filter(Files::isRegularFile).forEach(path -> {
-                    try {
-                        String zipEntryName = folderPath.relativize(path).toString().replace('\\', '/');
-
-                        zos.putNextEntry(new ZipEntry(zipEntryName));
-                        Files.copy(path, zos);
-                        zos.closeEntry();
-                    } catch (IOException e) {
-                        throw new UncheckedIOException("Failed to zip file: " + path, e);
-                    }
-                });
-            }
-        }
-
     }
 
-    /**
-     * Returns a transportable .osz archive for osuRenderer. Older caches may already
-     * have been extracted by a local Danser installation, so those are archived once
-     * and then reused for subsequent remote renders.
-     */
     public static Path getBeatmapsetArchivePath(long id) throws IOException {
         if (!cacheBeatmapsetFile(id)) {
             throw new IOException("Failed to cache beatmapset " + id);
         }
 
+        return prepareBeatmapsetArchive(id)
+                .orElseThrow(() -> new IOException("Cached beatmapset " + id + " has no archive or directory"));
+    }
+
+    private static Optional<Path> prepareBeatmapsetArchive(long id) throws IOException {
         Path archive = BEATMAPSET_CACHE.resolve(id + ".osz");
         if (Files.isRegularFile(archive)) {
-            return archive;
+            return Optional.of(archive);
         }
 
-        Path folder = findExtractedBeatmapset(id).orElse(null);
-        if (folder == null) {
-            throw new IOException("Cached beatmapset " + id + " has no archive or directory");
+        return repackExtractedBeatmapset(id, archive);
+    }
+
+    private static synchronized Optional<Path> repackExtractedBeatmapset(long id, Path archive) throws IOException {
+        if (Files.isRegularFile(archive)) {
+            return Optional.of(archive);
         }
 
+        Optional<Path> extractedBeatmapset = findExtractedBeatmapset(id);
+        if (extractedBeatmapset.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Path folder = extractedBeatmapset.get();
         Path temporary = Files.createTempFile(BEATMAPSET_CACHE, id + "-", ".osz.tmp");
-        try (OutputStream output = Files.newOutputStream(temporary);
-             ZipOutputStream zip = new ZipOutputStream(output);
-             Stream<Path> files = Files.walk(folder)) {
-            zip.setLevel(Deflater.BEST_COMPRESSION);
-            files.filter(Files::isRegularFile).forEach(path -> {
-                try {
-                    zip.putNextEntry(new ZipEntry(folder.relativize(path).toString().replace('\\', '/')));
-                    Files.copy(path, zip);
-                    zip.closeEntry();
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
-        } catch (UncheckedIOException e) {
-            Files.deleteIfExists(temporary);
-            throw e.getCause();
-        }
         try {
-            return Files.move(temporary, archive, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            return Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
+            try (ZipOutputStream output = new ZipOutputStream(Files.newOutputStream(temporary));
+                 Stream<Path> files = Files.walk(folder)) {
+                output.setLevel(Deflater.BEST_COMPRESSION);
+                Iterator<Path> iterator = files.filter(Files::isRegularFile).iterator();
+                while (iterator.hasNext()) {
+                    Path file = iterator.next();
+                    output.putNextEntry(new ZipEntry(folder.relativize(file).toString().replace('\\', '/')));
+                    Files.copy(file, output);
+                    output.closeEntry();
+                }
+            }
+
+            try {
+                Files.move(temporary, archive, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, archive, StandardCopyOption.REPLACE_EXISTING);
+            }
+            LOG.debug("Repacked extracted beatmapset {} to {}", folder, archive);
+            return Optional.of(archive);
+        } finally {
+            Files.deleteIfExists(temporary);
         }
     }
 
@@ -388,19 +375,31 @@ public class CacheService {
         return Files.exists(REPLAY_CACHE.resolve(id + ".osr"));
     }
 
-    public static Optional<byte[]> getBeatmapBg(Long beatmapSetId, String bgFileName) {
-        try {
-            Optional<Path> folder = findExtractedBeatmapset(beatmapSetId);
-            if (folder.isPresent()) {
-                Path resolve = folder.get().resolve(bgFileName).normalize();
-                if (!resolve.startsWith(folder.get()) || !Files.exists(resolve)) {
-                    return Optional.empty();
-                }
-                return Optional.of(Files.readAllBytes(resolve));
-            }
-        } catch (IOException e) {
+    public static Optional<byte[]> extractFile(Long beatmapsetId, String fileName) {
+        if (beatmapsetId == null || fileName == null || fileName.isBlank()) {
             return Optional.empty();
         }
-        return Optional.empty();
+
+        String entryName = fileName.replace('\\', '/');
+        try {
+            Optional<Path> archivePath = prepareBeatmapsetArchive(beatmapsetId);
+            if (archivePath.isEmpty()) {
+                return Optional.empty();
+            }
+
+            try (ZipFile archive = new ZipFile(archivePath.get().toFile())) {
+                ZipEntry entry = archive.getEntry(entryName);
+                if (entry == null || entry.isDirectory()) {
+                    return Optional.empty();
+                }
+
+                try (InputStream input = archive.getInputStream(entry)) {
+                    return Optional.of(input.readAllBytes());
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn("Failed to extract {} from beatmapset {}", fileName, beatmapsetId, e);
+            return Optional.empty();
+        }
     }
 }
