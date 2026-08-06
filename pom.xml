@@ -210,7 +210,7 @@
         <dependency>
             <groupId>io.javalin</groupId>
             <artifactId>javalin</artifactId>
-            <version>7.1.0</version>
+            <version>7.2.2</version>
         </dependency>
 
         <dependency>
