@@ -36,7 +36,7 @@ osu:
 # then uploads those inputs to a separately deployable osuRenderer instance.
 replayRender:
   enabled: true
-  rendererUrl: "http://localhost:8722"
+  rendererUrl: "http://localhost:8723"
   # Must match renderer.apiKey in osuRenderer. Use a secret when crossing hosts.
   apiKey: ""
   # Optional local Danser config template. It is constructed here and sent with each job.
