@@ -230,12 +230,13 @@ public class ScoreController {
                             return userIds;
                         })
                         .thenCompose(userIds -> findAvailableScore(userIds, 0))
-                        .thenCompose(score ->
-                                executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), score.getUserId()))
+                        .thenCompose(targetScore ->
+                                executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), targetScore.score().getUserId()))
                                         .thenApply(user -> {
                                             JsonObject result = new JsonObject();
                                             result.add("user", GSON.toJsonTree(user));
-                                            result.add("score", GSON.toJsonTree(score));
+                                            result.add("score", GSON.toJsonTree(targetScore.score()));
+                                            result.addProperty("best_index", targetScore.bestIndex());
                                             return result;
                                         })
                         )
@@ -245,7 +246,9 @@ public class ScoreController {
         );
     }
 
-    private CompletableFuture<Score> findAvailableScore(List<Long> userIds, int index) {
+    private record TargetScore(int bestIndex, Score score){}
+
+    private CompletableFuture<TargetScore> findAvailableScore(List<Long> userIds, int index) {
         if (index >= userIds.size()) {
             return CompletableFuture.failedFuture(
                     new ApiException(ErrorCode.NO_SCORE_FOUND, "No available scores found!")
@@ -260,15 +263,21 @@ public class ScoreController {
                         return findAvailableScore(userIds, index + 1);
                     }
 
-                    List<Score> candidates = scores.subList(3, 8).stream()
-                            .filter(Score::getHasReplay)
-                            .toList();
+                    List<TargetScore> candidates = new ArrayList<>(8);
+
+                    for (int i = 2; i < 7; i++) {
+                        if (!scores.get(i).getHasReplay()) {
+                            continue;
+                        }
+
+                        candidates.add(new TargetScore(i + 1, scores.get(i)));
+                    }
 
                     if (candidates.isEmpty()) {
                         return findAvailableScore(userIds, index + 1);
                     }
 
-                    Score selected = candidates.get(
+                    TargetScore selected = candidates.get(
                             ThreadLocalRandom.current().nextInt(candidates.size())
                     );
 
