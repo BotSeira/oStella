@@ -46,14 +46,25 @@ public final class ReplayService implements Closeable {
 
     public QueuedJob queueRender(long scoreId, Path replay, long beatmapsetId, Path beatmapset,
                                   double start, double end, boolean obscured) {
+        return queueRender(scoreId, replay, beatmapsetId, beatmapset, start, end, obscured, null);
+    }
+
+    public QueuedJob queueRender(long scoreId, Path replay, long beatmapsetId, Path beatmapset,
+                                  double start, double end, boolean obscured, QqUploadRequest qqUpload) {
         return upload("single", null, beatmapsetId, beatmapset,
-                List.of(new ReplayInput(scoreId, replay)), start, end, obscured);
+                List.of(new ReplayInput(scoreId, replay)), start, end, obscured, qqUpload);
     }
 
     public QueuedJob queueRenderShowcase(String beatmapId, long beatmapsetId,
                                           List<ReplayInput> replays, Path beatmapset) {
+        return queueRenderShowcase(beatmapId, beatmapsetId, replays, beatmapset, null);
+    }
+
+    public QueuedJob queueRenderShowcase(String beatmapId, long beatmapsetId,
+                                          List<ReplayInput> replays, Path beatmapset,
+                                          QqUploadRequest qqUpload) {
         return upload("showcase", beatmapId, beatmapsetId, beatmapset,
-                replays, Double.NaN, Double.NaN, false);
+                replays, Double.NaN, Double.NaN, false, qqUpload);
     }
 
     public JobProgress getJobProgress(String jobId) {
@@ -74,7 +85,9 @@ public final class ReplayService implements Closeable {
                 stringOrNull(json, "progress"),
                 stringOrNull(json, "speed"),
                 stringOrNull(json, "eta"),
-                stringOrNull(json, "error"));
+                stringOrNull(json, "error"),
+                json.has("qqFile") && json.get("qqFile").isJsonObject()
+                        ? json.getAsJsonObject("qqFile") : null);
     }
 
     public int getQueueSize() {
@@ -124,7 +137,7 @@ public final class ReplayService implements Closeable {
 
     private QueuedJob upload(String mode, String beatmapId, long beatmapsetId, Path beatmapset,
                              List<ReplayInput> replays,
-                             double start, double end, boolean obscured) {
+                             double start, double end, boolean obscured, QqUploadRequest qqUpload) {
         try {
             List<Long> replayIds = replays.stream().map(ReplayInput::scoreId).toList();
             CacheStatus cacheStatus = getCacheStatus(Set.of(beatmapsetId), new LinkedHashSet<>(replayIds));
@@ -146,6 +159,9 @@ public final class ReplayService implements Closeable {
             }
             if (!Double.isNaN(end)) {
                 multipart.text("end", String.valueOf(end));
+            }
+            if (qqUpload != null) {
+                multipart.text("qqUpload", GSON.toJson(qqUpload));
             }
             multipart.bytes("config", "danser-config.json", "application/json", buildDanserConfig(obscured));
             if (!cacheStatus.beatmapsetIds().contains(beatmapsetId)) {
@@ -277,14 +293,16 @@ public final class ReplayService implements Closeable {
         QUEUED,
         UNKNOWN,
         RENDERING,
+        UPLOADING,
         TIMEOUT,
         FAILED,
         DONE
     }
 
-    public record JobProgress(JobStatus status, String progress, String speed, String eta, String error) {
+    public record JobProgress(JobStatus status, String progress, String speed, String eta, String error,
+                              JsonObject qqFile) {
         public JobProgress(JobStatus status) {
-            this(status, null, null, null, null);
+            this(status, null, null, null, null, null);
         }
     }
 
@@ -296,6 +314,24 @@ public final class ReplayService implements Closeable {
             if (scoreId <= 0 || path == null) {
                 throw new IllegalArgumentException("Replay input requires a positive score id and a file");
             }
+        }
+    }
+
+    public record QqUploadRequest(String accessToken, String targetType, String targetId) {
+        public QqUploadRequest {
+            accessToken = requireValue(accessToken, "accessToken", 4096);
+            targetType = requireValue(targetType, "targetType", 16);
+            targetId = requireValue(targetId, "targetId", 256);
+            if (!targetType.equals("groups") && !targetType.equals("users")) {
+                throw new IllegalArgumentException("qqUpload.targetType must be groups or users");
+            }
+        }
+
+        private static String requireValue(String value, String name, int maxLength) {
+            if (value == null || value.isBlank() || value.length() > maxLength) {
+                throw new IllegalArgumentException("qqUpload." + name + " is invalid");
+            }
+            return value;
         }
     }
 

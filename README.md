@@ -147,6 +147,11 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 For video jobs, oStella batch-checks osuRenderer's persistent asset cache using
 the beatmapset ID and score IDs. Only missing `.osz` and `.osr` files are uploaded;
 the public replay endpoints below remain unchanged.
+SeiraCore may also include an optional `qqUpload` object containing a short-lived
+QQ access token and the destination. oStella passes it through without using or
+persisting it. After osuRenderer uploads the completed MP4, `/status` returns the
+QQ `qqFile` identifier to SeiraCore. Deploy both service hops behind TLS because
+the render request can contain a bearer credential.
 
 | Method | Path                                    | Purpose                                | Params / POST Body                                | Response    |
 |--------|-----------------------------------------|----------------------------------------|---------------------------------------------------|-------------|

@@ -58,12 +58,18 @@ public class ReplayController {
         ReplayService.JobStatus status = jobProgress.status();
 
         switch (status) {
-            case ReplayService.JobStatus.DONE -> context.status(200).result(
-                    new Response(true, "Render complete!",
-                            GSON.toJsonTree(Map.of(
-                                    "status", "done",
-                                    "id", jobId
-                            ))).toString());
+            case ReplayService.JobStatus.DONE -> {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("status", "done");
+                obj.addProperty("id", jobId);
+                if (jobProgress.qqFile() != null) {
+                    obj.add("qqFile", jobProgress.qqFile());
+                }
+                if (jobProgress.error() != null) {
+                    obj.addProperty("qqUploadError", jobProgress.error());
+                }
+                context.status(200).result(new Response(true, "Render complete!", obj).toString());
+            }
             case ReplayService.JobStatus.FAILED -> context.status(200).result(
                     new Response(true, "Render failed",
                             GSON.toJsonTree(Map.of(
@@ -93,6 +99,13 @@ public class ReplayController {
                 }
                 context.status(200).result(
                         new Response(true, "Render in progress", obj).toString());
+            }
+            case ReplayService.JobStatus.UPLOADING -> {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("status", "uploading");
+                obj.addProperty("id", jobId);
+                context.status(200).result(
+                        new Response(true, "Uploading render to QQ", obj).toString());
             }
             default -> context.status(404).result(new Response(false, "Job not found", null).toString());
         }
@@ -126,25 +139,27 @@ public class ReplayController {
         context.status(200).result("Job cleaned up successfully");
     }
 
-    private CompletionStage<Void> finalizeReplay(@NotNull Context context, Score score) {
+    private CompletionStage<Void> finalizeReplay(@NotNull Context context, Score score,
+                                                  ReplayService.QqUploadRequest qqUpload) {
         final double start = optionalDouble(context, "start");
         final double end = optionalDouble(context, "end");
         final boolean obscured = optionalBoolean(context, "obscured", false);
 
         router.ensurePp(score);
 
-        return renderScoreForAsync(context, score, start, end, obscured);
+        return renderScoreForAsync(context, score, start, end, obscured, qqUpload);
     }
 
     public void queueReplayRenderOfId(@NotNull Context context) {
         long scoreId = requirePathLong(context, "scoreId");
+        ReplayService.QqUploadRequest qqUpload = parseQqUpload(context);
         context.future(() ->
                 router.getScore(scoreId).thenCompose(score -> {
                     if (score == null) {
                         throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No score found for this ID!");
                     }
 
-                    return finalizeReplay(context, score);
+                    return finalizeReplay(context, score, qqUpload);
                 })
         );
     }
@@ -169,7 +184,7 @@ public class ReplayController {
                     .map(router::getScore)
                     .toList();
 
-            return finalizeShowcase(context, scoreFutures);
+            return finalizeShowcase(context, scoreFutures, showcaseRequest.qqUpload());
         });
     }
 
@@ -200,13 +215,14 @@ public class ReplayController {
 
             scoreFutures.addAll(scoreIds.stream().map(router::getScore).toList());
 
-            return finalizeShowcase(context, scoreFutures);
+            return finalizeShowcase(context, scoreFutures, showcaseRequest.qqUpload());
         });
     }
 
     @NonNull
     private CompletableFuture<?> finalizeShowcase(@NotNull Context context,
-                                                  List<CompletableFuture<Score>> scoreFutures) {
+                                                  List<CompletableFuture<Score>> scoreFutures,
+                                                  ReplayService.QqUploadRequest qqUpload) {
         return CompletableFuture.allOf(
                         scoreFutures.toArray(new CompletableFuture<?>[0])
                 )
@@ -222,11 +238,13 @@ public class ReplayController {
                             .collect(Collectors.toCollection(LinkedList::new));
                 })
                 .thenCompose(validScores ->
-                        renderShowcaseForAsync(context, validScores)
+                        renderShowcaseForAsync(context, validScores, qqUpload)
                 );
     }
 
-    private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start, Double end, boolean obscured) {
+    private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start,
+                                                         Double end, boolean obscured,
+                                                         ReplayService.QqUploadRequest qqUpload) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (!CacheService.hasReplayCache(score.getId()) && !score.getHasReplay()) {
@@ -250,7 +268,7 @@ public class ReplayController {
                     }
                     final ReplayService.QueuedJob queued =
                             replayService.queueRender(score.getId(), replayPath,
-                                    score.getBeatmapset().getId(), beatmapset, start, end, obscured);
+                                    score.getBeatmapset().getId(), beatmapset, start, end, obscured, qqUpload);
 
                     score.getBeatmap().setBeatmapset(score.getBeatmapset());
 
@@ -268,7 +286,8 @@ public class ReplayController {
                 });
     }
 
-    private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores) {
+    private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores,
+                                                            ReplayService.QqUploadRequest qqUpload) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (scores.isEmpty()) {
@@ -310,7 +329,7 @@ public class ReplayController {
                                     "Failed to prepare beatmapset for osuRenderer", e);
                         }
                         final ReplayService.QueuedJob queued = replayService.queueRenderShowcase(
-                                String.valueOf(beatmapId), beatmapsetId, replays, beatmapset);
+                                String.valueOf(beatmapId), beatmapsetId, replays, beatmapset, qqUpload);
 
                         JsonObject obj = new JsonObject();
                         obj.addProperty("status", "queued");
@@ -408,6 +427,21 @@ public class ReplayController {
         }
     }
 
-    public record ShowcaseRequest(List<String> ids) {
+    private ReplayService.QqUploadRequest parseQqUpload(Context context) {
+        if (context.body() == null || context.body().isBlank()) {
+            return null;
+        }
+        try {
+            JsonObject body = GSON.fromJson(context.body(), JsonObject.class);
+            if (body == null || !body.has("qqUpload") || body.get("qqUpload").isJsonNull()) {
+                return null;
+            }
+            return GSON.fromJson(body.get("qqUpload"), ReplayService.QqUploadRequest.class);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid qqUpload request", e);
+        }
+    }
+
+    public record ShowcaseRequest(List<String> ids, ReplayService.QqUploadRequest qqUpload) {
     }
 }
