@@ -57,7 +57,7 @@ Here are some demo:
 - JDK 25
 - Maven 3.9+
 - osu! OAuth app credentials (`client_id`, `client_secret`)
-- A reachable osuRenderer instance when replay video endpoints are enabled
+- One or more reachable osuRenderer workers when replay video endpoints are enabled
 
 ## Quick Start
 
@@ -147,6 +147,11 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 For video jobs, oStella batch-checks osuRenderer's persistent asset cache using
 the beatmapset ID and score IDs. Only missing `.osz` and `.osr` files are uploaded;
 the public replay endpoints below remain unchanged.
+Multiple worker URLs can be configured with `replayRender.workers`; all workers
+share `replayRender.apiKey`. oStella checks every worker before submission, prefers
+an idle worker, skips unreachable workers, and falls back across busy queues. It
+returns a queue-full error only when every configured worker rejects the job as full.
+The legacy `replayRender.rendererUrl` field remains supported as a single-worker fallback.
 SeiraCore may also include an optional `qqUpload` object containing a short-lived
 QQ access token and the destination. oStella passes it through without using or
 persisting it. After osuRenderer uploads the completed MP4, `/status` returns the

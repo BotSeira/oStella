@@ -36,9 +36,15 @@ osu:
 # then uploads those inputs to a separately deployable osuRenderer instance.
 replayRender:
   enabled: true
-  rendererUrl: "http://localhost:8723"
-  # Must match renderer.apiKey in osuRenderer. Use a secret when crossing hosts.
+  # Replay render worker pool. Idle workers are preferred; busy workers are used
+  # as queue fallbacks. Unreachable workers are skipped automatically.
+  workers:
+    - "http://localhost:8723"
+    # - "http://renderer-2:8723"
+  # Shared by all workers; must match renderer.apiKey on every osuRenderer instance.
   apiKey: ""
+  # Legacy single-worker configuration is still supported when workers is omitted:
+  # rendererUrl: "http://localhost:8723"
   # Optional local Danser config template. It is constructed here and sent with each job.
   configPath: ""
 
