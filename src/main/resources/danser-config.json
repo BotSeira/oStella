@@ -36,7 +36,8 @@
       "Outline": {
         "Show": true
       }
-    }
+    },
+    "PPVersion": "26xxxx"
   },
   "Playfield": {
     "SeizureWarning": {
