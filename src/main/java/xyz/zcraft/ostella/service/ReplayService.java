@@ -6,6 +6,8 @@ import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.cache.CacheControlRequest;
+import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.util.MiscUtil;
@@ -133,6 +135,115 @@ public final class ReplayService implements Closeable {
                     "No osuRenderer workers are available");
         }
         return statuses.stream().mapToInt(WorkerStatus::queue).sum();
+    }
+
+    public int workerCount() {
+        return workers.size();
+    }
+
+    public int assignedJobCount() {
+        return jobWorkers.size();
+    }
+
+    public List<CacheControlResult.CacheNodeResult> controlCacheWorkers(CacheControlRequest request) {
+        List<CompletableFuture<CacheControlResult.CacheNodeResult>> futures = workers.stream()
+                .map(worker -> CompletableFuture.supplyAsync(
+                        () -> controlWorkerCache(worker, request), workerProbeExecutor))
+                .toList();
+        return futures.stream().map(CompletableFuture::join).toList();
+    }
+
+    public List<CacheControlResult.CacheNodeResult> fetchCacheWorkers(
+            CacheControlRequest request,
+            Path cachedFile
+    ) {
+        String type = request.type() == null ? "" : request.type().toUpperCase(Locale.ROOT);
+        if (!List.of("BEATMAPSET", "REPLAY").contains(type)) {
+            return controlCacheWorkers(request);
+        }
+        if (cachedFile == null || !Files.isRegularFile(cachedFile)) {
+            return workers.stream().map(worker -> new CacheControlResult.CacheNodeResult(
+                    "osuRenderer " + worker.uri().toString().replaceAll("/$", ""),
+                    "NOT_ATTEMPTED", null, null, null, "oStella did not produce a cache file"
+            )).toList();
+        }
+        List<CompletableFuture<CacheControlResult.CacheNodeResult>> futures = workers.stream()
+                .map(worker -> CompletableFuture.supplyAsync(
+                        () -> fetchWorkerCache(worker, request, cachedFile), workerProbeExecutor))
+                .toList();
+        return futures.stream().map(CompletableFuture::join).toList();
+    }
+
+    private CacheControlResult.CacheNodeResult fetchWorkerCache(
+            RendererWorker worker,
+            CacheControlRequest cacheRequest,
+            Path cachedFile
+    ) {
+        String node = "osuRenderer " + worker.uri().toString().replaceAll("/$", "");
+        try {
+            CacheControlResult.CacheNodeResult current = controlWorkerCache(worker,
+                    new CacheControlRequest("QUERY", cacheRequest.type(), cacheRequest.id()));
+            if ("PRESENT".equals(current.status())) {
+                return new CacheControlResult.CacheNodeResult(
+                        node, "PRESENT", current.path(), current.sizeBytes(), current.modifiedAt(),
+                        "Already cached"
+                );
+            }
+            if ("UNAVAILABLE".equals(current.status())) {
+                return current;
+            }
+            MultipartBody multipart = new MultipartBody();
+            multipart.text("type", cacheRequest.type());
+            multipart.text("id", String.valueOf(cacheRequest.id()));
+            multipart.file("asset", cachedFile.getFileName().toString(), "application/octet-stream", cachedFile);
+            HttpResponse<String> response = sendString(worker, request(worker, "cache/fetch")
+                    .timeout(Duration.ofMinutes(5))
+                    .header("Content-Type", "multipart/form-data; boundary=" + multipart.boundary())
+                    .POST(multipart.publisher())
+                    .build());
+            requireSuccess(response.statusCode(), response.body());
+            CacheControlResult result = GSON.fromJson(response.body(), CacheControlResult.class);
+            if (result == null || result.nodes() == null || result.nodes().isEmpty()) {
+                throw new IllegalStateException("osuRenderer returned an empty cache fetch result");
+            }
+            return result.nodes().getFirst().withNode(node);
+        } catch (RuntimeException | IOException e) {
+            LOG.warn("Failed to fetch cache on {}", worker.uri(), e);
+            return new CacheControlResult.CacheNodeResult(
+                    node, "UNAVAILABLE", null, null, null, rootMessage(e)
+            );
+        }
+    }
+
+    private CacheControlResult.CacheNodeResult controlWorkerCache(
+            RendererWorker worker,
+            CacheControlRequest cacheRequest
+    ) {
+        String node = "osuRenderer " + worker.uri().toString().replaceAll("/$", "");
+        try {
+            HttpResponse<String> response = sendString(worker, request(worker, "cache/control")
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(cacheRequest), StandardCharsets.UTF_8))
+                    .build());
+            requireSuccess(response.statusCode(), response.body());
+            CacheControlResult result = GSON.fromJson(response.body(), CacheControlResult.class);
+            if (result == null || result.nodes() == null || result.nodes().isEmpty()) {
+                throw new IllegalStateException("osuRenderer returned an empty cache control result");
+            }
+            return result.nodes().getFirst().withNode(node);
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to control cache on {}", worker.uri(), e);
+            return new CacheControlResult.CacheNodeResult(
+                    node, "UNAVAILABLE", null, null, null, rootMessage(e)
+            );
+        }
+    }
+
+    private static String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) current = current.getCause();
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
     }
 
     public InputStream openJobResult(String jobId) {

@@ -6,6 +6,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.cache.CacheControlRequest;
+import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -83,6 +85,32 @@ public class Router implements Closeable {
                                         "osu_api", r
                                 ))).toString())));
 
+    }
+
+    public void controlCache(@NotNull Context context) {
+        CacheControlRequest request;
+        try {
+            request = GSON.fromJson(context.body(), CacheControlRequest.class);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid cache control body", e);
+        }
+        context.contentType("application/json").result(GSON.toJson(controlCache(request)));
+    }
+
+    public CacheControlResult controlCache(CacheControlRequest request) {
+        boolean fetch = request != null && "FETCH".equalsIgnoreCase(request.operation());
+        CacheControlResult local = fetch
+                ? CacheService.fetch(request, tokenManager.getTokenData())
+                : CacheService.control(request);
+        List<CacheControlResult.CacheNodeResult> nodes = new ArrayList<>(local.nodes());
+        Path fetchedPath = fetch && !local.nodes().isEmpty()
+                && List.of("FETCHED", "PRESENT").contains(local.nodes().getFirst().status())
+                ? CacheService.existingCachePath(request.type(), request.id())
+                : null;
+        nodes.addAll(fetch
+                ? replayService.fetchCacheWorkers(request, fetchedPath)
+                : replayService.controlCacheWorkers(request));
+        return new CacheControlResult(local.operation(), local.type(), local.id(), nodes);
     }
 
     public void ensurePp(Score score) {

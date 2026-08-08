@@ -8,6 +8,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.cache.CacheControlRequest;
+import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.osu.model.Score;
 
@@ -23,9 +25,13 @@ import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Iterator;
+import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -400,6 +406,234 @@ public class CacheService {
         } catch (IOException e) {
             LOG.warn("Failed to extract {} from beatmapset {}", fileName, beatmapsetId, e);
             return Optional.empty();
+        }
+    }
+
+    public static CacheSummary summary() {
+        try {
+            AreaStats beatmaps = areaStats(BEATMAP_CACHE);
+            AreaStats images = areaStats(IMAGE_CACHE);
+            AreaStats replays = areaStats(REPLAY_CACHE);
+            AreaStats scoreJson = areaStats(SCORE_JSON_CACHE);
+            AreaStats beatmapsets = areaStats(BEATMAPSET_CACHE);
+            return new CacheSummary(beatmaps, images, replays, scoreJson, beatmapsets);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to inspect oStella cache", e);
+        }
+    }
+
+    public static int clear(CacheArea area) {
+        try {
+            int removed = 0;
+            if (area == CacheArea.BEATMAPS || area == CacheArea.ALL) removed += clearChildren(BEATMAP_CACHE);
+            if (area == CacheArea.IMAGES || area == CacheArea.ALL) removed += clearChildren(IMAGE_CACHE);
+            if (area == CacheArea.REPLAYS || area == CacheArea.ALL) removed += clearChildren(REPLAY_CACHE);
+            if (area == CacheArea.SCORE_JSON || area == CacheArea.ALL) removed += clearChildren(SCORE_JSON_CACHE);
+            if (area == CacheArea.BEATMAPSETS || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_CACHE);
+            return removed;
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to clear oStella cache", e);
+        }
+    }
+
+    public static CacheControlResult control(CacheControlRequest request) {
+        if (request == null) throw new IllegalArgumentException("Cache control body is required");
+        if (request.id() <= 0) throw new IllegalArgumentException("Cache id must be positive");
+        String operation = normalizeOperation(request.operation());
+        String type = normalizeType(request.type());
+        List<Path> paths;
+        try {
+            paths = cachePaths(type, request.id());
+            if ("DELETE".equals(operation)) {
+                int removed = 0;
+                for (Path path : paths) removed += deleteCachePath(path);
+                return localResult(operation, type, request.id(), removed > 0 ? "DELETED" : "MISSING",
+                        paths, null, null, removed > 1 ? "Removed " + removed + " cache entries" : null);
+            }
+            List<Path> existing = paths.stream().filter(Files::exists).toList();
+            if (existing.isEmpty()) return localResult(operation, type, request.id(), "MISSING", paths,
+                    null, null, null);
+            if ("QUERY".equals(operation)) return localResult(operation, type, request.id(), "PRESENT",
+                    existing, null, null, null);
+            long bytes = 0;
+            Instant latest = Instant.EPOCH;
+            for (Path path : existing) {
+                AreaStats stats = areaStats(path);
+                bytes += stats.bytes();
+                Instant modified = Files.getLastModifiedTime(path).toInstant();
+                if (modified.isAfter(latest)) latest = modified;
+            }
+            return localResult(operation, type, request.id(), "PRESENT", existing, bytes,
+                    latest.toString(), null);
+        } catch (IOException e) {
+            return localResult(operation, type, request.id(), "ERROR", List.of(), null, null, e.getMessage());
+        }
+    }
+
+    public static CacheControlResult fetch(CacheControlRequest request, TokenData tokenData) {
+        if (request == null) throw new IllegalArgumentException("Cache control body is required");
+        if (request.id() <= 0) throw new IllegalArgumentException("Cache id must be positive");
+        String type = normalizeType(request.type());
+        try {
+            CacheControlResult current = control(new CacheControlRequest("GET", type, request.id()));
+            Path existingPath = existingCachePath(type, request.id());
+            boolean reusable = existingPath != null
+                    && (!"BEATMAPSET".equals(type) || Files.isRegularFile(existingPath));
+            if (reusable && !current.nodes().isEmpty()
+                    && "PRESENT".equals(current.nodes().getFirst().status())) {
+                CacheControlResult.CacheNodeResult node = current.nodes().getFirst();
+                return new CacheControlResult("FETCH", type, request.id(), List.of(
+                        new CacheControlResult.CacheNodeResult(
+                                node.node(), "PRESENT", node.path(), node.sizeBytes(), node.modifiedAt(),
+                                "Already cached"
+                        )
+                ));
+            }
+            switch (type) {
+                case "SCORE" -> cacheScoreJson(OsuAPI.getScore(tokenData, request.id()));
+                case "BEATMAP" -> getBeatmapPath(request.id(), true);
+                case "BEATMAPSET" -> getBeatmapsetArchivePath(request.id());
+                case "REPLAY" -> getReplayBlocking(tokenData, request.id());
+                default -> throw new IllegalArgumentException("Unsupported cache type");
+            }
+            CacheControlResult metadata = control(new CacheControlRequest("GET", type, request.id()));
+            CacheControlResult.CacheNodeResult node = metadata.nodes().getFirst();
+            return new CacheControlResult("FETCH", type, request.id(), List.of(
+                    new CacheControlResult.CacheNodeResult(
+                            node.node(), "FETCHED", node.path(), node.sizeBytes(), node.modifiedAt(), null
+                    )
+            ));
+        } catch (RuntimeException | IOException e) {
+            return localResult("FETCH", type, request.id(), "ERROR", List.of(), null, null, rootMessage(e));
+        }
+    }
+
+    public static Path existingCachePath(String typeValue, long id) {
+        String type = normalizeType(typeValue);
+        try {
+            List<Path> existing = cachePaths(type, id).stream().filter(Files::exists).toList();
+            return existing.stream().filter(Files::isRegularFile).findFirst()
+                    .orElse(existing.isEmpty() ? null : existing.getFirst());
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to locate fetched cache entry", e);
+        }
+    }
+
+    private static List<Path> cachePaths(String type, long id) throws IOException {
+        return switch (type) {
+            case "SCORE" -> List.of(SCORE_JSON_CACHE.resolve(id + ".json"));
+            case "BEATMAP" -> List.of(BEATMAP_CACHE.resolve(String.valueOf(id)));
+            case "REPLAY" -> List.of(REPLAY_CACHE.resolve(id + ".osr"));
+            case "BEATMAPSET" -> {
+                if (!Files.exists(BEATMAPSET_CACHE)) yield List.of(BEATMAPSET_CACHE.resolve(id + ".osz"));
+                try (Stream<Path> entries = Files.list(BEATMAPSET_CACHE)) {
+                    List<Path> matches = entries.filter(path -> {
+                        String name = path.getFileName().toString();
+                        return name.equals(String.valueOf(id)) || name.startsWith(id + " ") || name.equals(id + ".osz");
+                    }).toList();
+                    yield matches.isEmpty() ? List.of(BEATMAPSET_CACHE.resolve(id + ".osz")) : matches;
+                }
+            }
+            default -> throw new IllegalArgumentException("Unsupported cache type");
+        };
+    }
+
+    private static int deleteCachePath(Path path) throws IOException {
+        if (!Files.exists(path)) return 0;
+        if (Files.isDirectory(path)) {
+            int count = 0;
+            try (Stream<Path> paths = Files.walk(path)) {
+                for (Path child : paths.sorted(Comparator.reverseOrder()).toList()) {
+                    if (Files.deleteIfExists(child)) count++;
+                }
+            }
+            return count;
+        }
+        return Files.deleteIfExists(path) ? 1 : 0;
+    }
+
+    private static CacheControlResult localResult(String operation, String type, long id, String status,
+                                                  List<Path> paths, Long bytes, String modifiedAt, String message) {
+        String path = paths.isEmpty() ? null : paths.stream().map(value -> {
+            Path absolute = value.toAbsolutePath().normalize();
+            Path root = CACHE_PATH.toAbsolutePath().normalize();
+            return root.relativize(absolute).toString().replace('\\', '/');
+        }).reduce((left, right) -> left + "," + right).orElse(null);
+        return new CacheControlResult(operation, type, id, List.of(new CacheControlResult.CacheNodeResult(
+                "oStella", status, path, bytes, modifiedAt, message
+        )));
+    }
+
+    private static String normalizeOperation(String value) {
+        String normalized = value == null ? "" : value.toUpperCase(Locale.ROOT);
+        if (!List.of("QUERY", "GET", "DELETE", "FETCH").contains(normalized))
+            throw new IllegalArgumentException("Cache operation must be query, get, delete, or fetch");
+        return normalized;
+    }
+
+    private static String normalizeType(String value) {
+        String normalized = value == null ? "" : value.toUpperCase(Locale.ROOT);
+        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY").contains(normalized))
+            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, or replay");
+        return normalized;
+    }
+
+    private static String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) current = current.getCause();
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private static AreaStats areaStats(Path root) throws IOException {
+        if (!Files.exists(root)) return new AreaStats(0, 0);
+        long files = 0;
+        long bytes = 0;
+        try (Stream<Path> paths = Files.walk(root)) {
+            for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                files++;
+                bytes += Files.size(path);
+            }
+        }
+        return new AreaStats(files, bytes);
+    }
+
+    private static int clearChildren(Path root) throws IOException {
+        if (!Files.exists(root)) return 0;
+        int removed = 0;
+        try (Stream<Path> paths = Files.walk(root)) {
+            for (Path path : paths.filter(path -> !path.equals(root)).sorted(Comparator.reverseOrder()).toList()) {
+                if (Files.deleteIfExists(path)) removed++;
+            }
+        }
+        Files.createDirectories(root);
+        return removed;
+    }
+
+    public enum CacheArea {
+        BEATMAPS,
+        IMAGES,
+        REPLAYS,
+        SCORE_JSON,
+        BEATMAPSETS,
+        ALL
+    }
+
+    public record AreaStats(long files, long bytes) {
+    }
+
+    public record CacheSummary(
+            AreaStats beatmaps,
+            AreaStats images,
+            AreaStats replays,
+            AreaStats scoreJson,
+            AreaStats beatmapsets
+    ) {
+        public long totalFiles() {
+            return beatmaps.files + images.files + replays.files + scoreJson.files + beatmapsets.files;
+        }
+
+        public long totalBytes() {
+            return beatmaps.bytes + images.bytes + replays.bytes + scoreJson.bytes + beatmapsets.bytes;
         }
     }
 }

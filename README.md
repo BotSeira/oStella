@@ -61,6 +61,8 @@ Here are some demo:
 
 ## Quick Start
 
+Local administration commands are documented in [docs/console.md](docs/console.md). Runtime output is handled by Log4J2 and interactive input by JLine.
+
 1. Copy default config file in the project root.
 2. Install Playwright dependencies if not already present.
 3. Launch the app.
@@ -161,6 +163,7 @@ the render request can contain a bearer credential.
 | Method | Path                                    | Purpose                                | Params / POST Body                                | Response    |
 |--------|-----------------------------------------|----------------------------------------|---------------------------------------------------|-------------|
 | GET    | `/replays/status`                       | Replay renderer overview               | none                                              | JSON        |
+| POST   | `/cache/control`                        | Control cache across oStella and workers | `{"operation":"QUERY","type":"BEATMAPSET","id":12345}` | JSON |
 | POST   | `/replays/renders/score/{scoreId}`      | Queue single replay render             | path `scoreId`                                    | `202` JSON  |
 | POST   | `/replays/renders/showcase/scores`      | Queue multi-score showcase render      | POST Body `{"ids":[score ids]}`                   | `202` JSON  |
 | POST   | `/replays/renders/showcase/{beatmapId}` | Queue multi-score showcase render      | path `beatmapId` + POST Body `{"ids":[user ids]}` | `202` JSON  |

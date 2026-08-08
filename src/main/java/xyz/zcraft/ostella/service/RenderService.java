@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RenderService implements AutoCloseable {
@@ -263,6 +264,14 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
+    public Status status() {
+        if (renderExecutor instanceof ThreadPoolExecutor pool) {
+            return new Status(pool.getActiveCount(), pool.getMaximumPoolSize(), pool.getQueue().size(),
+                    pool.getCompletedTaskCount());
+        }
+        return new Status(0, 0, 0, 0);
+    }
+
     @Override
     public void close() {
         LOG.info("Shutting down RenderService executor");
@@ -330,5 +339,8 @@ public class RenderService implements AutoCloseable {
                     Thread.currentThread().getName()
             );
         }
+    }
+
+    public record Status(int active, int poolSize, int queued, long completed) {
     }
 }

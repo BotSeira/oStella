@@ -105,6 +105,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>4.3.1</version>
+        </dependency>
+        <dependency>
             <groupId>com.github.BotSeira</groupId>
             <artifactId>osuModel</artifactId>
             <version>v1.0.3</version>

@@ -6,10 +6,14 @@ import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.service.CacheService;
+import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class WebServer implements Closeable {
     private static final Logger LOG = LogManager.getLogger(WebServer.class);
@@ -17,6 +21,10 @@ public class WebServer implements Closeable {
     private final AppConfig conf;
     private final Javalin app;
     private final Router router;
+    private final AtomicBoolean running = new AtomicBoolean();
+    private final AtomicBoolean closed = new AtomicBoolean();
+    private final AtomicLong requests = new AtomicLong();
+    private final AtomicLong failures = new AtomicLong();
 
     public WebServer(AppConfig conf, TokenManager tokenManager) throws IOException {
         this.conf = conf;
@@ -30,7 +38,10 @@ public class WebServer implements Closeable {
             threadPool.setName("ServPool");
             cfg.jetty.threadPool = threadPool;
 
-            cfg.routes.before(ctx -> LOG.debug("{} {} {}", ctx.method(), ctx.path(), ctx.queryString()));
+            cfg.routes.before(ctx -> {
+                requests.incrementAndGet();
+                LOG.debug("{} {} {}", ctx.method(), ctx.path(), ctx.queryString());
+            });
 
             cfg.routes
                     .get("/beatmaps/lookup", router.beatmapController::lookupBeatmap)
@@ -66,6 +77,7 @@ public class WebServer implements Closeable {
 
                     .get("/daily", router::getDaily)
                     .get("/health", router::getServerStatus)
+                    .post("/cache/control", router::controlCache)
 
                     .post("/templates/{templateName}/render", router::renderCustomTemplate)
 
@@ -89,6 +101,7 @@ public class WebServer implements Closeable {
 
             cfg.routes
                     .exception(ApiException.class, (e, ctx) -> {
+                        failures.incrementAndGet();
                         switch (e.getErrorCode()) {
                             case ErrorCode.NO_BEATMAP_FOUND,
                                  ErrorCode.NO_BEATMAPSET_FOUND,
@@ -119,6 +132,7 @@ public class WebServer implements Closeable {
                         }
                     })
                     .exception(Exception.class, (e, ctx) -> {
+                        failures.incrementAndGet();
                         ctx.status(500).result(new Response(false, "An error occurred while processing the request!", null).toString());
                         LOG.error("An error occurred while processing request: {}", ctx.queryString(), e);
                     });
@@ -127,12 +141,70 @@ public class WebServer implements Closeable {
 
     public void start() {
         app.start(conf.webserver().port());
+        running.set(true);
         LOG.info("Started web server on port {}", conf.webserver().port());
+    }
+
+    public ServerStatus status() {
+        return new ServerStatus(
+                running.get() && !closed.get(),
+                requests.get(),
+                failures.get(),
+                router.tokenManager.isValid(),
+                router.executor.status(),
+                router.renderer.status(),
+                conf.replayRender().enabled(),
+                router.replayService.workerCount(),
+                router.replayService.assignedJobCount(),
+                CacheService.summary()
+        );
+    }
+
+    public boolean requestTokenRenewal() {
+        return router.tokenManager.requestRenewal();
+    }
+
+    public int replayQueueSize() {
+        return router.replayService.getQueueSize();
+    }
+
+    public ReplayService.JobProgress replayJob(String jobId) {
+        return router.replayService.getJobProgress(jobId);
+    }
+
+    public void deleteReplayJob(String jobId) {
+        router.replayService.deleteJob(jobId);
+    }
+
+    public int clearCache(CacheService.CacheArea area) {
+        return CacheService.clear(area);
+    }
+
+    public xyz.zcraft.ostella.cache.CacheControlResult controlCache(
+            xyz.zcraft.ostella.cache.CacheControlRequest request) {
+        return router.controlCache(request);
     }
 
     @Override
     public void close() {
-        app.stop();
-        router.close();
+        if (closed.compareAndSet(false, true)) {
+            running.set(false);
+            app.stop();
+            router.close();
+        }
+    }
+
+    public record ServerStatus(
+            boolean running,
+            long requests,
+            long failures,
+            boolean tokenValid,
+            xyz.zcraft.ostella.service.AsyncService.Status async,
+            xyz.zcraft.ostella.service.RenderService.Status renderer,
+            boolean replayEnabled,
+            int replayWorkers,
+            int assignedReplayJobs,
+            xyz.zcraft.ostella.service.CacheService.CacheSummary cache
+    ) {
     }
 }

@@ -10,8 +10,10 @@ import xyz.zcraft.ostella.network.OsuAPI;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-public class TokenManager {
+public class TokenManager implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(TokenManager.class);
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -21,6 +23,7 @@ public class TokenManager {
     });
 
     private final AppConfig conf;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     @Getter
     private volatile TokenData tokenData;
@@ -74,6 +77,9 @@ public class TokenManager {
         LOG.info("Startup paused: Waiting for a valid Osu API access token...");
 
         while (!isValid()) {
+            if (closed.get()) {
+                throw new IllegalStateException("Token manager has been closed");
+            }
             synchronized (this) {
                 if (isValid()) {
                     break;
@@ -94,6 +100,25 @@ public class TokenManager {
                     }
                 }
             }
+        }
+    }
+
+    public boolean requestRenewal() {
+        if (closed.get()) {
+            return false;
+        }
+        try {
+            scheduler.execute(this::renewToken);
+            return true;
+        } catch (RejectedExecutionException ignored) {
+            return false;
+        }
+    }
+
+    @Override
+    public void close() {
+        if (closed.compareAndSet(false, true)) {
+            scheduler.shutdownNow();
         }
     }
 }
