@@ -124,12 +124,26 @@
         .song-title {
             grid-column: 1 / 2;
             grid-row: 1 / 2;
+            padding-right: 24px;
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+        }
+
+        .title-main {
             font-size: 1.8em;
             font-weight: 900;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            padding-right: 24px;
+        }
+
+        .title-sub {
+            align-content: end;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 1px;
         }
 
         .song-artist {
@@ -369,7 +383,14 @@
             </div>
             <div class="meta-row">
                 <div class="map-info">
-                    <div class="song-title" th:text="${score.getBeatmapset().getTitle()}">Example Song Title</div>
+                    <div class="song-title">
+                        <div class="title-main" th:text="${score.getBeatmapset().getTitle()}">Example Song Title</div>
+                        <div class="title-sub"
+                             th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+                             th:text="${score.getBeatmapset().getTitleUnicode()}">
+                            标题
+                        </div>
+                    </div>
                     <div class="song-artist">
                         <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
                         <span style="color: #a0a0b8; margin: 0 8px;">//</span>
