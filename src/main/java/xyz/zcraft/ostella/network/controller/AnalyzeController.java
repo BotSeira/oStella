@@ -111,6 +111,7 @@ public class AnalyzeController {
 
                     final List<HitEvent.AimBias> misses = analyze.events().stream()
                             .filter(hitEvent -> !hitEvent.wasHit())
+                            .filter(hitEvent -> hitEvent.hitResult() == HitEvent.HitResult.MISS)
                             .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
                             .map(HitEvent::aimBias)
                             .filter(Objects::nonNull)

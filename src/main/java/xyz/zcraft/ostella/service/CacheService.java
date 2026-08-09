@@ -51,7 +51,7 @@ public class CacheService {
 //    private static final Path BEATMAP_JSON_CACHE = JSON_CACHE.resolve("beatmap");
 //    private static final Path BEATMAPSET_JSON_CACHE = JSON_CACHE.resolve("beatmapset");
 
-    private static final Path BEATMAPSET_CACHE = CACHE_PATH.resolve("danser", "songs");
+    private static final Path BEATMAPSET_CACHE = CACHE_PATH.resolve("beatmapset");
 
     private static final Gson GSON = new Gson();
     private static AsyncService executor = null;
