@@ -233,6 +233,13 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("aimBias", analyzeData.aimBias());
         ctx.setVariable("avgTimingError", analyzeData.avgTimingError());
         ctx.setVariable("analyze", analyzeData.replayAnalyze());
+        ctx.setVariable("performanceData", analyzeData.performanceGraph().windowDifficulties());
+        ctx.setVariable("missTimes", analyzeData.performanceGraph().misses());
+        ctx.setVariable("hit50Times", analyzeData.performanceGraph().hit50s());
+        ctx.setVariable("hit100Times", analyzeData.performanceGraph().hit100s());
+        ctx.setVariable("sliderTickBreakTimes", analyzeData.performanceGraph().sliderTickBreaks());
+        ctx.setVariable("sliderEndBreakTimes", analyzeData.performanceGraph().sliderEndBreaks());
+        ctx.setVariable("mapEndTime", analyzeData.performanceGraph().mapEndTime());
 
         String finalHtml = templateEngine.process("score-analysis", ctx);
 

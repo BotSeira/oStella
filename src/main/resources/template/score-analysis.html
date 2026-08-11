@@ -275,6 +275,16 @@
             height: 280px;
         }
 
+        .performance-chart-container {
+            height: 310px;
+            padding: 0 24px 24px 24px;
+        }
+
+        .performance-chart-container .chart-box {
+            width: 100%;
+            height: 100%;
+        }
+
         .chart-box {
             background: rgba(0, 0, 0, 0.2);
             border-radius: 12px;
@@ -485,6 +495,15 @@
         </div>
     </div>
 
+    <div class="performance-chart-container">
+        <div class="chart-box">
+            <div class="chart-title">Performance Graph</div>
+            <div class="chart-content">
+                <div id="performanceChart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="charts-container">
         <div class="chart-box" style="flex: 2;">
             <div class="chart-title">Timing Distribution</div>
@@ -571,6 +590,182 @@
     <span th:text="${'Analysis mapped at ' + time}">Analysis mapped at 2026-04-20T14:20:13Z</span>
     <span>Generated with oStella</span>
 </div>
+
+<!-- PERFORMANCE GRAPH -->
+<!--suppress ThymeleafObsoleteInlineAttributeInspection -->
+<script th:inline="javascript">
+    const performanceData = /*[[${performanceData}]]*/ [
+        [15000, 112.4], [25000, 148.2], [35000, 132.8], [45000, 179.5], [55000, 161.3]
+    ];
+    const missTimes = /*[[${missTimes}]]*/ [33000, 52000];
+    const hit50Times = /*[[${hit50Times}]]*/ [44000];
+    const hit100Times = /*[[${hit100Times}]]*/ [23000, 49000];
+    const sliderTickBreakTimes = /*[[${sliderTickBreakTimes}]]*/ [38000];
+    const sliderEndBreakTimes = /*[[${sliderEndBreakTimes}]]*/ [18000];
+    const mapEndTime = /*[[${mapEndTime}]]*/ 60000;
+
+    function formatMapTime(value) {
+        const seconds = Math.max(0, Math.round(value / 1000));
+        const minutes = Math.floor(seconds / 60);
+        return minutes + ':' + String(seconds % 60).padStart(2, '0');
+    }
+
+    function difficultyAt(time) {
+        if (performanceData.length === 0) return 0;
+        if (time <= performanceData[0][0]) return performanceData[0][1];
+
+        const lastPoint = performanceData[performanceData.length - 1];
+        if (time >= lastPoint[0]) return lastPoint[1];
+
+        let low = 0;
+        let high = performanceData.length - 1;
+        while (low + 1 < high) {
+            const middle = Math.floor((low + high) / 2);
+            if (performanceData[middle][0] <= time) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+
+        const left = performanceData[low];
+        const right = performanceData[high];
+        const progress = (time - left[0]) / (right[0] - left[0]);
+        return left[1] + (right[1] - left[1]) * progress;
+    }
+
+    function performanceMarks(times) {
+        return times.map(time => [time, difficultyAt(time)]);
+    }
+
+    const performanceChartDom = document.getElementById('performanceChart');
+    if (performanceChartDom && performanceData.length > 0) {
+        const performanceChart = echarts.init(performanceChartDom, 'dark');
+        const commonMarkStyle = {
+            borderWidth: 1.5,
+        };
+
+        performanceChart.setOption({
+            backgroundColor: 'transparent',
+            animation: false,
+            tooltip: {show: false},
+            legend: {
+                top: 0,
+                right: 4,
+                itemWidth: 12,
+                itemHeight: 9,
+                textStyle: {color: '#d7d7e5', fontSize: 11},
+                data: ['Miss', '50', '100', 'ST', 'SE']
+            },
+            grid: {top: 32, bottom: 30, left: 45, right: 14},
+            xAxis: {
+                type: 'value',
+                min: 0,
+                max: Math.max(mapEndTime, performanceData[performanceData.length - 1][0]),
+                axisLabel: {
+                    color: '#a0a0b8',
+                    fontSize: 10,
+                    formatter: formatMapTime
+                },
+                axisLine: {lineStyle: {color: '#6c6c83'}},
+                axisTick: {show: false},
+                splitLine: {show: false}
+            },
+            yAxis: {
+                type: 'value',
+                scale: true,
+                min: value => Math.max(0, value.min - Math.max(5, (value.max - value.min) * 0.12)),
+                max: value => value.max + Math.max(5, (value.max - value.min) * 0.12),
+                name: 'Window Difficulty',
+                nameGap: 8,
+                nameTextStyle: {color: '#a0a0b8', fontSize: 10},
+                axisLabel: {
+                    color: '#a0a0b8',
+                    fontSize: 10,
+                    formatter: value => Math.round(value)
+                },
+                axisLine: {show: false},
+                axisTick: {show: false},
+                splitLine: {lineStyle: {color: 'rgba(255, 255, 255, 0.08)'}}
+            },
+            series: [
+                {
+                    name: 'Window Difficulty',
+                    type: 'line',
+                    data: performanceData,
+                    smooth: 0.18,
+                    showSymbol: performanceData.length === 1,
+                    symbolSize: 5,
+                    silent: true,
+                    z: 2,
+                    lineStyle: {color: '#66ffcc', width: 2.5},
+                    itemStyle: {color: '#66ffcc'},
+                    areaStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            {offset: 0, color: 'rgba(102, 255, 204, 0.36)'},
+                            {offset: 1, color: 'rgba(102, 255, 204, 0.02)'}
+                        ])
+                    }
+                },
+                {
+                    name: 'Miss',
+                    type: 'scatter',
+                    data: performanceMarks(missTimes),
+                    symbol: 'path://M2,0L10,8L18,0L20,2L12,10L20,18L18,20L10,12L2,20L0,18L8,10L0,2Z',
+                    symbolSize: 12,
+                    clip: false,
+                    silent: true,
+                    z: 10,
+                    itemStyle: {...commonMarkStyle, color: '#ff5555'}
+                },
+                {
+                    name: '50',
+                    type: 'scatter',
+                    data: performanceMarks(hit50Times),
+                    symbol: 'pin',
+                    symbolSize: 15,
+                    clip: false,
+                    silent: true,
+                    z: 9,
+                    itemStyle: {...commonMarkStyle, color: '#e5c540'}
+                },
+                {
+                    name: '100',
+                    type: 'scatter',
+                    data: performanceMarks(hit100Times),
+                    symbol: 'pin',
+                    symbolSize: 15,
+                    clip: false,
+                    silent: true,
+                    z: 8,
+                    itemStyle: {...commonMarkStyle, color: '#52cc54'}
+                },
+                {
+                    name: 'ST',
+                    type: 'scatter',
+                    data: performanceMarks(sliderTickBreakTimes),
+                    symbol: 'pin',
+                    symbolSize: 11,
+                    clip: false,
+                    silent: true,
+                    z: 9,
+                    itemStyle: {...commonMarkStyle, color: '#c792ea'}
+                },
+                {
+                    name: 'SE',
+                    type: 'scatter',
+                    data: performanceMarks(sliderEndBreakTimes),
+                    symbol: 'triangle',
+                    symbolSize: 11,
+                    clip: false,
+                    silent: true,
+                    z: 9,
+                    itemStyle: {...commonMarkStyle, color: '#c792ea'}
+                }
+            ]
+        });
+    }
+</script>
 
 <!-- TIMING DISTRIBUTION -->
 <!--suppress ThymeleafObsoleteInlineAttributeInspection -->
