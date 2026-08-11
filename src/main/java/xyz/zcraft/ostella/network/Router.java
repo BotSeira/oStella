@@ -6,6 +6,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.exception.ApiException;
@@ -180,7 +181,7 @@ public class Router implements Closeable {
             scoreObj.addProperty("rank", score.getRank());
             scoreObj.addProperty("accuracy", String.format("%.2f%%", score.getAccuracy() * 100));
             scoreObj.addProperty("pp", String.format("%.2fpp", score.getPp()));
-            scoreObj.addProperty("id", String.valueOf(score.getId()));
+            scoreObj.addProperty("id", ScoreId.format(score));
             scoresArr.add(scoreObj);
         }
         return scoresArr;
@@ -198,6 +199,10 @@ public class Router implements Closeable {
             LOG.warn("Failed to get score from cache for score id {}: {}", id, e.getMessage());
         }
 
+        if (ScoreId.isLocal(id)) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id));
     }
 
@@ -210,10 +215,10 @@ public class Router implements Closeable {
 
         final JsonElement score = data.remove("@score");
         if (score != null) {
-            final long scoreId = score.getAsLong();
+            final long scoreId = ScoreId.parse(score.getAsString());
             variablesFuture.put(
                     "score",
-                    executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), scoreId))
+                    getScore(scoreId).thenApply(value -> value)
             );
         }
 

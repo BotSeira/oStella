@@ -351,6 +351,13 @@
             padding: 2px 6px;
         }
 
+        .if-local {
+            color: #ffd166;
+            font-weight: 900;
+            padding: 2px 6px;
+            letter-spacing: 0.06em;
+        }
+
         .hit-stats-container {
             background: rgba(0, 0, 0, 0.2);
             padding: 16px 24px;
@@ -457,7 +464,7 @@
                 <div th:text="${'MS' + score.getBeatmapset().getId() + ' - ' + 'M' + score.getBeatmap().getId()}">
                     MS1234567 - M1234567
                 </div>
-                <div th:text="${'U' + score.getUser().getId() + ' - ' + 'S' + score.getId()}">U123456789 - S1234567890
+                <div th:text="${'U' + score.getUser().getId() + ' - ' + Scores.getDisplayScoreId(score)}">U123456789 - S1234567890
                 </div>
             </div>
         </div>
@@ -578,11 +585,12 @@
                 1,234,567
             </div>
             <div class="data-sub">
+                <span class="if-local" th:if="${Scores.isLocal(score)}">▣</span>
                 <span class="if-ranked"
-                      th:if="${score.getRanked() && score.getBeatmap().getStatus().equalsIgnoreCase('RANKED')}">▲</span>
-                <span class="if-unranked" th:if="${!(score.getRanked())}">×</span>
+                      th:if="${!Scores.isLocal(score) && score.getRanked() && score.getBeatmap().getStatus().equalsIgnoreCase('RANKED')}">▲</span>
+                <span class="if-unranked" th:if="${!Scores.isLocal(score) && !(score.getRanked())}">×</span>
                 <span class="if-loved"
-                      th:if="${score.getBeatmap().getStatus().equalsIgnoreCase('LOVED') && score.getRanked()}">❤</span>
+                      th:if="${!Scores.isLocal(score) && score.getBeatmap().getStatus().equalsIgnoreCase('LOVED') && score.getRanked()}">❤</span>
                 <span th:if="${diff != null}"
                       th:text="${ppSafe != null ? #numbers.formatDecimal(ppSafe, 1, 1) : '--'} + 'pp' + ' / ' + ${#numbers.formatDecimal(diff.getPpSS(), 1, 1)} + 'pp'">
                     412.5pp / 1234.56pp

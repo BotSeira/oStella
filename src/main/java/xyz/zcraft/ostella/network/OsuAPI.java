@@ -476,6 +476,35 @@ public class OsuAPI {
         }
     }
 
+    public static BeatmapExtended getBeatmapByChecksum(TokenData tokenData, String checksum) {
+        LOG.debug("Fetching beatmap with checksum {}", checksum);
+        try {
+            final var request = newRequestBuilder(tokenData,
+                    "/beatmaps/lookup?checksum=" + URLEncoder.encode(checksum, StandardCharsets.UTF_8))
+                    .GET()
+                    .build();
+
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 404) {
+                return null;
+            }
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.BEATMAP_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for beatmap checksum " + checksum
+                );
+            }
+
+            final JsonElement body = JsonParser.parseString(response.body());
+            if (!body.isJsonObject() || body.getAsJsonObject().has("error")) {
+                return null;
+            }
+            return GSON.fromJson(body, BeatmapExtended.class);
+        } catch (IOException | InterruptedException e) {
+            throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap checksum " + checksum, e);
+        }
+    }
+
     public static List<Score> getLatestPassedScores(TokenData tokenData) {
         LOG.debug("Fetching all passed scores");
         try {

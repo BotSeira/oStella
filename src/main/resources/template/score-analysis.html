@@ -187,7 +187,6 @@
         }
 
         .id-data {
-            margin-left: auto;
             letter-spacing: 1px;
             color: #a0a0b8;
             font-size: 1.1em;
@@ -418,14 +417,15 @@
         <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
              th:text="${score.getBeatmap().getVersion()}">Example Difficulty
         </div>
-        <div class="id-data" th:text="${'M' + score.getBeatmap().getId() + ' - ' + 'S' + score.getId()}">M1234567 -
-            S1234567890
+        <span th:if="${Scores.isLocal(score)}" style="font-size: 0.28em; color: #a0a0b8; vertical-align: middle; margin-left: auto;">LOCAL</span>
+        <div class="id-data" th:text="${'M' + score.getBeatmap().getId() + ' - ' + Scores.getDisplayScoreId(score)}">
+            M1234567 - S1234567890
         </div>
     </div>
 
     <div class="score-info">
-        <div class="grade-letter" th:style="'color: ' + ${Scores.getRankColor(score)}" th:text="${score.getRank()}">
-            A
+        <div class="grade-letter" th:style="'color: ' + ${Scores.getRankColor(score)}">
+            <span th:text="${score.getRank()}">A</span>
         </div>
 
         <div class="score-data">

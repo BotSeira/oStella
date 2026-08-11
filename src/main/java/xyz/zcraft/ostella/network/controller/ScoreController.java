@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
@@ -64,7 +65,7 @@ public class ScoreController {
     }
 
     public void renderScoreById(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
 
         context.future(() -> router.getScore(scoreId)
                 .thenApplyAsync(score -> {
@@ -72,7 +73,7 @@ public class ScoreController {
                     final BeatmapExtended beatmap = score.getBeatmap();
 
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
-                            .header("X-Score-Id", String.valueOf(score.getId()));
+                            .header("X-Score-Id", ScoreId.format(score));
 
                     try {
                         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
@@ -98,7 +99,7 @@ public class ScoreController {
     }
 
     private void lookupScoreOfIdAsync(@NotNull Context context) {
-        final long scoreId = requireLong(context, "s");
+        final long scoreId = requireScoreId(context, "s");
         context.future(() -> router.getScore(scoreId)
                 .thenAccept(score -> context.status(200).result(
                         new Response(true, "Success", scoreLookupData(score)).toString()
@@ -143,7 +144,11 @@ public class ScoreController {
         if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
 
         final JsonObject data = new JsonObject();
-        data.addProperty("score_id", score.getId());
+        if (ScoreId.isLocal(score)) {
+            data.addProperty("score_id", ScoreId.format(score));
+        } else {
+            data.addProperty("score_id", score.getId());
+        }
 
         if (score.getBeatmap() != null) {
             data.addProperty("beatmap_id", score.getBeatmap().getId());

@@ -6,6 +6,7 @@ import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
@@ -35,7 +36,7 @@ import java.util.List;
 import java.util.Objects;
 
 import static xyz.zcraft.ostella.util.RequestUtil.requirePathInt;
-import static xyz.zcraft.ostella.util.RequestUtil.requirePathLong;
+import static xyz.zcraft.ostella.util.RequestUtil.requirePathScoreId;
 
 public class AnalyzeController {
     final RenderService renderer;
@@ -51,14 +52,14 @@ public class AnalyzeController {
     }
 
     public void renderScoreAnalysisById(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     final BeatmapExtended beatmap = score.getBeatmap();
 
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
-                            .header("X-Score-Id", String.valueOf(score.getId()));
+                            .header("X-Score-Id", ScoreId.format(score));
 
                     final OsuBeatmap osuBeatmap;
                     final DiffSpec diffSpec;
@@ -141,7 +142,7 @@ public class AnalyzeController {
     }
 
     public void getMisses(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> {
@@ -167,7 +168,7 @@ public class AnalyzeController {
     }
 
     public void getScoreHighlight(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> {
@@ -193,7 +194,7 @@ public class AnalyzeController {
         final BeatmapExtended beatmap = score.getBeatmap();
 
         context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
-                .header("X-Score-Id", String.valueOf(score.getId()));
+                .header("X-Score-Id", ScoreId.format(score));
 
         final Path rosuPath = CacheService.getBeatmapPath(beatmap.getId());
 
@@ -211,7 +212,7 @@ public class AnalyzeController {
     }
 
     public void visualizeMiss(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         final int missIndex = requirePathInt(context, "missIndex");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))

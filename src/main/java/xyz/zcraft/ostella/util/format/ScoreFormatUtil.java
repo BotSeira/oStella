@@ -2,6 +2,7 @@ package xyz.zcraft.ostella.util.format;
 
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 
@@ -14,6 +15,9 @@ public class ScoreFormatUtil {
     }
 
     public static String getScoreStatus(Score score) {
+        if (ScoreId.isLocal(score)) {
+            return "LOC";
+        }
         if (score.getRanked() == false) {
             return "×";
         }
@@ -23,6 +27,19 @@ public class ScoreFormatUtil {
             return "▲";
         }
         return "?";
+    }
+
+    public static boolean isLocal(Score score) {
+        return ScoreId.isLocal(score);
+    }
+
+    public static String getScoreId(Score score) {
+        return ScoreId.format(score);
+    }
+
+    public static String getDisplayScoreId(Score score) {
+        String id = getScoreId(score);
+        return ScoreId.isLocal(score) ? id : "S" + id;
     }
 
     public static boolean hasWeight(Score score) {
