@@ -62,6 +62,7 @@ public class ModFormatUtil {
             case "DP" -> "https://osu.ppy.sh/assets/images/mod-depth.0cfcae1d.svg";
             case "BM" -> "https://osu.ppy.sh/assets/images/mod-bloom.a02383c1.svg";
             case "TD" -> "https://osu.ppy.sh/assets/images/mod-touch-device.ceb86291.svg";
+            case "V2" -> "https://picui.ogmua.cn/s1/2026/08/12/6a7b4bb14fc57.webp";
             default -> "https://osu.ppy.sh/assets/images/mod-no-mod.3634af18.svg";
         };
     }

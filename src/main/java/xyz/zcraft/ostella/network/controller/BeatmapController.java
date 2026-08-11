@@ -15,6 +15,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.MultiplayerRoom;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
@@ -205,6 +206,10 @@ public class BeatmapController {
                         final Path beatmapPath = CacheService.getBeatmapPath(beatmap.getId());
                         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
                         DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, mod);
+
+                        final Mod e = new Mod();
+                        e.setAcronym("V2");
+                        diffSpec.getMods().add(e);
 
                         final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) Math.max(3, (beatmap.getTotalLength() / 50.0))))
                                 .stream()
