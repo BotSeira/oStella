@@ -295,7 +295,7 @@ public class ScoreController {
 
             List<ScoreEntry> candidates = new ArrayList<>(5);
 
-            for (int i = 2; i < 7; i++) {
+            for (int i = 0; i < 7; i++) {
                 if (!scores.get(i).getHasReplay()) {
                     continue;
                 }
