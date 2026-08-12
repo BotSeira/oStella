@@ -6,8 +6,8 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
@@ -235,23 +235,39 @@ public class ScoreController {
                             return userIds;
                         })
                         .thenCompose(userIds -> findAvailableScore(userIds, 0))
-                        .thenCompose(targetScore ->
-                                executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), targetScore.score().getUserId()))
-                                        .thenApply(user -> {
-                                            JsonObject result = new JsonObject();
-                                            result.add("user", GSON.toJsonTree(user));
-                                            result.add("score", GSON.toJsonTree(targetScore.score()));
-                                            result.addProperty("best_index", targetScore.bestIndex());
-                                            return result;
-                                        })
+                        .thenCompose(targetScore -> {
+                                    final OsuBeatmap osuBeatmap;
+                                    final DiffSpec diffSpec;
+
+                                    try {
+                                        osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(targetScore.score.getBeatmap().getId()));
+                                        diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, targetScore.score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+                                    } catch (Exception e) {
+                                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+                                    }
+
+                                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), targetScore.score().getUserId()))
+                                            .thenApply(user -> {
+                                                JsonObject result = new JsonObject();
+                                                result.add("user", GSON.toJsonTree(user));
+                                                result.add("score", GSON.toJsonTree(targetScore.score()));
+                                                result.addProperty("diff", "%.2f★ (CS %.2f / AR %.2f / OD %.2f / HP %.2f)".formatted(
+                                                        diffSpec.getStar(),
+                                                        diffSpec.getDifficulty().cs(),
+                                                        diffSpec.getDifficulty().ar(),
+                                                        diffSpec.getDifficulty().od(),
+                                                        diffSpec.getDifficulty().hp()
+                                                ));
+                                                result.addProperty("best_index", targetScore.bestIndex());
+                                                return result;
+                                            });
+                                }
                         )
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
                         )
         );
     }
-
-    private record TargetScore(int bestIndex, Score score){}
 
     private CompletableFuture<TargetScore> findAvailableScore(List<Long> userIds, int index) {
         if (index >= userIds.size()) {
@@ -288,5 +304,8 @@ public class ScoreController {
 
                     return CompletableFuture.completedFuture(selected);
                 });
+    }
+
+    private record TargetScore(int bestIndex, Score score) {
     }
 }
