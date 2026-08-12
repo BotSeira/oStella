@@ -70,6 +70,16 @@ public class RequestUtil {
         }
     }
 
+    public static long optionalLong(Context context, String param, long fallback) throws ApiException {
+        try {
+            final String obj = context.queryParam(param);
+            if (obj == null) return fallback;
+            return Long.parseLong(obj);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
+        }
+    }
+
     public static String requireString(Context context, String param) throws ApiException {
         final String s = context.queryParam(param);
         if (s != null && !s.isBlank()) {
