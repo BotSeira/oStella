@@ -427,7 +427,7 @@
         <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
              th:text="${score.getBeatmap().getVersion()}">Example Difficulty
         </div>
-        <span th:if="${Scores.isLocal(score)}" style="font-size: 0.28em; color: #a0a0b8; vertical-align: middle; margin-left: auto;">LOCAL</span>
+        <span th:if="${Scores.isLocal(score)}" style="font-size: 1em; color: #ffd166; vertical-align: middle; margin-left: auto;">▣</span>
         <div class="id-data" th:text="${'M' + score.getBeatmap().getId() + ' - ' + Scores.getDisplayScoreId(score)}">
             M1234567 - S1234567890
         </div>
@@ -712,10 +712,10 @@
                     type: 'scatter',
                     data: performanceMarks(missTimes),
                     symbol: 'path://M2,0L10,8L18,0L20,2L12,10L20,18L18,20L10,12L2,20L0,18L8,10L0,2Z',
-                    symbolSize: 12,
+                    symbolSize: 14,
                     clip: false,
                     silent: true,
-                    z: 10,
+                    z: 12,
                     itemStyle: {...commonMarkStyle, color: '#ff5555'}
                 },
                 {
@@ -756,11 +756,11 @@
                     type: 'scatter',
                     data: performanceMarks(sliderEndBreakTimes),
                     symbol: 'triangle',
-                    symbolSize: 11,
+                    symbolSize: 14,
                     clip: false,
                     silent: true,
                     z: 9,
-                    itemStyle: {...commonMarkStyle, color: '#c792ea'}
+                    itemStyle: {...commonMarkStyle, color: '#ff5555'}
                 }
             ]
         });
