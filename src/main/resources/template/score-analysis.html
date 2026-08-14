@@ -118,6 +118,7 @@
         }
 
         .map-info {
+            overflow: hidden;
             margin-right: auto;
         }
 
@@ -134,7 +135,6 @@
             font-size: 1.8em;
             font-weight: 900;
             white-space: nowrap;
-            overflow: hidden;
             text-overflow: ellipsis;
         }
 
@@ -187,6 +187,7 @@
         }
 
         .id-data {
+            margin-left: auto;
             letter-spacing: 1px;
             color: #a0a0b8;
             font-size: 1.1em;
@@ -427,10 +428,10 @@
         <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
              th:text="${score.getBeatmap().getVersion()}">Example Difficulty
         </div>
-        <span th:if="${Scores.isLocal(score)}" style="font-size: 1em; color: #ffd166; vertical-align: middle; margin-left: auto;">▣</span>
         <div class="id-data" th:text="${'M' + score.getBeatmap().getId() + ' - ' + Scores.getDisplayScoreId(score)}">
             M1234567 - S1234567890
         </div>
+        <span th:if="${Scores.isLocal(score)}" style="font-size: 1em; color: #ffd166; vertical-align: middle; ">▣</span>
     </div>
 
     <div class="score-info">
