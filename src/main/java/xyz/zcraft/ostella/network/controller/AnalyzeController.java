@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
@@ -17,10 +18,7 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.parser.BeatmapParser;
-import xyz.zcraft.osu.parser.OsuParser;
-import xyz.zcraft.osu.parser.ReplayAnalyzer;
-import xyz.zcraft.osu.parser.ReplayParser;
+import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.HitEvent;
@@ -31,13 +29,16 @@ import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 import static xyz.zcraft.ostella.util.RequestUtil.requirePathInt;
-import static xyz.zcraft.ostella.util.RequestUtil.requirePathLong;
+import static xyz.zcraft.ostella.util.RequestUtil.requirePathScoreId;
 
 public class AnalyzeController {
+    private static final int PERFORMANCE_GRAPH_MAX_POINTS = 120;
+
     final RenderService renderer;
     final AsyncService executor;
     final TokenManager tokenManager;
@@ -50,15 +51,80 @@ public class AnalyzeController {
         this.executor = router.executor;
     }
 
+    private static PerformanceGraphData buildPerformanceGraphData(OsuBeatmap beatmap,
+                                                                  ReplayAnalyze analyze)
+            throws AnalyzeException {
+        if (beatmap.getHitObjects() == null || beatmap.getHitObjects().isEmpty()) {
+            throw new AnalyzeException("No hit objects found in the beatmap.");
+        }
+
+        final long firstObjectTime = beatmap.getHitObjects().getFirst().getTime();
+        final long lastObjectTime = beatmap.getHitObjects().getLast().getTime();
+        final long mapSpan = Math.max(1, lastObjectTime - firstObjectTime);
+        final long windowDurationMs = Math.max(3_000, mapSpan / 50);
+
+        final List<double[]> windowDifficulties = new ArrayList<>();
+        final int sampleStep = Math.max(1, (int) Math.ceil(
+                beatmap.getHitObjects().size() / (double) PERFORMANCE_GRAPH_MAX_POINTS));
+        for (int objectIndex = 0; objectIndex < beatmap.getHitObjects().size(); objectIndex += sampleStep) {
+            final long windowStart = beatmap.getHitObjects().get(objectIndex).getTime();
+            final long windowEnd = windowStart + windowDurationMs;
+            if (windowEnd > lastObjectTime) break;
+
+            windowDifficulties.add(calculatePerformancePoint(beatmap, windowStart, windowEnd));
+        }
+
+        if (windowDifficulties.isEmpty()) {
+            windowDifficulties.add(calculatePerformancePoint(beatmap, firstObjectTime,
+                    Math.max(firstObjectTime + 1, lastObjectTime)));
+        }
+
+        final List<Long> misses = objectResultTimes(analyze.events(), HitEvent.HitResult.MISS);
+        final List<Long> hit50s = objectResultTimes(analyze.events(), HitEvent.HitResult.MEH);
+        final List<Long> hit100s = objectResultTimes(analyze.events(), HitEvent.HitResult.OK);
+        final List<Long> sliderTickBreaks = analyze.events().stream()
+                .filter(event -> !event.wasHit())
+                .filter(event -> event.eventType() == HitEvent.EventType.SLIDER_TICK)
+                .map(HitEvent::eventTime)
+                .toList();
+        final List<Long> sliderEndBreaks = analyze.events().stream()
+                .filter(event -> !event.wasHit())
+                .filter(event -> event.eventType() == HitEvent.EventType.SLIDER_END)
+                .map(HitEvent::eventTime)
+                .toList();
+
+        return new PerformanceGraphData(windowDifficulties, misses, hit50s, hit100s,
+                sliderTickBreaks, sliderEndBreaks, lastObjectTime);
+    }
+
+    private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end)
+            throws AnalyzeException {
+        try {
+            final var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end);
+            return new double[]{start + (end - start) / 2.0, difficulty.getValue()};
+        } catch (RuntimeException e) {
+            throw new AnalyzeException("Failed to calculate window difficulty around " + start, e);
+        }
+    }
+
+    private static List<Long> objectResultTimes(List<HitEvent> events,
+                                                HitEvent.HitResult result) {
+        return events.stream()
+                .filter(HitEvent::isObjectStart)
+                .filter(event -> event.hitResult() == result)
+                .map(HitEvent::eventTime)
+                .toList();
+    }
+
     public void renderScoreAnalysisById(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     final BeatmapExtended beatmap = score.getBeatmap();
 
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
-                            .header("X-Score-Id", String.valueOf(score.getId()));
+                            .header("X-Score-Id", ScoreId.format(score));
 
                     final OsuBeatmap osuBeatmap;
                     final DiffSpec diffSpec;
@@ -111,6 +177,7 @@ public class AnalyzeController {
 
                     final List<HitEvent.AimBias> misses = analyze.events().stream()
                             .filter(hitEvent -> !hitEvent.wasHit())
+                            .filter(hitEvent -> hitEvent.hitResult() == HitEvent.HitResult.MISS)
                             .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
                             .map(HitEvent::aimBias)
                             .filter(Objects::nonNull)
@@ -133,14 +200,22 @@ public class AnalyzeController {
                     final double aimBias = aimBiases.isEmpty() ? 0.0 : (aimBiases.stream().reduce(0.0, Double::sum) / aimBiases.size() / diffSpec.getDifficulty().getCircleRadiusInPixel());
 
                     final double avgTimingError = hitErrors.isEmpty() ? 0.0 : (hitErrors.stream().reduce(0L, Long::sum) / (double) hitErrors.size());
-                    return new ScoreAnalyzeData(score, diffSpec, hitErrors, hitPos, hitPosAbs, missPos, missPosAbs, aimBias, avgTimingError, analyze);
+                    final PerformanceGraphData performanceGraph;
+                    try {
+                        performanceGraph = buildPerformanceGraphData(osuBeatmap, analyze);
+                    } catch (AnalyzeException e) {
+                        throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
+                    }
+
+                    return new ScoreAnalyzeData(score, diffSpec, hitErrors, hitPos, hitPosAbs,
+                            missPos, missPosAbs, aimBias, avgTimingError, analyze, performanceGraph);
                 })
                 .thenApplyAsync(renderer::renderScoreAnalysis, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 
     public void getMisses(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> {
@@ -166,7 +241,7 @@ public class AnalyzeController {
     }
 
     public void getScoreHighlight(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> {
@@ -192,7 +267,7 @@ public class AnalyzeController {
         final BeatmapExtended beatmap = score.getBeatmap();
 
         context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
-                .header("X-Score-Id", String.valueOf(score.getId()));
+                .header("X-Score-Id", ScoreId.format(score));
 
         final Path rosuPath = CacheService.getBeatmapPath(beatmap.getId());
 
@@ -210,7 +285,7 @@ public class AnalyzeController {
     }
 
     public void visualizeMiss(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
         final int missIndex = requirePathInt(context, "missIndex");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
@@ -228,7 +303,19 @@ public class AnalyzeController {
             List<double[]> missPositionsAbsolute,
             double aimBias,
             double avgTimingError,
-            ReplayAnalyze replayAnalyze
+            ReplayAnalyze replayAnalyze,
+            PerformanceGraphData performanceGraph
+    ) {
+    }
+
+    public record PerformanceGraphData(
+            List<double[]> windowDifficulties,
+            List<Long> misses,
+            List<Long> hit50s,
+            List<Long> hit100s,
+            List<Long> sliderTickBreaks,
+            List<Long> sliderEndBreaks,
+            long mapEndTime
     ) {
     }
 }

@@ -6,6 +6,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.cache.CacheControlRequest;
+import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -13,6 +16,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.util.VersionInfo;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
@@ -63,7 +67,7 @@ public class Router implements Closeable {
         this.multiplayerController = new MultiplayerController(this);
         this.userController = new UserController(this);
 
-        this.replayService = new ReplayService(conf, CacheService.getDanserCache());
+        this.replayService = new ReplayService(conf);
         this.replayController = new ReplayController(this);
 
         LOG.info("Router created");
@@ -78,9 +82,36 @@ public class Router implements Closeable {
                                 "Server is running!",
                                 GSON.toJsonTree(Map.of(
                                         "ostella", true,
-                                        "osu-api", r
+                                        "ostella_version", VersionInfo.getVersion(),
+                                        "osu_api", r
                                 ))).toString())));
 
+    }
+
+    public void controlCache(@NotNull Context context) {
+        CacheControlRequest request;
+        try {
+            request = GSON.fromJson(context.body(), CacheControlRequest.class);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Invalid cache control body", e);
+        }
+        context.contentType("application/json").result(GSON.toJson(controlCache(request)));
+    }
+
+    public CacheControlResult controlCache(CacheControlRequest request) {
+        boolean fetch = request != null && "FETCH".equalsIgnoreCase(request.operation());
+        CacheControlResult local = fetch
+                ? CacheService.fetch(request, tokenManager.getTokenData())
+                : CacheService.control(request);
+        List<CacheControlResult.CacheNodeResult> nodes = new ArrayList<>(local.nodes());
+        Path fetchedPath = fetch && !local.nodes().isEmpty()
+                && List.of("FETCHED", "PRESENT").contains(local.nodes().getFirst().status())
+                ? CacheService.existingCachePath(request.type(), request.id())
+                : null;
+        nodes.addAll(fetch
+                ? replayService.fetchCacheWorkers(request, fetchedPath)
+                : replayService.controlCacheWorkers(request));
+        return new CacheControlResult(local.operation(), local.type(), local.id(), nodes);
     }
 
     public void ensurePp(Score score) {
@@ -150,7 +181,7 @@ public class Router implements Closeable {
             scoreObj.addProperty("rank", score.getRank());
             scoreObj.addProperty("accuracy", String.format("%.2f%%", score.getAccuracy() * 100));
             scoreObj.addProperty("pp", String.format("%.2fpp", score.getPp()));
-            scoreObj.addProperty("id", String.valueOf(score.getId()));
+            scoreObj.addProperty("id", ScoreId.format(score));
             scoresArr.add(scoreObj);
         }
         return scoresArr;
@@ -168,6 +199,10 @@ public class Router implements Closeable {
             LOG.warn("Failed to get score from cache for score id {}: {}", id, e.getMessage());
         }
 
+        if (ScoreId.isLocal(id)) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id));
     }
 
@@ -180,10 +215,10 @@ public class Router implements Closeable {
 
         final JsonElement score = data.remove("@score");
         if (score != null) {
-            final long scoreId = score.getAsLong();
+            final long scoreId = ScoreId.parse(score.getAsString());
             variablesFuture.put(
                     "score",
-                    executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), scoreId))
+                    getScore(scoreId).thenApply(value -> value)
             );
         }
 

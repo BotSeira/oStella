@@ -1,13 +1,18 @@
 package xyz.zcraft.ostella.network.controller;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
@@ -15,6 +20,7 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.UserExtended;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
@@ -22,14 +28,19 @@ import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class ScoreController {
     private static final Logger LOG = LogManager.getLogger(ScoreController.class);
+    private static final Gson GSON = new Gson();
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -55,7 +66,7 @@ public class ScoreController {
     }
 
     public void renderScoreById(@NotNull Context context) {
-        final long scoreId = requirePathLong(context, "scoreId");
+        final long scoreId = requirePathScoreId(context, "scoreId");
 
         context.future(() -> router.getScore(scoreId)
                 .thenApplyAsync(score -> {
@@ -63,7 +74,7 @@ public class ScoreController {
                     final BeatmapExtended beatmap = score.getBeatmap();
 
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
-                            .header("X-Score-Id", String.valueOf(score.getId()));
+                            .header("X-Score-Id", ScoreId.format(score));
 
                     try {
                         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
@@ -89,7 +100,7 @@ public class ScoreController {
     }
 
     private void lookupScoreOfIdAsync(@NotNull Context context) {
-        final long scoreId = requireLong(context, "s");
+        final long scoreId = requireScoreId(context, "s");
         context.future(() -> router.getScore(scoreId)
                 .thenAccept(score -> context.status(200).result(
                         new Response(true, "Success", scoreLookupData(score)).toString()
@@ -134,7 +145,11 @@ public class ScoreController {
         if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
 
         final JsonObject data = new JsonObject();
-        data.addProperty("score_id", score.getId());
+        if (ScoreId.isLocal(score)) {
+            data.addProperty("score_id", ScoreId.format(score));
+        } else {
+            data.addProperty("score_id", score.getId());
+        }
 
         if (score.getBeatmap() != null) {
             data.addProperty("beatmap_id", score.getBeatmap().getId());
@@ -206,5 +221,113 @@ public class ScoreController {
 
                     return scores.get(i - 1);
                 });
+    }
+
+    public void randomScore(@NotNull Context context) {
+        final long minRank = optionalLong(context, "min_rank", Long.MAX_VALUE);
+        context.future(() ->
+                executor.enqueueAsync(() -> OsuAPI.getLatestPassedScores(tokenManager.getTokenData()))
+                        .thenApply(scores -> {
+                            List<Long> userIds = scores.stream()
+                                    .map(Score::getUserId)
+                                    .distinct()
+                                    .collect(Collectors.toCollection(ArrayList::new));
+
+                            Collections.shuffle(userIds, ThreadLocalRandom.current());
+                            return userIds;
+                        })
+                        .thenCompose(userIds -> findAvailableScore(userIds, 0, minRank))
+                        .thenApply(targetScore -> {
+                                    final OsuBeatmap osuBeatmap;
+                                    final DiffSpec diffSpec;
+
+                                    final ScoreEntry entry = targetScore.entry();
+                                    final Score score = entry.score();
+                                    final UserExtended user = targetScore.user();
+
+                                    try {
+                                        osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmap().getId()));
+                                        diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+                                    } catch (Exception e) {
+                                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+                                    }
+
+                                    JsonObject result = new JsonObject();
+                                    result.add("user", GSON.toJsonTree(user));
+                                    result.add("score", GSON.toJsonTree(score));
+                                    result.addProperty("diff", "%.2f★ (CS %.2f / AR %.2f / OD %.2f / HP %.2f)".formatted(
+                                            diffSpec.getStar(),
+                                            diffSpec.getDifficulty().cs(),
+                                            diffSpec.getDifficulty().ar(),
+                                            diffSpec.getDifficulty().od(),
+                                            diffSpec.getDifficulty().hp()
+                                    ));
+                                    result.addProperty("best_index", entry.bestIndex());
+                                    return result;
+                                }
+                        )
+                        .thenAccept(result ->
+                                context.status(200).result(new Response(true, "Success", result).toString())
+                        )
+        );
+    }
+
+    private CompletableFuture<TargetScore> findAvailableScore(List<Long> userIds, int index, long minRank) {
+        if (index >= userIds.size()) {
+            return CompletableFuture.failedFuture(
+                    new ApiException(ErrorCode.NO_SCORE_FOUND, "No available scores found!")
+            );
+        }
+
+        long userId = userIds.get(index);
+
+        return executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(),
+                        userId,
+                        ScoreType.BEST,
+                        10
+                )
+        ).thenCompose(scores -> {
+            if (scores.size() < 8) {
+                return findAvailableScore(userIds, index + 1, minRank);
+            }
+
+            List<ScoreEntry> candidates = new ArrayList<>(5);
+
+            for (int i = 0; i < 7; i++) {
+                if (!scores.get(i).getHasReplay()) {
+                    continue;
+                }
+
+                candidates.add(new ScoreEntry(i + 1, scores.get(i)));
+            }
+
+            if (candidates.isEmpty()) {
+                return findAvailableScore(userIds, index + 1, minRank);
+            }
+
+            return executor.enqueueAsync(() ->
+                    OsuAPI.getUser(tokenManager.getTokenData(), userId)
+            ).thenCompose(user -> {
+                Long globalRank = user.getStatistics().getGlobalRank();
+
+                if (globalRank == null || globalRank > minRank) {
+                    return findAvailableScore(userIds, index + 1, minRank);
+                }
+
+                ScoreEntry selected = candidates.get(
+                        ThreadLocalRandom.current().nextInt(candidates.size())
+                );
+
+                return CompletableFuture.completedFuture(new TargetScore(selected, user));
+            });
+        });
+    }
+
+    private record ScoreEntry(int bestIndex, Score score) {
+    }
+
+    private record TargetScore(ScoreEntry entry, UserExtended user) {
     }
 }

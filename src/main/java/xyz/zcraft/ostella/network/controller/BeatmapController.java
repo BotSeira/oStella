@@ -15,6 +15,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.MultiplayerRoom;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
@@ -247,7 +248,9 @@ public class BeatmapController {
                                 fileName = fileName.substring(1, fileName.length() - 1);
                             }
 
-                            return CacheService.getBeatmapBg(b.getBeatmapSetId(), fileName)
+                            CacheService.cacheBeatmapsetFile(b.getBeatmapSetId());
+
+                            return CacheService.extractFile(b.getBeatmapSetId(), fileName)
                                     .orElseThrow(() -> new ApiException(ErrorCode.NO_BACKGROUND_FOUND, "No background found"));
                         })
                         .thenAccept(bytes -> context.status(200).result(bytes))

@@ -6,7 +6,7 @@
 
     <groupId>com.github.BotSeira</groupId>
     <artifactId>oStella</artifactId>
-    <version>1.8.1</version>
+    <version>1.10.0</version>
 
     <properties>
         <maven.compiler.source>25</maven.compiler.source>
@@ -27,6 +27,17 @@
             <resource>
                 <directory>src/main/resources</directory>
                 <filtering>false</filtering>
+                <excludes>
+                    <exclude>version.properties</exclude>
+                </excludes>
+            </resource>
+
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>version.properties</include>
+                </includes>
             </resource>
         </resources>
 
@@ -94,6 +105,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline</artifactId>
+            <version>4.3.1</version>
+        </dependency>
+        <dependency>
             <groupId>com.github.BotSeira</groupId>
             <artifactId>osuModel</artifactId>
             <version>v1.0.3</version>
@@ -102,7 +118,7 @@
         <dependency>
             <groupId>com.github.BotSeira</groupId>
             <artifactId>osuParser</artifactId>
-            <version>v1.4.0</version>
+            <version>v1.4.2</version>
         </dependency>
 
         <!-- Source: https://mvnrepository.com/artifact/org.tukaani/xz -->
@@ -147,7 +163,7 @@
         <dependency>
             <groupId>org.thymeleaf</groupId>
             <artifactId>thymeleaf</artifactId>
-            <version>3.1.4.RELEASE</version>
+            <version>3.1.5.RELEASE</version>
             <scope>compile</scope>
         </dependency>
 
@@ -199,7 +215,7 @@
         <dependency>
             <groupId>io.javalin</groupId>
             <artifactId>javalin</artifactId>
-            <version>7.1.0</version>
+            <version>7.2.2</version>
         </dependency>
 
         <dependency>

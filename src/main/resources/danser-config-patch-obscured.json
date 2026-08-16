@@ -1,0 +1,11 @@
+{
+  "Gameplay": {
+    "PPCounter": {
+      "Show": false
+    },
+    "ScoreBoard": {
+      "Show": false
+    },
+    "ShowResultsScreen": false
+  }
+}

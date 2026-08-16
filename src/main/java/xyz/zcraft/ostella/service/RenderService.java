@@ -1,7 +1,6 @@
 package xyz.zcraft.ostella.service;
 
 import com.microsoft.playwright.*;
-import com.microsoft.playwright.options.WaitUntilState;
 import com.microsoft.playwright.options.LoadState;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
@@ -31,6 +30,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RenderService implements AutoCloseable {
@@ -115,11 +115,14 @@ public class RenderService implements AutoCloseable {
             throw new IllegalStateException("Image rendering must run on RenderService's executor");
         }
 
-        Page page = workerState.page();
-
-        page.setContent(html, new Page.SetContentOptions().setWaitUntil(WaitUntilState.LOAD));
-        page.waitForLoadState(LoadState.NETWORKIDLE);
-        page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
+        var context = workerState.context();
+        
+        try (Page page = context.newPage()) {
+            page.setContent(html);
+            page.waitForLoadState(LoadState.NETWORKIDLE);
+            page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
+            return page.locator("body").screenshot();
+        }
             
         // page.waitForFunction("""
         // () => document.fonts.status === 'loaded'
@@ -129,8 +132,6 @@ public class RenderService implements AutoCloseable {
         //        || window.__OSTELLA_RENDER_READY__ === true
         //    )
         // """);
-
-        return page.locator("body").screenshot();
     }
 
     private Context createContext() {
@@ -232,6 +233,13 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("aimBias", analyzeData.aimBias());
         ctx.setVariable("avgTimingError", analyzeData.avgTimingError());
         ctx.setVariable("analyze", analyzeData.replayAnalyze());
+        ctx.setVariable("performanceData", analyzeData.performanceGraph().windowDifficulties());
+        ctx.setVariable("missTimes", analyzeData.performanceGraph().misses());
+        ctx.setVariable("hit50Times", analyzeData.performanceGraph().hit50s());
+        ctx.setVariable("hit100Times", analyzeData.performanceGraph().hit100s());
+        ctx.setVariable("sliderTickBreakTimes", analyzeData.performanceGraph().sliderTickBreaks());
+        ctx.setVariable("sliderEndBreakTimes", analyzeData.performanceGraph().sliderEndBreaks());
+        ctx.setVariable("mapEndTime", analyzeData.performanceGraph().mapEndTime());
 
         String finalHtml = templateEngine.process("score-analysis", ctx);
 
@@ -263,6 +271,14 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
+    public Status status() {
+        if (renderExecutor instanceof ThreadPoolExecutor pool) {
+            return new Status(pool.getActiveCount(), pool.getMaximumPoolSize(), pool.getQueue().size(),
+                    pool.getCompletedTaskCount());
+        }
+        return new Status(0, 0, 0, 0);
+    }
+
     @Override
     public void close() {
         LOG.info("Shutting down RenderService executor");
@@ -272,8 +288,7 @@ public class RenderService implements AutoCloseable {
     private record RenderWorkerState(
             Playwright playwright,
             Browser browser,
-            BrowserContext context,
-            Page page
+            BrowserContext context
     ) implements AutoCloseable {
         static RenderWorkerState create() {
             Playwright playwright = Playwright.create();
@@ -285,11 +300,7 @@ public class RenderService implements AutoCloseable {
 
                 setupRoutes(context);
 
-                Page page = context.newPage();
-
-                page.setDefaultTimeout(60 * 1000);
-
-                return new RenderWorkerState(playwright, browser, context, page);
+                return new RenderWorkerState(playwright, browser, context);
             } catch (Exception e) {
                 playwright.close();
                 throw e;
@@ -327,7 +338,7 @@ public class RenderService implements AutoCloseable {
         @Override
         public void close() {
 //            closeSafely("BrowserContext", context::close);
-            closeSafely("Browser", browser::close);
+//            closeSafely("Browser", browser::close);
             closeSafely("Playwright", playwright::close);
 
             LOG.info(
@@ -335,5 +346,8 @@ public class RenderService implements AutoCloseable {
                     Thread.currentThread().getName()
             );
         }
+    }
+
+    public record Status(int active, int poolSize, int queued, long completed) {
     }
 }

@@ -2,6 +2,7 @@ package xyz.zcraft.ostella.service;
 
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.osu.parser.ReplayAnalyzer;
 import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.HitObject;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
@@ -63,29 +64,31 @@ public class MissVisualizeService {
                 targetMiss,
                 extractNearbyKeyFrames(keyFrames, targetMiss.hitObject()),
                 replayAnalyze.beatmap(),
-                replayAnalyze.calculatedDifficulty()
+                replayAnalyze.calculatedDifficulty(),
+                ReplayAnalyzer.hasHardRock(replayAnalyze.replay())
         );
     }
 
     private static List<OsuReplay.TimedKeyFrame> extractNearbyKeyFrames(List<OsuReplay.TimedKeyFrame> keyFrames, HitObject hitObject) {
-        int leftIndex = -1, rightIndex = -1;
-        for (int i = 0; i < keyFrames.size(); i++) {
-            if (keyFrames.get(i).time() > hitObject.getTime()) {
-                leftIndex = i;
-                rightIndex = i + 1;
-                break;
-            }
+        if (keyFrames == null || keyFrames.isEmpty()) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Replay contains no keyframes");
         }
 
-        if (leftIndex == -1) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Could not find keyframe to lookup");
+        int firstAfter = 0;
+        while (firstAfter < keyFrames.size()
+                && keyFrames.get(firstAfter).time() <= hitObject.getTime()) {
+            firstAfter++;
         }
 
-        while (leftIndex > 0 && keyFrames.get(leftIndex).time() >= hitObject.getTime() - WINDOW_MILLIS) {
+        int leftIndex = Math.min(firstAfter, keyFrames.size() - 1);
+        while (leftIndex > 0
+                && keyFrames.get(leftIndex - 1).time() >= hitObject.getTime() - WINDOW_MILLIS) {
             leftIndex--;
         }
 
-        while (rightIndex < keyFrames.size() - 1 && keyFrames.get(rightIndex).time() <= hitObject.getTime() + WINDOW_MILLIS) {
+        int rightIndex = Math.min(firstAfter, keyFrames.size() - 1);
+        while (rightIndex + 1 < keyFrames.size()
+                && keyFrames.get(rightIndex + 1).time() <= hitObject.getTime() + WINDOW_MILLIS) {
             rightIndex++;
         }
 
@@ -169,7 +172,8 @@ public class MissVisualizeService {
                                        HitEvent targetMiss,
                                        List<OsuReplay.TimedKeyFrame> keyFrames,
                                        OsuBeatmap beatmap,
-                                       DifficultyAttribute diff) {
+                                       DifficultyAttribute diff,
+                                       boolean hardRock) {
             final HitObject hitObject = targetMiss.hitObject();
             final double circleRadius = diff.getCircleRadiusInPixel();
 
@@ -184,13 +188,13 @@ public class MissVisualizeService {
             g2d.setColor(Color.WHITE);
             g2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-            drawNearbyObjects(hitObject, beatmap, circleRadius, g2d);
+            drawNearbyObjects(hitObject, beatmap, circleRadius, hardRock, g2d);
 
-            drawTargetObject(hitObject, circleRadius, g2d);
+            drawTargetObject(hitObject, circleRadius, hardRock, g2d);
 
-            drawCursorPath(hitObject, keyFrames, diff, g2d);
+            drawCursorPath(hitObject, keyFrames, diff, hardRock, g2d);
 
-            drawFramePoints(hitObject, keyFrames, g2d, hitTimes);
+            drawFramePoints(hitObject, keyFrames, hardRock, g2d, hitTimes);
 
             drawText(missIndex, targetMiss, beatmap, g2d);
 
@@ -209,19 +213,23 @@ public class MissVisualizeService {
             return output.toByteArray();
         }
 
-        private static void drawNearbyObjects(HitObject hitObject, OsuBeatmap beatmap, double circleRadius, Graphics2D g2d) {
+        private static void drawNearbyObjects(HitObject hitObject, OsuBeatmap beatmap,
+                                              double circleRadius, boolean hardRock,
+                                              Graphics2D g2d) {
+            double focusY = playfieldY(hitObject.getY(), hardRock);
             beatmap.getHitObjects().stream()
                     .filter(obj -> obj.getObjectType() != HitObject.ObjectType.SPINNER)
                     .filter(obj -> obj.getTime() <= hitObject.getTime() + WINDOW_MILLIS
                             && obj.getTime() >= hitObject.getTime() - WINDOW_MILLIS)
                     .forEach(obj -> {
                         if (obj.getObjectType() == HitObject.ObjectType.SLIDER) {
-                            drawSlider(obj, hitObject, circleRadius, g2d);
+                            drawSlider(obj, hitObject, circleRadius, hardRock, g2d);
                         }
 
                         Ellipse2D circle = new Ellipse2D.Double(
                                 (obj.getX() - hitObject.getX() - circleRadius) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5,
-                                (obj.getY() - hitObject.getY() - circleRadius) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5,
+                                (playfieldY(obj.getY(), hardRock) - focusY - circleRadius)
+                                        * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5,
                                 circleRadius * 2 * ZOOM_FACTOR,
                                 circleRadius * 2 * ZOOM_FACTOR
                         );
@@ -290,13 +298,15 @@ public class MissVisualizeService {
 
         private static void drawFramePoints(HitObject hitObject,
                                             List<OsuReplay.TimedKeyFrame> keyFrames,
+                                            boolean hardRock,
                                             Graphics2D g2d,
                                             List<Long> hitTimes) {
             int previousFlags = keyFrames.getFirst().key();
+            double focusY = playfieldY(hitObject.getY(), hardRock);
 
             for (var keyFrame : keyFrames) {
                 final double x = (keyFrame.cursorX() - hitObject.getX()) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5;
-                final double y = (keyFrame.cursorY() - hitObject.getY()) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
+                final double y = (keyFrame.cursorY() - focusY) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
 
                 int currentFlags = keyFrame.key();
                 int newlyPressed = currentFlags & ~previousFlags;
@@ -328,6 +338,7 @@ public class MissVisualizeService {
         private static void drawCursorPath(HitObject hitObject,
                                            List<OsuReplay.TimedKeyFrame> keyFrames,
                                            DifficultyAttribute diff,
+                                           boolean hardRock,
                                            Graphics2D g2d) {
             Path2D.Double currentPath = new Path2D.Double();
             int currentCategory = -1;
@@ -337,13 +348,14 @@ public class MissVisualizeService {
             boolean hasLast = false;
 
             int segmentCounter = 0;
+            double focusY = playfieldY(hitObject.getY(), hardRock);
 
             for (var keyFrame : keyFrames) {
                 long offset = keyFrame.time() - hitObject.getTime();
                 int category = getHitWindowCategory(offset, diff);
 
                 double x = (keyFrame.cursorX() - hitObject.getX()) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5;
-                double y = (keyFrame.cursorY() - hitObject.getY()) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
+                double y = (keyFrame.cursorY() - focusY) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
 
                 if (category != currentCategory) {
                     if (currentCategory != -1) {
@@ -431,9 +443,10 @@ public class MissVisualizeService {
             g2d.setComposite(oldComp);
         }
 
-        private static void drawTargetObject(HitObject hitObject, double circleRadius, Graphics2D g2d) {
+        private static void drawTargetObject(HitObject hitObject, double circleRadius,
+                                             boolean hardRock, Graphics2D g2d) {
             if (hitObject.getObjectType() == HitObject.ObjectType.SLIDER) {
-                drawSlider(hitObject, hitObject, circleRadius, g2d);
+                drawSlider(hitObject, hitObject, circleRadius, hardRock, g2d);
             }
 
             Ellipse2D circle = new Ellipse2D.Double(
@@ -451,15 +464,17 @@ public class MissVisualizeService {
         private static void drawSlider(HitObject slider,
                                        HitObject focusObject,
                                        double circleRadius,
+                                       boolean hardRock,
                                        Graphics2D g2d) {
-            SliderPath sliderPath = new SliderPath(slider);
+            SliderPath sliderPath = new SliderPath(slider, hardRock);
             Path2D.Double path = new Path2D.Double();
             int samples = Math.clamp((int) Math.ceil(sliderPath.expectedLength / 2), 1, 10000);
+            double focusY = playfieldY(focusObject.getY(), hardRock);
 
             for (int i = 0; i <= samples; i++) {
                 Point point = sliderPath.positionAt((double) i / samples);
                 double x = (point.x - focusObject.getX()) * ZOOM_FACTOR + CANVAS_WIDTH * 0.5;
-                double y = (point.y - focusObject.getY()) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
+                double y = (point.y - focusY) * ZOOM_FACTOR + CANVAS_HEIGHT * 0.5;
                 if (i == 0) path.moveTo(x, y);
                 else path.lineTo(x, y);
             }
@@ -482,6 +497,10 @@ public class MissVisualizeService {
         private record Point(double x, double y) {
         }
 
+        private static double playfieldY(double y, boolean hardRock) {
+            return hardRock ? CANVAS_HEIGHT - y : y;
+        }
+
         /**
          * Builds the geometric path osu! uses for each supported slider curve type.
          */
@@ -490,12 +509,12 @@ public class MissVisualizeService {
             private final List<Double> cumulativeLength = new ArrayList<>();
             private final double expectedLength;
 
-            private SliderPath(HitObject slider) {
+            private SliderPath(HitObject slider, boolean hardRock) {
                 expectedLength = Math.max(0, slider.getLength());
                 List<Point> controls = new ArrayList<>();
-                controls.add(new Point(slider.getX(), slider.getY()));
+                controls.add(new Point(slider.getX(), playfieldY(slider.getY(), hardRock)));
                 for (HitObject.ControlPoint point : slider.getControlPoints()) {
-                    controls.add(new Point(point.x(), point.y()));
+                    controls.add(new Point(point.x(), playfieldY(point.y(), hardRock)));
                 }
 
                 switch (slider.getCurveType() == null ? "L" : slider.getCurveType()) {
@@ -507,7 +526,9 @@ public class MissVisualizeService {
                     }
                     default -> controls.forEach(this::addPoint);
                 }
-                if (points.isEmpty()) addPoint(new Point(slider.getX(), slider.getY()));
+                if (points.isEmpty()) {
+                    addPoint(new Point(slider.getX(), playfieldY(slider.getY(), hardRock)));
+                }
                 extendToExpectedLength();
                 calculateLengths();
             }

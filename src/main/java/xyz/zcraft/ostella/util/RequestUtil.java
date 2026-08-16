@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import io.javalin.http.Context;
 import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 
@@ -59,6 +60,26 @@ public class RequestUtil {
         }
     }
 
+    public static boolean optionalBoolean(Context context, String param, boolean fallback) throws ApiException {
+        try {
+            final String obj = context.queryParam(param);
+            if (obj == null) return fallback;
+            return Boolean.parseBoolean(obj);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
+        }
+    }
+
+    public static long optionalLong(Context context, String param, long fallback) throws ApiException {
+        try {
+            final String obj = context.queryParam(param);
+            if (obj == null) return fallback;
+            return Long.parseLong(obj);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
+        }
+    }
+
     public static String requireString(Context context, String param) throws ApiException {
         final String s = context.queryParam(param);
         if (s != null && !s.isBlank()) {
@@ -99,6 +120,22 @@ public class RequestUtil {
             return Long.parseLong(Objects.requireNonNull(s));
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid path parameter: " + param);
+        }
+    }
+
+    public static long requirePathScoreId(Context context, String param) throws ApiException {
+        try {
+            return ScoreId.parse(context.pathParam(param));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score ID: " + param);
+        }
+    }
+
+    public static long requireScoreId(Context context, String param) throws ApiException {
+        try {
+            return ScoreId.parse(context.queryParam(param));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score ID: " + param);
         }
     }
 

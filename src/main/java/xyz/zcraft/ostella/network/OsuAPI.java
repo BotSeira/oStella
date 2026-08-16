@@ -18,6 +18,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -210,7 +211,7 @@ public class OsuAPI {
     public static UserExtended getUser(TokenData tokenData, long uid) {
         LOG.debug("Fetching user with id {}", uid);
         try {
-            final var request = newRequestBuilder(tokenData, "/users/" + uid)
+            final var request = newRequestBuilder(tokenData, "/users/" + uid + "/osu")
                     .GET()
                     .build();
 
@@ -472,6 +473,77 @@ public class OsuAPI {
             return GSON.fromJson(body, BeatmapExtended.class);
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap id " + beatmapId, e);
+        }
+    }
+
+    public static BeatmapExtended getBeatmapByChecksum(TokenData tokenData, String checksum) {
+        LOG.debug("Fetching beatmap with checksum {}", checksum);
+        try {
+            final var request = newRequestBuilder(tokenData,
+                    "/beatmaps/lookup?checksum=" + URLEncoder.encode(checksum, StandardCharsets.UTF_8))
+                    .GET()
+                    .build();
+
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() == 404) {
+                return null;
+            }
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.BEATMAP_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for beatmap checksum " + checksum
+                );
+            }
+
+            final JsonElement body = JsonParser.parseString(response.body());
+            if (!body.isJsonObject() || body.getAsJsonObject().has("error")) {
+                return null;
+            }
+            return GSON.fromJson(body, BeatmapExtended.class);
+        } catch (IOException | InterruptedException e) {
+            throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap checksum " + checksum, e);
+        }
+    }
+
+    public static List<Score> getLatestPassedScores(TokenData tokenData) {
+        LOG.debug("Fetching all passed scores");
+        try {
+            final var request = newRequestBuilder(tokenData, "/scores?ruleset=osu")
+                    .GET()
+                    .build();
+
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                return null;
+            }
+
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.SCORE_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for all passed scores"
+                );
+            }
+
+            final String body = response.body();
+            final JsonElement rootElem = JsonParser.parseString(body);
+            final JsonObject rootObj = rootElem.getAsJsonObject();
+
+            if (rootObj.has("error")) {
+                return null;
+            }
+
+            final JsonArray scoreArr = rootObj.get("scores").getAsJsonArray();
+
+            List<Score> scores = new ArrayList<>(scoreArr.size());
+
+            for (JsonElement jsonElement : scoreArr) {
+                scores.add(GSON.fromJson(jsonElement, Score.class));
+            }
+
+            return scores;
+        } catch (IOException | InterruptedException e) {
+            throw new ApiException(ErrorCode.SCORE_FETCH_FAILED, "Failed to get all passed scores", e);
         }
     }
 

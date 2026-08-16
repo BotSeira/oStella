@@ -1,88 +1,72 @@
 package xyz.zcraft.ostella;
 
 import lombok.Getter;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.config.Configurator;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.config.ConfigLoader;
-import xyz.zcraft.ostella.network.WebServer;
-import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.runtime.OstellaApplication;
 import xyz.zcraft.ostella.util.format.UserFormatUtil;
 
 import java.io.IOException;
 
 public class oStella {
     private static final Logger LOG = LogManager.getLogger(oStella.class);
-
-    private static WebServer webServer;
-
     @Getter
     private static AppConfig conf;
 
     static void main() {
         LOG.info("Reading config.yml");
-
         if (!ConfigLoader.configExists()) {
-            LOG.warn("Config file does not exist, copying default config. Please check your config file.");
+            LOG.warn("Config file does not exist, copying default config. Please check it before restarting.");
             try {
                 ConfigLoader.copyDefaultConfig();
             } catch (IOException e) {
                 LOG.error("Failed to copy default config", e);
             }
-
-            System.exit(0);
+            return;
         }
-
         try {
             conf = ConfigLoader.loadConfig();
         } catch (RuntimeException e) {
-            LOG.error("Invalid configuration! Please check your config.yml file.");
+            LOG.error("Invalid configuration. Please check config.yml.", e);
             System.exit(1);
             return;
         }
-
         if (conf.ostella().debugMode()) {
-            Configurator.setRootLevel(org.apache.logging.log4j.Level.DEBUG);
-            LOG.warn("Debug mode is enabled! This may cause security and performance issues. Please disable debug mode in production environment.");
+            Configurator.setRootLevel(Level.DEBUG);
+            LOG.warn("Debug mode is enabled. Disable it in production.");
         }
+        UserFormatUtil.setSafeFlags(conf.ostella().safeFlags());
+        initializeNativeLibraries();
 
-        if (conf.ostella().safeFlags()) {
-            UserFormatUtil.setSafeFlags(true);
-        }
-
-        try {
-            LOG.info("Initializing, you may ignore the warnings below:");
-            /*
-                osuParser will use Rosu-FFI, which calls a restricted method in System and prints a warning.
-                This is to call the methods during initialization, to avoid the warning during runtime.
-             */
-            System.load("");
-        } catch (UnsatisfiedLinkError _) {
-        }
-
-        LOG.info("Authorizing...");
-
-        final TokenManager tokenManager = new TokenManager(conf);
-
-        tokenManager.blockUntilValid();
-
-        LOG.info("Starting web server");
-
-        try {
-            webServer = new WebServer(conf, tokenManager);
-            webServer.start();
-        } catch (IOException e) {
-            LOG.error("Failed to start web server", e);
+        try (OstellaApplication application = new OstellaApplication(conf)) {
+            Thread shutdownHook = new Thread(application::close, "ostella-shutdown");
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
+            try {
+                application.run();
+            } finally {
+                try {
+                    Runtime.getRuntime().removeShutdownHook(shutdownHook);
+                } catch (IllegalStateException ignored) {
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOG.info("oStella shutdown requested");
+        } catch (IOException | RuntimeException e) {
+            LOG.error("Failed to run oStella", e);
             System.exit(1);
-            return;
         }
+    }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            LOG.info("Stopping web server");
-            webServer.close();
-        }));
-
-        LOG.info("Web server ready, waiting for requests");
+    private static void initializeNativeLibraries() {
+        try {
+            LOG.info("Initializing native libraries; startup warnings below may be ignored");
+            System.load("");
+        } catch (UnsatisfiedLinkError ignored) {
+        }
     }
 }
