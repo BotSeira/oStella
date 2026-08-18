@@ -156,14 +156,26 @@ public class RenderService implements AutoCloseable {
     }
 
     public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type) {
+        return renderScores(user, scores, type, List.of());
+    }
+
+    public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type, List<String> filters) {
         Context ctx = createContext();
         ctx.setVariable("user", user);
         ctx.setVariable("scores", scores);
-        ctx.setVariable("type", switch (type) {
-            case BEST -> "Best of " + scores.size() + " Scores";
-            case RECENT -> "Most recent " + scores.size() + " Scores";
-            case RECENT_PASS -> "Most recent " + scores.size() + " Passed Scores";
-        });
+        ctx.setVariable("filters", List.copyOf(filters));
+        ctx.setVariable("filtered", !filters.isEmpty());
+        ctx.setVariable("type", filters.isEmpty()
+                ? switch (type) {
+                    case BEST -> "Best of " + scores.size() + " Scores";
+                    case RECENT -> "Most recent " + scores.size() + " Scores";
+                    case RECENT_PASS -> "Most recent " + scores.size() + " Passed Scores";
+                }
+                : switch (type) {
+                    case BEST -> "Filtered Scores From Best Scores";
+                    case RECENT -> "Filtered Scores From Recent Scores";
+                    case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
+                });
         ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 

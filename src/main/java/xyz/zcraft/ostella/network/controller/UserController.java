@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -28,6 +29,7 @@ import static xyz.zcraft.ostella.util.RequestUtil.*;
 public class UserController {
     private static final Logger LOG = LogManager.getLogger(UserController.class);
     private static final Gson GSON = new Gson();
+    private static final int FILTER_SCAN_LIMIT = 100;
 
     public final RenderService renderer;
     public final AsyncService executor;
@@ -114,25 +116,28 @@ public class UserController {
         final long u = requirePathLong(context, "userId");
         final int n = requireInt(context, "n");
         final boolean fail = requireBoolean(context, "fail", false);
+        final List<ScoreFilter> filters = requireScoreFilters(context);
 
         final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
+        final int fetchLimit = filters.isEmpty() ? n : FILTER_SCAN_LIMIT;
 
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, type, n)
+                        tokenManager.getTokenData(), u, type, fetchLimit)
                 )
                 .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
                         .thenApplyAsync(user -> {
                             if (user == null) {
                                 throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
                             }
-                            context.header("X-User-Id", String.valueOf(user.getId()));
-                            context.header("X-Score-Ids", scores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-
                             for (Score score : scores) {
                                 router.ensurePp(score);
                             }
 
-                            return renderer.renderScores(user, scores, fail ? ScoreType.RECENT : ScoreType.RECENT_PASS);
+                            List<Score> filteredScores = applyFilters(scores, filters, n);
+                            context.header("X-User-Id", String.valueOf(user.getId()));
+                            context.header("X-Score-Ids", filteredScores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
+
+                            return renderer.renderScores(user, filteredScores, type, filterLabels(filters));
                         }, renderer.getRenderExecutor()))
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
@@ -182,21 +187,53 @@ public class UserController {
     public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
         final int n = requireInt(context, "n");
+        final List<ScoreFilter> filters = requireScoreFilters(context);
+        final int fetchLimit = filters.isEmpty() ? n : FILTER_SCAN_LIMIT;
 
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, ScoreType.BEST, n
+                        tokenManager.getTokenData(), u, ScoreType.BEST, fetchLimit
                 ))
                 .thenCompose(scores -> {
                     if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
                             .thenApplyAsync(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                for (Score score : scores) {
+                                    router.ensurePp(score);
+                                }
+                                List<Score> filteredScores = applyFilters(scores, filters, n);
                                 context.header("X-User-Id", String.valueOf(user.getId()));
-                                context.header("X-Score-Ids", scores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-                                return renderer.renderScores(user, scores, ScoreType.BEST);
+                                context.header("X-Score-Ids", filteredScores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
+                                return renderer.renderScores(user, filteredScores, ScoreType.BEST, filterLabels(filters));
                             }, renderer.getRenderExecutor());
                 })
                 .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    private static List<ScoreFilter> requireScoreFilters(Context context) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+    }
+
+    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters, int limit) {
+        if (filters.isEmpty()) {
+            return scores;
+        }
+        List<Score> result = scores.stream()
+                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
+                .limit(limit)
+                .toList();
+        if (result.isEmpty()) {
+            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
+        }
+        return result;
+    }
+
+    private static List<String> filterLabels(List<ScoreFilter> filters) {
+        return filters.stream().map(ScoreFilter::displayText).toList();
     }
 
     public void getFriends(@NotNull Context context) {
