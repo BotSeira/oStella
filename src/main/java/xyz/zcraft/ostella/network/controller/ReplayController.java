@@ -78,18 +78,10 @@ public class ReplayController {
                 }
                 context.status(200).result(new Response(true, "Render complete!", obj).toString());
             }
-            case ReplayService.JobStatus.FAILED -> context.status(200).result(
-                    new Response(true, "Render failed",
-                            GSON.toJsonTree(Map.of(
-                                    "status", "failed",
-                                    "id", jobId
-                            ))).toString());
-            case ReplayService.JobStatus.TIMEOUT -> context.status(200).result(
-                    new Response(true, "Render timed out",
-                            GSON.toJsonTree(Map.of(
-                                    "status", "timeout",
-                                    "id", jobId
-                            ))).toString());
+            case ReplayService.JobStatus.FAILED -> respondTerminalStatus(
+                    context, jobId, "failed", "Render failed", jobProgress.error());
+            case ReplayService.JobStatus.TIMEOUT -> respondTerminalStatus(
+                    context, jobId, "timeout", "Render timed out", jobProgress.error());
             case ReplayService.JobStatus.QUEUED -> context.status(200).result(
                     new Response(true, "Render is waiting in queue",
                             GSON.toJsonTree(Map.of(
@@ -225,6 +217,22 @@ public class ReplayController {
 
             return finalizeShowcase(context, scoreFutures, showcaseRequest.qqUpload());
         });
+    }
+
+    private void respondTerminalStatus(Context context, String jobId, String status,
+                                       String message, String error) {
+        JsonObject obj = terminalStatusData(jobId, status, error);
+        context.status(200).result(new Response(true, message, obj).toString());
+    }
+
+    static JsonObject terminalStatusData(String jobId, String status, String error) {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("status", status);
+        obj.addProperty("id", jobId);
+        if (error != null && !error.isBlank()) {
+            obj.addProperty("error", error);
+        }
+        return obj;
     }
 
     public void renderBeatmapPreview(@NotNull Context context) {
