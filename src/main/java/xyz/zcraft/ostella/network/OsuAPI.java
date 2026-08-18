@@ -6,6 +6,8 @@ import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
+import xyz.zcraft.ostella.data.MultiplayerRoomScore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
@@ -28,6 +30,8 @@ public class OsuAPI {
     private static final HttpClient CLIENT = HttpClient.newBuilder().build();
     private static final String BASE_URL = "https://osu.ppy.sh/api/v2";
     private static final Gson GSON = new Gson();
+    private static final int USER_SCORES_PAGE_LIMIT = 100;
+    public static final int MAX_USER_SCORES_LIMIT = 200;
 
     public static TokenData getToken(AppConfig conf) {
         try {
@@ -119,30 +123,65 @@ public class OsuAPI {
                 case RECENT_PASS, BEST -> false;
                 case RECENT -> true;
             };
-            final String url = "/users/%s/scores/%s?mode=osu&limit=%d&include_fails=%d";
-            final var request = newRequestBuilder(tokenData, String.format(url, uid, type, limit, fail ? 1 : 0))
-                    .GET()
-                    .build();
+            final List<Score> scores = new ArrayList<>(limit);
+            for (UserScoresPage page : userScoresPages(limit)) {
+                final String url = userScoresUrl(uid, type, fail, page);
+                final var request = newRequestBuilder(tokenData, url).GET().build();
+                final HttpResponse<String> send = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
-            final HttpResponse<String> send = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+                if (send.statusCode() == 404) {
+                    throw new ApiException(ErrorCode.NO_USER_FOUND, "User not found for uid " + uid);
+                }
+                if (send.statusCode() >= 400) {
+                    throw new ApiException(
+                            ErrorCode.SCORE_FETCH_FAILED,
+                            "osu! API returned status " + send.statusCode() + " for user " + uid + " scores"
+                    );
+                }
 
-            if (send.statusCode() == 404) {
-                throw new ApiException(ErrorCode.NO_USER_FOUND, "User not found for uid" + uid);
+                JsonArray pageScores = JsonParser.parseString(send.body()).getAsJsonArray();
+                for (JsonElement element : pageScores) {
+                    final Score score = GSON.fromJson(element, Score.class);
+                    score.getBeatmap().setBeatmapset(score.getBeatmapset());
+                    scores.add(score);
+                }
+
+                if (pageScores.size() < page.limit()) {
+                    break;
+                }
             }
-
-            final String body = send.body();
-
-            final LinkedList<Score> scores = new LinkedList<>();
-            JsonParser.parseString(body).getAsJsonArray().forEach(s -> {
-                final Score e = GSON.fromJson(s, Score.class);
-                e.getBeatmap().setBeatmapset(e.getBeatmapset());
-                scores.add(e);
-            });
-
-            return scores;
+            return List.copyOf(scores);
         } catch (JsonSyntaxException | InterruptedException | IOException e) {
             throw new ApiException(ErrorCode.SCORE_FETCH_FAILED, "Failed to fetch scores for user id " + uid, e);
         }
+    }
+
+    static List<UserScoresPage> userScoresPages(int limit) {
+        if (limit <= 0 || limit > MAX_USER_SCORES_LIMIT) {
+            throw new ApiException(
+                    ErrorCode.ILLEGAL_ARGUMENT,
+                    "Score limit must be between 1 and " + MAX_USER_SCORES_LIMIT
+            );
+        }
+
+        List<UserScoresPage> pages = new ArrayList<>(2);
+        for (int offset = 0; offset < limit; offset += USER_SCORES_PAGE_LIMIT) {
+            pages.add(new UserScoresPage(Math.min(USER_SCORES_PAGE_LIMIT, limit - offset), offset));
+        }
+        return List.copyOf(pages);
+    }
+
+    static String userScoresUrl(long uid, String type, boolean includeFails, UserScoresPage page) {
+        return "/users/%d/scores/%s?mode=osu&limit=%d%s&include_fails=%d".formatted(
+                uid,
+                type,
+                page.limit(),
+                page.offset() == 0 ? "" : "&offset=" + page.offset(),
+                includeFails ? 1 : 0
+        );
+    }
+
+    record UserScoresPage(int limit, int offset) {
     }
 
     public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
@@ -475,6 +514,83 @@ public class OsuAPI {
             throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED, "Failed to get beatmap id " + beatmapId, e);
         }
     }
+
+    public static MultiplayerRoomDetails getRoom(TokenData tokenData, long roomId) {
+        LOG.debug("Fetching multiplayer room {}", roomId);
+        try {
+            final var request = newRequestBuilder(tokenData, "/rooms/" + roomId)
+                    .GET()
+                    .build();
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer room " + roomId + " was not found");
+            }
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.ROOM_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for room " + roomId
+                );
+            }
+
+            MultiplayerRoomDetails room = GSON.fromJson(response.body(), MultiplayerRoomDetails.class);
+            if (room == null || room.getId() <= 0) {
+                throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for room " + roomId);
+            }
+            return room;
+        } catch (JsonSyntaxException | IOException | InterruptedException e) {
+            throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Failed to fetch room " + roomId, e);
+        }
+    }
+
+    public static List<MultiplayerRoomScore> getRoomPlaylistScores(
+            TokenData tokenData,
+            long roomId,
+            long playlistItemId
+    ) {
+        LOG.debug("Fetching scores for multiplayer room {} playlist item {}", roomId, playlistItemId);
+        try {
+            String endpoint = "/rooms/%d/playlist/%d/scores?limit=100&sort=score_desc"
+                    .formatted(roomId, playlistItemId);
+            final var request = newRequestBuilder(tokenData, endpoint).GET().build();
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores for playlist item " + playlistItemId);
+            }
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.SCORE_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for room scores"
+                );
+            }
+
+            JsonObject root = JsonParser.parseString(response.body()).getAsJsonObject();
+            JsonArray scoreArray = root.has("scores") && root.get("scores").isJsonArray()
+                    ? root.getAsJsonArray("scores")
+                    : new JsonArray();
+            List<MultiplayerRoomScore> scores = new ArrayList<>(scoreArray.size());
+            for (JsonElement element : scoreArray) {
+                JsonObject object = element.getAsJsonObject();
+                Score score = GSON.fromJson(object, Score.class);
+                if (score.getBeatmap() != null && score.getBeatmapset() != null) {
+                    score.getBeatmap().setBeatmapset(score.getBeatmapset());
+                }
+                Integer position = object.has("position") && !object.get("position").isJsonNull()
+                        ? object.get("position").getAsInt()
+                        : null;
+                scores.add(new MultiplayerRoomScore(score, position));
+            }
+            return List.copyOf(scores);
+        } catch (JsonSyntaxException | IOException | InterruptedException e) {
+            throw new ApiException(
+                    ErrorCode.SCORE_FETCH_FAILED,
+                    "Failed to fetch scores for room " + roomId + " playlist item " + playlistItemId,
+                    e
+            );
+        }
+    }
+
 
     public static BeatmapExtended getBeatmapByChecksum(TokenData tokenData, String checksum) {
         LOG.debug("Fetching beatmap with checksum {}", checksum);

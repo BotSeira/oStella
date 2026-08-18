@@ -29,7 +29,6 @@ import static xyz.zcraft.ostella.util.RequestUtil.*;
 public class UserController {
     private static final Logger LOG = LogManager.getLogger(UserController.class);
     private static final Gson GSON = new Gson();
-    private static final int FILTER_SCAN_LIMIT = 100;
 
     public final RenderService renderer;
     public final AsyncService executor;
@@ -114,15 +113,13 @@ public class UserController {
 
     public void getRecentScores(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireInt(context, "n");
+        final int n = requireScoreListLimit(context);
         final boolean fail = requireBoolean(context, "fail", false);
         final List<ScoreFilter> filters = requireScoreFilters(context);
 
         final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
-        final int fetchLimit = filters.isEmpty() ? n : FILTER_SCAN_LIMIT;
-
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, type, fetchLimit)
+                        tokenManager.getTokenData(), u, type, n)
                 )
                 .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
                         .thenApplyAsync(user -> {
@@ -133,7 +130,7 @@ public class UserController {
                                 router.ensurePp(score);
                             }
 
-                            List<Score> filteredScores = applyFilters(scores, filters, n);
+                            List<Score> filteredScores = applyFilters(scores, filters);
                             context.header("X-User-Id", String.valueOf(user.getId()));
                             context.header("X-Score-Ids", filteredScores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
 
@@ -186,12 +183,10 @@ public class UserController {
 
     public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireInt(context, "n");
+        final int n = requireScoreListLimit(context);
         final List<ScoreFilter> filters = requireScoreFilters(context);
-        final int fetchLimit = filters.isEmpty() ? n : FILTER_SCAN_LIMIT;
-
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, ScoreType.BEST, fetchLimit
+                        tokenManager.getTokenData(), u, ScoreType.BEST, n
                 ))
                 .thenCompose(scores -> {
                     if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -201,7 +196,7 @@ public class UserController {
                                 for (Score score : scores) {
                                     router.ensurePp(score);
                                 }
-                                List<Score> filteredScores = applyFilters(scores, filters, n);
+                                List<Score> filteredScores = applyFilters(scores, filters);
                                 context.header("X-User-Id", String.valueOf(user.getId()));
                                 context.header("X-Score-Ids", filteredScores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
                                 return renderer.renderScores(user, filteredScores, ScoreType.BEST, filterLabels(filters));
@@ -218,13 +213,23 @@ public class UserController {
         }
     }
 
-    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters, int limit) {
+    private static int requireScoreListLimit(Context context) {
+        int limit = requirePositiveInt(context, "n");
+        if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
+            throw new ApiException(
+                    ErrorCode.ILLEGAL_ARGUMENT,
+                    "Score limit must not exceed " + OsuAPI.MAX_USER_SCORES_LIMIT
+            );
+        }
+        return limit;
+    }
+
+    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
         if (filters.isEmpty()) {
             return scores;
         }
         List<Score> result = scores.stream()
                 .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
-                .limit(limit)
                 .toList();
         if (result.isEmpty()) {
             throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");

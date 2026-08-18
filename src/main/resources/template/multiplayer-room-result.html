@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>oStella - Multiplayer Room Result</title>
+    <script>window.__OSTELLA_RENDER_READY__ = false;</script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: fit-content;
+            height: fit-content;
+            padding: 24px;
+            color: #f8fafc;
+            background: #0d1020;
+            font-family: 'Dejavu Sans', 'Microsoft YaHei UI', sans-serif;
+        }
+
+        .card {
+            width: 1120px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, .09);
+            border-radius: 24px;
+            background: linear-gradient(145deg, #171a30 0%, #101426 100%);
+            box-shadow: 0 22px 60px rgba(0, 0, 0, .52);
+        }
+
+        .hero {
+            position: relative;
+            min-height: 310px;
+            overflow: hidden;
+            background: linear-gradient(125deg, #352950, #20284a 52%, #172036);
+        }
+
+        .hero-bg {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: .52;
+            filter: saturate(.92) contrast(1.05);
+        }
+
+        .hero-shade {
+            position: absolute;
+            inset: 0;
+            background:
+                    linear-gradient(90deg, rgba(13, 16, 32, .95) 0%, rgba(13, 16, 32, .66) 58%, rgba(13, 16, 32, .32) 100%),
+                    linear-gradient(0deg, #171a30 0%, transparent 48%);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            min-height: 310px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 26px 30px 30px;
+        }
+
+        .room-line,
+        .map-meta,
+        .queued-by,
+        .summary-line,
+        .footer {
+            display: flex;
+            align-items: center;
+        }
+
+        .room-line {
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .eyebrow {
+            color: #f0abfc;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: .14em;
+            text-transform: uppercase;
+        }
+
+        .room-name {
+            margin-top: 5px;
+            max-width: 760px;
+            overflow: hidden;
+            color: #fff;
+            font-size: 25px;
+            font-weight: 800;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .room-id {
+            padding: 9px 14px;
+            border: 1px solid rgba(255, 255, 255, .14);
+            border-radius: 999px;
+            color: #d8b4fe;
+            background: rgba(8, 10, 24, .55);
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .song-title {
+            max-width: 970px;
+            overflow: hidden;
+            font-size: 42px;
+            font-weight: 900;
+            letter-spacing: -.035em;
+            line-height: 1.05;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-shadow: 0 3px 18px rgba(0, 0, 0, .55);
+        }
+
+        .song-artist {
+            margin-top: 8px;
+            color: #dbe4f3;
+            font-size: 21px;
+            font-weight: 500;
+        }
+
+        .map-meta {
+            flex-wrap: wrap;
+            gap: 9px;
+            margin-top: 18px;
+        }
+
+        .pill {
+            padding: 6px 11px;
+            border: 1px solid rgba(255, 255, 255, .1);
+            border-radius: 9px;
+            color: #dbe4f3;
+            background: rgba(8, 10, 24, .58);
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .pill.diff {
+            color: #ffe4f4;
+            border-color: rgba(244, 114, 182, .35);
+            background: rgba(190, 24, 93, .27);
+        }
+
+        .queued-by {
+            gap: 10px;
+            color: #cbd5e1;
+            font-size: 15px;
+        }
+
+        .avatar,
+        .avatar-fallback {
+            width: 38px;
+            height: 38px;
+            border: 2px solid rgba(255, 255, 255, .18);
+            border-radius: 10px;
+        }
+
+        .avatar {
+            object-fit: cover;
+        }
+
+        .avatar-fallback {
+            display: grid;
+            place-items: center;
+            color: #f5d0fe;
+            background: #4c1d68;
+            font-weight: 900;
+        }
+
+        .queued-by strong {
+            color: #fff;
+        }
+
+        .results {
+            padding: 0 24px 22px;
+        }
+
+        .summary-line {
+            justify-content: space-between;
+            padding: 4px 6px 16px;
+        }
+
+        .summary-title {
+            font-size: 22px;
+            font-weight: 850;
+        }
+
+        .summary-count {
+            color: #94a3b8;
+            font-size: 15px;
+        }
+
+        .table-head,
+        .player-row {
+            display: grid;
+            grid-template-columns: 68px 245px minmax(180px, 1fr) 105px 100px 142px 84px;
+            column-gap: 12px;
+            align-items: center;
+        }
+
+        .table-head {
+            padding: 0 18px 9px;
+            color: #7f8ca6;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .table-head > div:not(:nth-child(2)):not(:nth-child(3)) {
+            text-align: right;
+        }
+
+        .player-list {
+            display: flex;
+            flex-direction: column;
+            gap: 9px;
+        }
+
+        .player-row {
+            min-height: 82px;
+            padding: 12px 18px;
+            border: 1px solid rgba(255, 255, 255, .055);
+            border-radius: 15px;
+            background: linear-gradient(90deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .025));
+        }
+
+        .player-row.top-1 {
+            border-color: rgba(250, 204, 21, .30);
+            background: linear-gradient(90deg, rgba(250, 204, 21, .11), rgba(255, 255, 255, .025));
+        }
+
+        .position {
+            color: #a9b4ca;
+            font-size: 25px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .top-1 .position {
+            color: #fde047;
+        }
+
+        .player {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 11px;
+        }
+
+        .player .avatar,
+        .player .avatar-fallback {
+            flex: 0 0 auto;
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+        }
+
+        .player-name {
+            min-width: 0;
+            overflow: hidden;
+            font-size: 18px;
+            font-weight: 800;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .grade {
+            margin-top: 3px;
+            color: #f0abfc;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .failed .grade {
+            color: #fb7185;
+        }
+
+        .difficulty {
+            min-width: 0;
+        }
+
+        .difficulty-name {
+            overflow: hidden;
+            color: #e7edf8;
+            font-size: 15px;
+            font-weight: 750;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .difficulty-sub {
+            display: flex;
+            gap: 8px;
+            margin-top: 5px;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .mod {
+            color: #f5d0fe;
+        }
+
+        .metric {
+            text-align: right;
+            font-size: 18px;
+            font-weight: 850;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .metric.score {
+            font-size: 20px;
+        }
+
+        .metric.pp {
+            font-size: 20px;
+        }
+
+        .empty {
+            padding: 42px 20px;
+            border: 1px dashed rgba(255, 255, 255, .14);
+            border-radius: 15px;
+            color: #94a3b8;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .footer {
+            justify-content: space-between;
+            padding: 14px 30px 17px;
+            border-top: 1px solid rgba(255, 255, 255, .06);
+            color: #69758c;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+<main class="card">
+    <section class="hero">
+        <img class="hero-bg" alt="Beatmap cover"
+             th:if="${result.beatmap.coverUrl != null}"
+             th:src="${result.beatmap.coverUrl}">
+        <div class="hero-shade"></div>
+        <div class="hero-content">
+            <div class="room-line">
+                <div>
+                    <div class="eyebrow">Multiplayer · Round Result</div>
+                    <div class="room-name" th:text="${result.roomName}">Room Name</div>
+                </div>
+                <div class="room-id" th:text="${'#' + result.roomId + ' · Round ' + result.playlistItemId}">
+                    #123 · Round 456
+                </div>
+            </div>
+
+            <div>
+                <div class="song-title" th:text="${result.beatmap.title}">Song Title</div>
+                <div class="song-artist" th:text="${result.beatmap.artist + ' · mapped by ' + result.beatmap.creator}">
+                    Artist · mapped by Mapper
+                </div>
+                <div class="map-meta">
+                    <span class="pill diff"
+                          th:text="${result.beatmap.difficultyName + ' · ' + (result.beatmap.difficultyRating == null ? '--' : #numbers.formatDecimal(result.beatmap.difficultyRating, 1, 2)) + '★'}">
+                        Insane · 5.20★
+                    </span>
+                    <span class="pill" th:text="${result.beatmap.ruleset}">osu!</span>
+                    <span class="pill"
+                          th:text="${'BPM ' + (result.beatmap.bpm == null ? '--' : #numbers.formatDecimal(result.beatmap.bpm, 1, 0))}">
+                        BPM 180
+                    </span>
+                    <span class="pill"
+                          th:text="${result.beatmap.totalLength == null ? '--:--' : #numbers.formatInteger(result.beatmap.totalLength / 60, 1) + ':' + #numbers.formatInteger(result.beatmap.totalLength % 60, 2)}">
+                        2:30
+                    </span>
+                    <span class="pill" th:text="${'Beatmap #' + result.beatmap.id}">Beatmap #1</span>
+                </div>
+            </div>
+
+            <div class="queued-by">
+                <img class="avatar" alt="Queue owner avatar"
+                     th:if="${result.queuedBy.avatarUrl != null}"
+                     th:src="${result.queuedBy.avatarUrl}">
+                <span>Queued by <strong th:text="${result.queuedBy.username}">Player</strong></span>
+            </div>
+        </div>
+    </section>
+
+    <section class="results">
+        <div class="summary-line">
+            <div class="summary-title">Player Scores</div>
+            <div class="summary-count" th:text="${result.players.size() + ' Players'}">4 Players</div>
+        </div>
+
+        <div class="table-head" th:if="${!result.players.isEmpty()}">
+            <div>Rank</div>
+            <div>Player</div>
+            <div>Difficulty / MOD</div>
+            <div>Accuracy</div>
+            <div>Combo</div>
+            <div>Score</div>
+            <div>PP</div>
+        </div>
+
+        <div class="player-list">
+            <div class="player-row"
+                 th:each="player : ${result.players}"
+                 th:classappend="${(player.position == 1 ? 'top-1 ' : '') + (!player.passed ? 'failed' : '')}">
+                <div class="position" th:text="${'#' + player.position}">#1</div>
+                <div class="player">
+                    <img class="avatar" alt="Player avatar"
+                         th:if="${player.avatarUrl != null}"
+                         th:src="${player.avatarUrl}">
+                    <div style="min-width: 0">
+                        <div class="player-name" th:text="${player.username}">Player</div>
+                    </div>
+                </div>
+                <div class="difficulty">
+                    <div class="difficulty-name" th:text="${player.difficultyName}">Insane</div>
+                    <div class="difficulty-sub">
+                        <span th:text="${player.difficultyRating == null ? '--★' : #numbers.formatDecimal(player.difficultyRating, 1, 2) + '★'}">5.20★</span>
+                        <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
+                    </div>
+                </div>
+                <div class="metric"
+                     th:text="${player.grade} + ' · ' + ${player.accuracy == null ? '--' : #numbers.formatDecimal(player.accuracy * 100, 1, 2) + '%'}">
+                    S · 98.50%
+                </div>
+                <div class="metric" th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</div>
+                <div class="metric score"
+                     th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">
+                    1,000,000
+                </div>
+                <div class="metric pp"
+                     th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">
+                    123.4pp
+                </div>
+            </div>
+        </div>
+
+        <div class="empty" th:if="${result.players.isEmpty()}">No Scores Available For The Round</div>
+    </section>
+
+    <footer class="footer">
+        <span th:text="${result.playedAt == null ? 'Round completed' : 'Played at ' + result.playedAt}">Played at</span>
+        <span th:text="${'Generated with oStella · ' + time}">Generated with oStella</span>
+    </footer>
+</main>
+<script>window.__OSTELLA_RENDER_READY__ = true;</script>
+</body>
+</html>

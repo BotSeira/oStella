@@ -12,6 +12,7 @@ import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.Placement;
+import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.ostella.util.Colors;
@@ -193,6 +194,15 @@ public class RenderService implements AutoCloseable {
 
         String finalHtml = templateEngine.process("map-leaderboard", ctx);
 
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderMultiplayerResult(MultiplayerResultData result) {
+        Context ctx = createContext();
+        ctx.setVariable("result", result);
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("multiplayer-room-result", ctx);
         return takeScreenshot(finalHtml);
     }
 
