@@ -37,6 +37,7 @@
         }
 
         .profile-main {
+            position: relative;
             display: flex;
             align-items: center;
             gap: 40px;
@@ -197,10 +198,9 @@
         }
 
         .filter-summary {
-            width: 650px;
-            min-height: 80px;
-            margin-top: 15px;
-            margin-left: auto;
+            position: absolute;
+            bottom: -18px;
+            right: 0;
             display: flex;
             flex-wrap: wrap;
             align-content: center;
@@ -545,14 +545,16 @@
                         </div>
                     </div>
                 </div>
-                <div class="chart-wrapper" style="width: 650px; height: 80px; margin-top: 15px; margin-left: auto;"
-                     th:unless="${filtered}">
-                    <canvas id="historyChart"></canvas>
-                </div>
-                <div class="filter-summary" th:if="${filtered}">
-                    <span class="filter-chip" th:each="filter : ${filters}" th:text="${filter}">Accuracy ≥ 98%</span>
+                <div style="max-width: 700px; margin-top: 15px; margin-left: auto;">
+                    <div class="chart-wrapper" style="width: 700px; height: 80px; ">
+                        <canvas id="historyChart"></canvas>
+                    </div>
                 </div>
             </div>
+        </div>
+        <div class="filter-summary" th:if="${filtered}">
+            <span style="font-size: 20px; align-self: center;">Filters | </span>
+            <span class="filter-chip" th:each="filter : ${filters}" th:text="${filter}">Accuracy ≥ 98%</span>
         </div>
     </div>
     <div class="rank-counts-container">
