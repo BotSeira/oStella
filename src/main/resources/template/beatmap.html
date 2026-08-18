@@ -579,7 +579,7 @@
             <div class="diff">
                 <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
                     <div class="diff-rating" th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)} + ';'"
-                         th:text="'★' + ${#numbers.formatDecimal(diff.getStar(), 1, 2)}">★5.78
+                         th:text="'★' + ${Osu.formatStarRating(diff.getStar())}">★5.78
                     </div>
                 </div>
                 <span class="spec-diff spec-star-diff"

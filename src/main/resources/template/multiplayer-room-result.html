@@ -165,24 +165,8 @@
             font-size: 15px;
         }
 
-        .avatar,
-        .avatar-fallback {
-            width: 38px;
-            height: 38px;
-            border: 2px solid rgba(255, 255, 255, .18);
-            border-radius: 10px;
-        }
-
         .avatar {
             object-fit: cover;
-        }
-
-        .avatar-fallback {
-            display: grid;
-            place-items: center;
-            color: #f5d0fe;
-            background: #4c1d68;
-            font-weight: 900;
         }
 
         .queued-by strong {
@@ -267,7 +251,7 @@
         }
 
         .player .avatar,
-        .player .avatar-fallback {
+        .player {
             flex: 0 0 auto;
             width: 46px;
             height: 46px;
@@ -281,17 +265,6 @@
             font-weight: 800;
             text-overflow: ellipsis;
             white-space: nowrap;
-        }
-
-        .grade {
-            margin-top: 3px;
-            color: #f0abfc;
-            font-size: 12px;
-            font-weight: 850;
-        }
-
-        .failed .grade {
-            color: #fb7185;
         }
 
         .difficulty {
@@ -376,7 +349,7 @@
                     <div class="song-title" th:text="${result.beatmap.title()}">Song Title</div>
                     <div class="song-title-sub"
                          style="padding-bottom: 2px;"
-                         th:if="${java.util.Objects.equals(result.beatmap().title(), result.beatmap().titleUnicode())}"
+                         th:if="${MiscUtil.equals(result.beatmap().title(), result.beatmap().titleUnicode())}"
                          th:text="${result.beatmap.titleUnicode()}">
                         Song Title Sub
                     </div>
@@ -387,7 +360,7 @@
                 </div>
                 <div class="map-meta">
                     <span class="pill diff"
-                          th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : #numbers.formatDecimal(result.beatmap.difficultyRating(), 1, 2)) + '★'}">
+                          th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : Osu.formatStarRating(result.beatmap.difficultyRating())) + '★'}">
                         Insane · 5.20★
                     </span>
                     <span class="pill" th:text="${result.beatmap.ruleset()}">osu!</span>
@@ -444,12 +417,12 @@
                 <div class="difficulty">
                     <div class="difficulty-name" th:text="${player.difficultyName}">Insane</div>
                     <div class="difficulty-sub">
-                        <span th:text="${player.difficultyRating == null ? '--★' : #numbers.formatDecimal(player.difficultyRating, 1, 2) + '★'}">5.20★</span>
+                        <span th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">5.20★</span>
                         <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
                     </div>
                 </div>
                 <div class="metric"
-                     th:text="${player.grade} + ' · ' + ${player.accuracy == null ? '--' : #numbers.formatDecimal(player.accuracy * 100, 1, 2) + '%'}">
+                     th:text="${player.grade} + ' · ' + ${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">
                     S · 98.50%
                 </div>
                 <div class="metric" th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</div>

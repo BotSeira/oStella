@@ -16,6 +16,7 @@ import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.ostella.util.Colors;
+import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.ostella.util.format.*;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
@@ -153,7 +154,11 @@ public class RenderService implements AutoCloseable {
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("DiffSpecs", new DiffSpecFormatUtil());
         //noinspection InstantiationOfUtilityClass
+        ctx.setVariable("Osu", new OsuFormatUtil());
+        //noinspection InstantiationOfUtilityClass
         ctx.setVariable("cache", new CacheService());
+        //noinspection InstantiationOfUtilityClass
+        ctx.setVariable("MiscUtil", new MiscUtil());
         return ctx;
     }
 

@@ -614,7 +614,7 @@
                  th:style="'background: ' + ${Colors.getBeatmapDiffColor(score.getBeatmap().getDifficultyRating())} + ';'">
                 <div class="diff-rating"
                      th:style="'color: ' + ${Colors.getBeatmapDiffTextColor(score.getBeatmap().getDifficultyRating())} + ';'"
-                     th:text="'★' + ${#numbers.formatDecimal(score.beatmap.difficultyRating, 1, 2)}">
+                     th:text="'★' + ${Osu.formatStarRating(score.beatmap.difficultyRating)}">
                     ★5.78
                 </div>
             </div>
@@ -623,7 +623,7 @@
         </div>
         <div style="display: grid;">
             <span class="acc-number"
-                  th:text="${#numbers.formatDecimal(score.accuracy * 100, 1, 2)} + '% ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
             <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
                 456 / 132 / 12 / 34
             </div>

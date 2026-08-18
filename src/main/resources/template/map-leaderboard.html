@@ -342,7 +342,7 @@
                      th:style="'background: ' + ${Colors.getBeatmapDiffColor(beatmap.getDifficultyRating())} + ';'">
                     <div class="pk-diff-rating"
                          th:style="'color: ' + ${Colors.getBeatmapDiffTextColor(beatmap.getDifficultyRating())} + ';'"
-                         th:text="'★' + ${#numbers.formatDecimal(beatmap.difficultyRating, 1, 2)}">★5.72
+                         th:text="'★' + ${Osu.formatStarRating(beatmap.difficultyRating)}">★5.72
                     </div>
                 </div>
                 <div class="pk-map-diff"
@@ -396,7 +396,7 @@
 
                 <!--                <div class="pk-stat-box" th:style="${placement.score.accuracy == 1 ? 'color: #ffcc22;' : ''}">-->
                 <!--                    <div class="pk-acc"-->
-                <!--                         th:text="${#numbers.formatDecimal(placement.score.accuracy * 100, 1, 2) + '%'}">98.76%-->
+                <!--                         th:text="${Osu.formatAccuracy(placement.score.accuracy)}">98.76%-->
                 <!--                    </div>-->
                 <!--                    <div class="pk-combo"-->
                 <!--                         th:text="${placement.score.maxCombo} + 'x' + ${placement.score.isPerfectCombo ? ' FC' : ''}">-->
@@ -415,7 +415,7 @@
                         1,000,000
                     </div>
                     <div class="pk-score-sub">
-                        <span th:text="${#numbers.formatDecimal(placement.getScore().getAccuracy() * 100, 1, 2) + '%'}">98.76%</span>
+                        <span th:text="${Osu.formatAccuracy(placement.getScore().getAccuracy())}">98.76%</span>
                         <span th:text="${#numbers.formatDecimal(placement.getScore().getPp(), 1, 1)} + ' PP'">123 PP</span>
                     </div>
                 </div>

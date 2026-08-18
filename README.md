@@ -210,6 +210,10 @@ The rest of key-value pairs will be  available as direct variables in the templa
 Template rendering is powered by [Thymeleaf](https://www.thymeleaf.org/), 
 and you can use Thymeleaf syntax in your templates to access the data.
 
+Use `Osu.formatStarRating(value)` and `Osu.formatAccuracy(value)` for values that
+should match osu!'s in-game display. These helpers floor star ratings to two
+decimal places and accuracy ratios to four decimal places before formatting.
+
 #### External Assets
 
 To use external assets, put them under `templates/assets/` directory,

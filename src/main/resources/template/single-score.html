@@ -485,7 +485,7 @@
             <div class="diff-row">
                 <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
                     <span th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)}"
-                          th:text="${'★' + #numbers.formatDecimal(diff.getStar(), 1, 2)}">★6.84</span>
+                          th:text="${'★' + Osu.formatStarRating(diff.getStar())}">★6.84</span>
                 </div>
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getStar() - score.getBeatmap().getDifficultyRating())}"
@@ -601,7 +601,7 @@
         <!--suppress XmlUnresolvedReference -->
         <div class="data-block" style="align-items: flex-end; text-align: right;">
             <div class="data-label">Acc / Combo</div>
-            <div class="data-primary" th:text="${#numbers.formatDecimal(score.getAccuracy() * 100, 1, 2)} + '%'">
+            <div class="data-primary" th:text="${Osu.formatAccuracy(score.getAccuracy())}">
                 98.50%
             </div>
             <div class="data-sub">

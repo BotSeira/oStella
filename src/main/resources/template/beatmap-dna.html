@@ -226,7 +226,7 @@
 
     <div class="diff-row">
         <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
-            <span th:text="'★' + ${#numbers.formatDecimal(diff.getStar(), 1, 2)}">★7.24</span>
+            <span th:text="'★' + ${Osu.formatStarRating(diff.getStar())}">★7.24</span>
         </div>
         <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
              th:text="${dna.getBeatmap().getVersion()}">

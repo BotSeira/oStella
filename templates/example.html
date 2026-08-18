@@ -37,7 +37,7 @@
     <div th:text="
     '在 ' + ${score.getBeatmapset().getArtist()} +
     ' - ' + ${score.getBeatmapset().getTitle()} +
-    ' [' + ${#numbers.formatDecimal(score.getBeatmap().getDifficultyRating(), 1, 2)} + '★ ' +
+    ' [' + ${Osu.formatStarRating(score.getBeatmap().getDifficultyRating())} + '★ ' +
     ${score.getBeatmap().getVersion()} + '] 中'">
         在 Example Artist - Example Title [1.23★ Example Version] 中
     </div>
@@ -45,7 +45,7 @@
         [HDDT] 获得了
     </div>
     <div style="font-size: 40px; font-weight: bold;"
-         th:text="${#numbers.formatInteger(score.getTotalScore(), 0, 'COMMA')} + ' (' + ${#numbers.formatDecimal(score.getAccuracy() * 100, 1, 2)} + '%)'">
+         th:text="${#numbers.formatInteger(score.getTotalScore(), 0, 'COMMA')} + ' (' + ${Osu.formatAccuracy(score.getAccuracy())} + ')'">
         123,456,789 (98.76%)
     </div>
     <div>的高分！</div>
