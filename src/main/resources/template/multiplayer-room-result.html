@@ -49,9 +49,8 @@
         .hero-shade {
             position: absolute;
             inset: 0;
-            background:
-                    linear-gradient(90deg, rgba(13, 16, 32, .95) 0%, rgba(13, 16, 32, .66) 58%, rgba(13, 16, 32, .32) 100%),
-                    linear-gradient(0deg, #171a30 0%, transparent 48%);
+            background: linear-gradient(90deg, rgba(13, 16, 32, .95) 0%, rgba(13, 16, 32, .66) 58%, rgba(13, 16, 32, .32) 100%),
+            linear-gradient(0deg, #171a30 0%, transparent 48%);
         }
 
         .hero-content {
@@ -357,7 +356,7 @@
 <body>
 <main class="card">
     <section class="hero">
-        <img class="hero-bg" alt="Beatmap cover"
+        <img alt="Beatmap cover" class="hero-bg"
              th:if="${result.beatmap.coverUrl() != null}"
              th:src="${result.beatmap.coverUrl()}">
         <div class="hero-shade"></div>
@@ -375,9 +374,15 @@
             <div>
                 <div style="display: flex; gap: 10px; align-items: end;">
                     <div class="song-title" th:text="${result.beatmap.title()}">Song Title</div>
-                    <div class="song-title-sub" style="padding-bottom: 2px;" th:text="${result.beatmap.titleUnicode()}">Song Title Sub</div>
+                    <div class="song-title-sub"
+                         style="padding-bottom: 2px;"
+                         th:if="${java.util.Objects.equals(result.beatmap().title(), result.beatmap().titleUnicode())}"
+                         th:text="${result.beatmap.titleUnicode()}">
+                        Song Title Sub
+                    </div>
                 </div>
-                <div class="song-artist" th:text="${result.beatmap.artist() + ' · mapped by ' + result.beatmap.creator()}">
+                <div class="song-artist"
+                     th:text="${result.beatmap.artist() + ' · mapped by ' + result.beatmap.creator()}">
                     Artist · mapped by Mapper
                 </div>
                 <div class="map-meta">
@@ -399,7 +404,7 @@
             </div>
 
             <div class="queued-by">
-                <img class="avatar" alt="Queue owner avatar"
+                <img alt="Queue owner avatar" class="avatar"
                      th:if="${result.queuedBy.avatarUrl != null}"
                      th:src="${result.queuedBy.avatarUrl}">
                 <span>Queued by <strong th:text="${result.queuedBy.username}">Player</strong></span>
@@ -425,11 +430,11 @@
 
         <div class="player-list">
             <div class="player-row"
-                 th:each="player : ${result.players}"
-                 th:classappend="${(player.position == 1 ? 'top-1 ' : '') + (!player.passed ? 'failed' : '')}">
+                 th:classappend="${(player.position == 1 ? 'top-1 ' : '') + (!player.passed ? 'failed' : '')}"
+                 th:each="player : ${result.players}">
                 <div class="position" th:text="${'#' + player.position}">#1</div>
                 <div class="player">
-                    <img class="avatar" alt="Player avatar"
+                    <img alt="Player avatar" class="avatar"
                          th:if="${player.avatarUrl != null}"
                          th:src="${player.avatarUrl}">
                     <div style="min-width: 0">
