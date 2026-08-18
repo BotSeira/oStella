@@ -91,7 +91,8 @@ public final class MultiplayerResultFactory {
                 : firstNonBlankOrNull(covers.getCover2x(), covers.getCover(), covers.getCard2x(), covers.getCard());
         return new MultiplayerResultData.BeatmapInfo(
                 map == null || map.getId() == null ? beatmapId : map.getId(),
-                set == null ? "Beatmap #" + beatmapId : firstNonBlank(set.getTitleUnicode(), set.getTitle()),
+                set == null ? "Beatmap #" + beatmapId : set.getTitle(),
+                set == null ? "Beatmap #" + beatmapId : set.getTitleUnicode(),
                 set == null ? "Unknown Artist" : firstNonBlank(set.getArtistUnicode(), set.getArtist()),
                 set == null || set.getCreator() == null ? "Unknown Mapper" : set.getCreator(),
                 map == null || map.getVersion() == null ? "Unknown Difficulty" : map.getVersion(),

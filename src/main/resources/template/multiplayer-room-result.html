@@ -119,6 +119,18 @@
             text-shadow: 0 3px 18px rgba(0, 0, 0, .55);
         }
 
+        .song-title-sub {
+            max-width: 970px;
+            overflow: hidden;
+            font-size: 18px;
+            font-weight: normal;
+            letter-spacing: -.035em;
+            line-height: 1.05;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-shadow: 0 3px 18px rgba(0, 0, 0, .55);
+        }
+
         .song-artist {
             margin-top: 8px;
             color: #dbe4f3;
@@ -311,7 +323,7 @@
 
         .metric {
             text-align: right;
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 850;
             font-variant-numeric: tabular-nums;
         }
@@ -346,8 +358,8 @@
 <main class="card">
     <section class="hero">
         <img class="hero-bg" alt="Beatmap cover"
-             th:if="${result.beatmap.coverUrl != null}"
-             th:src="${result.beatmap.coverUrl}">
+             th:if="${result.beatmap.coverUrl() != null}"
+             th:src="${result.beatmap.coverUrl()}">
         <div class="hero-shade"></div>
         <div class="hero-content">
             <div class="room-line">
@@ -361,25 +373,28 @@
             </div>
 
             <div>
-                <div class="song-title" th:text="${result.beatmap.title}">Song Title</div>
-                <div class="song-artist" th:text="${result.beatmap.artist + ' · mapped by ' + result.beatmap.creator}">
+                <div style="display: flex; gap: 10px; align-items: end;">
+                    <div class="song-title" th:text="${result.beatmap.title()}">Song Title</div>
+                    <div class="song-title-sub" style="padding-bottom: 2px;" th:text="${result.beatmap.titleUnicode()}">Song Title Sub</div>
+                </div>
+                <div class="song-artist" th:text="${result.beatmap.artist() + ' · mapped by ' + result.beatmap.creator()}">
                     Artist · mapped by Mapper
                 </div>
                 <div class="map-meta">
                     <span class="pill diff"
-                          th:text="${result.beatmap.difficultyName + ' · ' + (result.beatmap.difficultyRating == null ? '--' : #numbers.formatDecimal(result.beatmap.difficultyRating, 1, 2)) + '★'}">
+                          th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : #numbers.formatDecimal(result.beatmap.difficultyRating(), 1, 2)) + '★'}">
                         Insane · 5.20★
                     </span>
-                    <span class="pill" th:text="${result.beatmap.ruleset}">osu!</span>
+                    <span class="pill" th:text="${result.beatmap.ruleset()}">osu!</span>
                     <span class="pill"
-                          th:text="${'BPM ' + (result.beatmap.bpm == null ? '--' : #numbers.formatDecimal(result.beatmap.bpm, 1, 0))}">
+                          th:text="${'BPM ' + (result.beatmap.bpm() == null ? '--' : #numbers.formatDecimal(result.beatmap.bpm(), 1, 0))}">
                         BPM 180
                     </span>
                     <span class="pill"
-                          th:text="${result.beatmap.totalLength == null ? '--:--' : #numbers.formatInteger(result.beatmap.totalLength / 60, 1) + ':' + #numbers.formatInteger(result.beatmap.totalLength % 60, 2)}">
+                          th:text="${result.beatmap.totalLength() == null ? '--:--' : #numbers.formatInteger(result.beatmap.totalLength() / 60, 1) + ':' + #numbers.formatInteger(result.beatmap.totalLength() % 60, 2)}">
                         2:30
                     </span>
-                    <span class="pill" th:text="${'Beatmap #' + result.beatmap.id}">Beatmap #1</span>
+                    <span class="pill" th:text="${'Beatmap #' + result.beatmap.id()}">Beatmap #1</span>
                 </div>
             </div>
 
