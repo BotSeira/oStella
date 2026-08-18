@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
@@ -204,6 +205,7 @@ public class ScoreController {
         final String of = requireStringFrom(context, "of", "rs", "bo", "rp");
         final long u = requireLong(context, "u");
         final int i = requirePositiveInt(context, "i");
+        final List<ScoreFilter> filters = requireScoreFilters(context);
 
         final ScoreType type = switch (of.toLowerCase()) {
             case "rs" -> ScoreType.RECENT;
@@ -211,16 +213,42 @@ public class ScoreController {
             case "bo" -> ScoreType.BEST;
             default -> throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score type: " + of);
         };
+        final int fetchLimit = scoreLookupFetchLimit(i, filters);
 
         return executor
-                .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, type, i))
+                .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, type, fetchLimit))
                 .thenApply(scores -> {
-                    if (scores.isEmpty() || scores.size() < i) {
+                    if (!filters.isEmpty()) {
+                        scores.forEach(router::ensurePp);
+                    }
+                    List<Score> filteredScores = applyFilters(scores, filters);
+                    if (filteredScores.size() < i) {
                         throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores found for user!");
                     }
 
-                    return scores.get(i - 1);
+                    return filteredScores.get(i - 1);
                 });
+    }
+
+    private static List<ScoreFilter> requireScoreFilters(Context context) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+    }
+
+    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        if (filters.isEmpty()) {
+            return scores;
+        }
+        return scores.stream()
+                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
+                .toList();
+    }
+
+    static int scoreLookupFetchLimit(int index, List<ScoreFilter> filters) {
+        return filters.isEmpty() ? index : OsuAPI.MAX_USER_SCORES_LIMIT;
     }
 
     public void randomScore(@NotNull Context context) {
