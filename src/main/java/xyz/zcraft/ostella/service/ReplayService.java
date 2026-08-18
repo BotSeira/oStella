@@ -59,7 +59,7 @@ public final class ReplayService implements Closeable {
     public QueuedJob queueRender(long scoreId, Path replay, long beatmapsetId, Path beatmapset,
                                   double start, double end, boolean obscured, QqUploadRequest qqUpload) {
         return upload("single", null, beatmapsetId, beatmapset,
-                List.of(new ReplayInput(scoreId, replay)), start, end, obscured, qqUpload);
+                List.of(new ReplayInput(scoreId, replay)), start, end, "", obscured, qqUpload);
     }
 
     @SuppressWarnings("UnusedReturnValue")
@@ -72,7 +72,14 @@ public final class ReplayService implements Closeable {
                                           List<ReplayInput> replays, Path beatmapset,
                                           QqUploadRequest qqUpload) {
         return upload("showcase", beatmapId, beatmapsetId, beatmapset,
-                replays, Double.NaN, Double.NaN, false, qqUpload);
+                replays, Double.NaN, Double.NaN, "", false, qqUpload);
+    }
+
+    public QueuedJob queueRenderPreview(long beatmapId, long beatmapsetId, Path beatmapset,
+                                         double start, double end, String mods,
+                                         QqUploadRequest qqUpload) {
+        return upload("autoplay", String.valueOf(beatmapId), beatmapsetId, beatmapset,
+                List.of(), start, end, mods, false, qqUpload);
     }
 
     public JobProgress getJobProgress(String jobId) {
@@ -335,7 +342,8 @@ public final class ReplayService implements Closeable {
 
     private QueuedJob upload(String mode, String beatmapId, long beatmapsetId, Path beatmapset,
                              List<ReplayInput> replays,
-                             double start, double end, boolean obscured, QqUploadRequest qqUpload) {
+                             double start, double end, String mods,
+                             boolean obscured, QqUploadRequest qqUpload) {
         try {
             byte[] danserConfig = buildDanserConfig(obscured);
             List<WorkerStatus> idleWorkers = new ArrayList<>();
@@ -354,7 +362,7 @@ public final class ReplayService implements Closeable {
             for (WorkerStatus candidate : candidates) {
                 try {
                     QueuedJob queued = uploadToWorker(candidate.worker(), mode, beatmapId,
-                            beatmapsetId, beatmapset, replays, start, end, qqUpload, danserConfig);
+                            beatmapsetId, beatmapset, replays, start, end, mods, qqUpload, danserConfig);
                     jobWorkers.put(queued.id(), candidate.worker());
                     return queued;
                 } catch (ApiException e) {
@@ -389,7 +397,7 @@ public final class ReplayService implements Closeable {
 
     private QueuedJob uploadToWorker(RendererWorker worker, String mode, String beatmapId,
                                      long beatmapsetId, Path beatmapset, List<ReplayInput> replays,
-                                     double start, double end, QqUploadRequest qqUpload,
+                                     double start, double end, String mods, QqUploadRequest qqUpload,
                                      byte[] danserConfig) throws IOException {
         List<Long> replayIds = replays.stream().map(ReplayInput::scoreId).toList();
         CacheStatus cacheStatus = getCacheStatus(worker, Set.of(beatmapsetId), new LinkedHashSet<>(replayIds));
@@ -406,6 +414,7 @@ public final class ReplayService implements Closeable {
         if (beatmapId != null) multipart.text("beatmapId", beatmapId);
         if (!Double.isNaN(start)) multipart.text("start", String.valueOf(start));
         if (!Double.isNaN(end)) multipart.text("end", String.valueOf(end));
+        if (mods != null && !mods.isBlank()) multipart.text("mods", mods);
         if (qqUpload != null) multipart.text("qqUpload", GSON.toJson(qqUpload));
         multipart.bytes("config", "danser-config.json", "application/json", danserConfig);
         if (!cacheStatus.beatmapsetIds().contains(beatmapsetId)) {

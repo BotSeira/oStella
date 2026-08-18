@@ -88,6 +88,7 @@ public class WebServer implements Closeable {
             if (conf.replayRender().enabled()) {
                 cfg.routes
                         .post("/replays/renders/score/{scoreId}", router.replayController::queueReplayRenderOfId)
+                        .post("/replays/renders/preview/{beatmapId}", router.replayController::renderBeatmapPreview)
                         .post("/replays/renders/showcase/scores", router.replayController::renderShowcaseOfIds)
                         .post("/replays/renders/showcase/{beatmapId}", router.replayController::renderShowcaseOfUsers)
 
