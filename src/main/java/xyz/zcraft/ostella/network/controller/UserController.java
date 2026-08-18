@@ -130,11 +130,17 @@ public class UserController {
                                 router.ensurePp(score);
                             }
 
-                            List<Score> filteredScores = applyFilters(scores, filters);
+                            FilteredScores filteredScores = applyFilters(scores, filters);
                             context.header("X-User-Id", String.valueOf(user.getId()));
-                            context.header("X-Score-Ids", filteredScores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
+                            context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
 
-                            return renderer.renderScores(user, filteredScores, type, filterLabels(filters));
+                            return renderer.renderScores(
+                                    user,
+                                    filteredScores.scores(),
+                                    type,
+                                    filterLabels(filters),
+                                    filteredScores.originalPositions()
+                            );
                         }, renderer.getRenderExecutor()))
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
@@ -196,10 +202,16 @@ public class UserController {
                                 for (Score score : scores) {
                                     router.ensurePp(score);
                                 }
-                                List<Score> filteredScores = applyFilters(scores, filters);
+                                FilteredScores filteredScores = applyFilters(scores, filters);
                                 context.header("X-User-Id", String.valueOf(user.getId()));
-                                context.header("X-Score-Ids", filteredScores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-                                return renderer.renderScores(user, filteredScores, ScoreType.BEST, filterLabels(filters));
+                                context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
+                                return renderer.renderScores(
+                                        user,
+                                        filteredScores.scores(),
+                                        ScoreType.BEST,
+                                        filterLabels(filters),
+                                        filteredScores.originalPositions()
+                                );
                             }, renderer.getRenderExecutor());
                 })
                 .thenAccept(bytes -> context.status(200).result(bytes)));
@@ -224,21 +236,27 @@ public class UserController {
         return limit;
     }
 
-    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        if (filters.isEmpty()) {
-            return scores;
+    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> originalPositions = new ArrayList<>();
+        for (int index = 0; index < scores.size(); index++) {
+            Score score = scores.get(index);
+            if (filters.stream().allMatch(filter -> filter.matches(score))) {
+                result.add(score);
+                originalPositions.add(index + 1);
+            }
         }
-        List<Score> result = scores.stream()
-                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
-                .toList();
-        if (result.isEmpty()) {
+        if (!filters.isEmpty() && result.isEmpty()) {
             throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
         }
-        return result;
+        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
     }
 
     private static List<String> filterLabels(List<ScoreFilter> filters) {
         return filters.stream().map(ScoreFilter::displayText).toList();
+    }
+
+    record FilteredScores(List<Score> scores, List<Integer> originalPositions) {
     }
 
     public void getFriends(@NotNull Context context) {

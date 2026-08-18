@@ -33,6 +33,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 public class RenderService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(RenderService.class);
@@ -161,9 +162,29 @@ public class RenderService implements AutoCloseable {
     }
 
     public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type, List<String> filters) {
+        return renderScores(
+                user,
+                scores,
+                type,
+                filters,
+                IntStream.rangeClosed(1, scores.size()).boxed().toList()
+        );
+    }
+
+    public byte[] renderScores(
+            UserExtended user,
+            List<Score> scores,
+            ScoreType type,
+            List<String> filters,
+            List<Integer> scorePositions
+    ) {
+        if (scores.size() != scorePositions.size()) {
+            throw new IllegalArgumentException("Each rendered score must have a display position");
+        }
         Context ctx = createContext();
         ctx.setVariable("user", user);
         ctx.setVariable("scores", scores);
+        ctx.setVariable("scorePositions", List.copyOf(scorePositions));
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());
         ctx.setVariable("type", filters.isEmpty()
