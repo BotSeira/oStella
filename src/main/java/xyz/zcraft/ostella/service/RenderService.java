@@ -184,6 +184,17 @@ public class RenderService implements AutoCloseable {
             List<String> filters,
             List<Integer> scorePositions
     ) {
+        return renderScores(user, scores, type, filters, scorePositions, scoreListTitle(type, filters, scores.size()));
+    }
+
+    public byte[] renderScores(
+            UserExtended user,
+            List<Score> scores,
+            ScoreType type,
+            List<String> filters,
+            List<Integer> scorePositions,
+            String title
+    ) {
         if (scores.size() != scorePositions.size()) {
             throw new IllegalArgumentException("Each rendered score must have a display position");
         }
@@ -193,23 +204,27 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("scorePositions", List.copyOf(scorePositions));
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());
-        ctx.setVariable("type", filters.isEmpty()
-                ? switch (type) {
-                    case BEST -> "Best of " + scores.size() + " Scores";
-                    case RECENT -> "Most recent " + scores.size() + " Scores";
-                    case RECENT_PASS -> "Most recent " + scores.size() + " Passed Scores";
-                }
-                : switch (type) {
-                    case BEST -> "Filtered Scores From Best Scores";
-                    case RECENT -> "Filtered Scores From Recent Scores";
-                    case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
-                });
+        ctx.setVariable("type", title);
         ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
         String finalHtml = templateEngine.process("score-list", ctx);
 
         return takeScreenshot(finalHtml);
+    }
+
+    private static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
+        return filters.isEmpty()
+                ? switch (type) {
+                    case BEST -> "Best of " + scoreCount + " Scores";
+                    case RECENT -> "Most recent " + scoreCount + " Scores";
+                    case RECENT_PASS -> "Most recent " + scoreCount + " Passed Scores";
+                }
+                : switch (type) {
+                    case BEST -> "Filtered Scores From Best Scores";
+                    case RECENT -> "Filtered Scores From Recent Scores";
+                    case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
+                };
     }
 
     public byte[] renderMapLeaderboard(BeatmapExtended map, List<Placement> placements, double ppMax) {

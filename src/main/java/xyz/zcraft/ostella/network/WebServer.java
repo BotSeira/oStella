@@ -77,6 +77,7 @@ public class WebServer implements Closeable {
                     .post("/users/scores/recent/batch", router.userController::getRecentScoresBatch)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
+                    .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
 
                     .get("/daily", router::getDaily)
                     .get("/health", router::getServerStatus)

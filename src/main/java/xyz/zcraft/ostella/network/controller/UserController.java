@@ -19,7 +19,9 @@ import xyz.zcraft.osu.model.User;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
@@ -217,6 +219,50 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 
+    public void getTodayBestScores(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+        final CompletableFuture<List<Score>> bestScoresFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(), userId, ScoreType.BEST, OsuAPI.MAX_USER_SCORES_LIMIT
+                ));
+        final CompletableFuture<List<Score>> recentPassedScoresFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(), userId, ScoreType.RECENT_PASS, OsuAPI.MAX_USER_SCORES_LIMIT
+                ));
+
+        context.future(() -> bestScoresFuture
+                .thenCombine(recentPassedScoresFuture, UserController::intersectBestAndRecent)
+                .thenCompose(todayBestScores -> {
+                    if (todayBestScores.scores().isEmpty()) {
+                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No new best scores found today");
+                    }
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                            .thenApplyAsync(user -> {
+                                if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                for (Score score : todayBestScores.scores()) {
+                                    router.ensurePp(score);
+                                }
+                                context.header("X-User-Id", String.valueOf(user.getId()));
+                                context.header(
+                                        "X-Score-Ids",
+                                        todayBestScores.scores().stream()
+                                                .map(Score::getId)
+                                                .map(String::valueOf)
+                                                .collect(Collectors.joining(","))
+                                );
+                                return renderer.renderScores(
+                                        user,
+                                        todayBestScores.scores(),
+                                        ScoreType.BEST,
+                                        List.of(),
+                                        todayBestScores.originalPositions(),
+                                        "Today's New Best Scores"
+                                );
+                            }, renderer.getRenderExecutor());
+                })
+                .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
     private static List<ScoreFilter> requireScoreFilters(Context context) {
         try {
             return ScoreFilter.parseList(context.queryParam("filters"));
@@ -250,6 +296,26 @@ public class UserController {
             throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
         }
         return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
+    }
+
+    static FilteredScores intersectBestAndRecent(List<Score> bestScores, List<Score> recentScores) {
+        Set<Long> recentScoreIds = new HashSet<>();
+        for (Score score : recentScores) {
+            if (score.getId() != null) {
+                recentScoreIds.add(score.getId());
+            }
+        }
+
+        List<Score> result = new ArrayList<>();
+        List<Integer> bestPositions = new ArrayList<>();
+        for (int index = 0; index < bestScores.size(); index++) {
+            Score bestScore = bestScores.get(index);
+            if (bestScore.getId() != null && recentScoreIds.contains(bestScore.getId())) {
+                result.add(bestScore);
+                bestPositions.add(index + 1);
+            }
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(bestPositions));
     }
 
     private static List<String> filterLabels(List<ScoreFilter> filters) {
