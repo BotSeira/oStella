@@ -143,6 +143,7 @@
         }
 
         .mapper {
+            margin-left: auto;
             display: flex;
             min-width: 0;
             align-items: baseline;
@@ -347,7 +348,7 @@
 
         .meta {
             margin: 0;
-            padding: 18px 24px 20px;
+            padding: 18px 24px 10px;
         }
 
         .spec-back {
@@ -584,7 +585,7 @@
 
         .spec-wrapper {
             background: rgba(0, 0, 0, 0.3);
-            padding: 20px 24px 22px;
+            padding: 10px 24px 10px;
             gap: 32px;
             border-top: 1px solid rgba(255, 255, 255, 0.05);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -669,7 +670,7 @@
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getStar() - beatmap.getDifficultyRating())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getStar() - beatmap.getDifficultyRating())}">▲1.23
                     </span>
-                <div class="diff-title" th:text="${beatmap.version}">This Is An Example Diff</div>
+                <div class="diff-title" th:text="${beatmap.version}">Example</div>
                 <div class="mapper">
                     <span class="mapper-by">By</span>
                     <span class="mapper-name" th:text="${Beatmaps.getOwnersString(beatmap)}">ExampleMapper</span>
