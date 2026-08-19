@@ -50,7 +50,5 @@ replayRender:
 
 # === Optional configuration for performance+ ===
 performancePlus:
-  # Enable performance+ endpoints, which provide more detailed performance calculations
-  enabled: true
-  # URL of the performance+ API, make sure to set this to your actual performance+ API URL if you have it running
+  # URL of the performance+ API. Leave empty to omit its skill breakdown from score analysis.
   endpoint: "http://localhost:5000/api"

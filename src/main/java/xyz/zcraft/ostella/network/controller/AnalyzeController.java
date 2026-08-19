@@ -2,12 +2,16 @@ package xyz.zcraft.ostella.network.controller;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import desu.life.RosuFFI;
 import io.javalin.http.Context;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.PerfPlusApi;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -37,22 +41,26 @@ import static xyz.zcraft.ostella.util.RequestUtil.requirePathInt;
 import static xyz.zcraft.ostella.util.RequestUtil.requirePathScoreId;
 
 public class AnalyzeController {
+    private static final Logger LOG = LogManager.getLogger(AnalyzeController.class);
     private static final int PERFORMANCE_GRAPH_MAX_POINTS = 120;
 
     final RenderService renderer;
     final AsyncService executor;
     final TokenManager tokenManager;
     final Router router;
+    final PerfPlusApi perfPlusApi;
 
     public AnalyzeController(Router router) {
         this.router = router;
         this.tokenManager = router.tokenManager;
         this.renderer = router.renderer;
         this.executor = router.executor;
+        this.perfPlusApi = new PerfPlusApi(router.conf.performancePlus().endpoint());
     }
 
     private static PerformanceGraphData buildPerformanceGraphData(OsuBeatmap beatmap,
-                                                                  ReplayAnalyze analyze)
+                                                                  ReplayAnalyze analyze,
+                                                                  Score score)
             throws AnalyzeException {
         if (beatmap.getHitObjects() == null || beatmap.getHitObjects().isEmpty()) {
             throw new AnalyzeException("No hit objects found in the beatmap.");
@@ -79,6 +87,12 @@ public class AnalyzeController {
                     Math.max(firstObjectTime + 1, lastObjectTime)));
         }
 
+        final String mods = score.getMods().stream()
+                .map(Mod::getAcronym)
+                .reduce("", String::concat);
+        final List<double[]> realtimePp = calculateRealtimePp(
+                beatmap, analyze, mods, score.getMaxCombo());
+
         final List<Long> misses = objectResultTimes(analyze.events(), HitEvent.HitResult.MISS);
         final List<Long> hit50s = objectResultTimes(analyze.events(), HitEvent.HitResult.MEH);
         final List<Long> hit100s = objectResultTimes(analyze.events(), HitEvent.HitResult.OK);
@@ -93,8 +107,86 @@ public class AnalyzeController {
                 .map(HitEvent::eventTime)
                 .toList();
 
-        return new PerformanceGraphData(windowDifficulties, misses, hit50s, hit100s,
+        return new PerformanceGraphData(windowDifficulties, realtimePp, misses, hit50s, hit100s,
                 sliderTickBreaks, sliderEndBreaks, lastObjectTime);
+    }
+
+    static List<double[]> calculateRealtimePp(OsuBeatmap beatmap,
+                                               ReplayAnalyze analyze,
+                                               String mods,
+                                               Long finalMaxCombo)
+            throws AnalyzeException {
+        final List<HitEvent> events = analyze.events();
+        final List<double[]> realtimePp = new ArrayList<>();
+        final int objectCount = beatmap.getHitObjects().size();
+        final int sampleStep = Math.max(1, (int) Math.ceil(
+                objectCount / (double) PERFORMANCE_GRAPH_MAX_POINTS));
+
+        int eventIndex = 0;
+        int n300 = 0;
+        int n100 = 0;
+        int n50 = 0;
+        int misses = 0;
+        int currentCombo = 0;
+        int maxCombo = 0;
+
+        try (var rosuBeatmap = new RosuFFI.Beatmap(beatmap.toBeatmapString().getBytes());
+             var rosuMods = RosuFFI.Mods.fromAcronyms(mods, RosuFFI.Mode.Osu);
+             var performance = new RosuFFI.Performance()) {
+            performance.mods(rosuMods);
+
+            for (int objectIndex = 0; objectIndex < objectCount; objectIndex++) {
+                while (eventIndex < events.size()
+                        && events.get(eventIndex).objectIndex() <= objectIndex) {
+                    final HitEvent event = events.get(eventIndex++);
+                    if (event.objectIndex() < objectIndex) continue;
+
+                    if (event.isObjectStart()) {
+                        switch (event.hitResult()) {
+                            case PERFECT -> n300++;
+                            case OK -> n100++;
+                            case MEH -> n50++;
+                            case MISS -> misses++;
+                        }
+                    }
+
+                    if (isComboEvent(event)) {
+                        if (event.wasHit()) {
+                            currentCombo++;
+                            maxCombo = Math.max(maxCombo, currentCombo);
+                        } else {
+                            currentCombo = 0;
+                        }
+                    }
+                }
+
+                final boolean lastObject = objectIndex == objectCount - 1;
+                if (objectIndex % sampleStep != 0 && !lastObject) continue;
+
+                performance.passedObjects(objectIndex + 1L);
+                performance.n300(n300);
+                performance.n100(n100);
+                performance.n50(n50);
+                performance.misses(misses);
+                performance.combo(lastObject && finalMaxCombo != null ? finalMaxCombo : maxCombo);
+
+                final double pp = performance.calculate(rosuBeatmap).asOsu().pp;
+                realtimePp.add(new double[]{
+                        beatmap.getHitObjects().get(objectIndex).getTime(), pp
+                });
+            }
+        } catch (RuntimeException e) {
+            throw new AnalyzeException("Failed to calculate realtime PP", e);
+        }
+
+        return realtimePp;
+    }
+
+    private static boolean isComboEvent(HitEvent event) {
+        return switch (event.eventType()) {
+            case HIT_CIRCLE, SLIDER_HEAD, SLIDER_TICK, SLIDER_END, SPINNER -> true;
+            case SPINNER_SPIN, SPINNER_BONUS -> false;
+        };
     }
 
     private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end)
@@ -119,7 +211,7 @@ public class AnalyzeController {
     public void renderScoreAnalysisById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
-                .thenApply(score -> {
+                .thenCompose(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     final BeatmapExtended beatmap = score.getBeatmap();
 
@@ -202,13 +294,22 @@ public class AnalyzeController {
                     final double avgTimingError = hitErrors.isEmpty() ? 0.0 : (hitErrors.stream().reduce(0L, Long::sum) / (double) hitErrors.size());
                     final PerformanceGraphData performanceGraph;
                     try {
-                        performanceGraph = buildPerformanceGraphData(osuBeatmap, analyze);
+                        performanceGraph = buildPerformanceGraphData(osuBeatmap, analyze, score);
                     } catch (AnalyzeException e) {
                         throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
                     }
 
-                    return new ScoreAnalyzeData(score, diffSpec, hitErrors, hitPos, hitPosAbs,
-                            missPos, missPosAbs, aimBias, avgTimingError, analyze, performanceGraph);
+                    return perfPlusApi.calculate(score)
+                            .exceptionally(error -> {
+                                LOG.warn("Could not calculate performance+ for score {}. "
+                                                + "Rendering analysis without its skill breakdown.",
+                                        ScoreId.format(score), error);
+                                return null;
+                            })
+                            .thenApply(performancePlus -> new ScoreAnalyzeData(
+                                    score, diffSpec, hitErrors, hitPos, hitPosAbs,
+                                    missPos, missPosAbs, aimBias, avgTimingError, analyze,
+                                    performanceGraph, performancePlus));
                 })
                 .thenApplyAsync(renderer::renderScoreAnalysis, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
@@ -304,12 +405,14 @@ public class AnalyzeController {
             double aimBias,
             double avgTimingError,
             ReplayAnalyze replayAnalyze,
-            PerformanceGraphData performanceGraph
+            PerformanceGraphData performanceGraph,
+            PerfPlusApi.PerformancePlus performancePlus
     ) {
     }
 
     public record PerformanceGraphData(
             List<double[]> windowDifficulties,
+            List<double[]> realtimePp,
             List<Long> misses,
             List<Long> hit50s,
             List<Long> hit100s,

@@ -7,5 +7,8 @@ public record AppConfig(
         WebserverConfig webserver,
         PerfPlusConfig performancePlus
 ) {
+    public AppConfig {
+        if (performancePlus == null) performancePlus = new PerfPlusConfig("");
+    }
 }
 

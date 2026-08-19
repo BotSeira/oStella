@@ -12,6 +12,7 @@ import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.Placement;
+import xyz.zcraft.ostella.data.BeatmapAnalysisData;
 import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
@@ -270,6 +271,20 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
+    public byte[] renderBeatmapAnalysis(BeatmapAnalysisData analysis) {
+        Context ctx = createContext();
+        ctx.setVariable("analysis", analysis);
+        ctx.setVariable("beatmap", analysis.beatmap());
+        ctx.setVariable("diff", analysis.diff());
+        ctx.setVariable("performancePlus", analysis.performance());
+        ctx.setVariable("types", analysis.types());
+        ctx.setVariable("aimTypes", analysis.aimTypes());
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("beatmap-analysis", ctx);
+        return takeScreenshot(finalHtml);
+    }
+
     public byte[] renderScore(Score score, DiffSpec spec, Double calPp, boolean replayPresent) {
         Context ctx = createContext();
         ctx.setVariable("score", score);
@@ -297,7 +312,9 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("aimBias", analyzeData.aimBias());
         ctx.setVariable("avgTimingError", analyzeData.avgTimingError());
         ctx.setVariable("analyze", analyzeData.replayAnalyze());
+        ctx.setVariable("performancePlus", analyzeData.performancePlus());
         ctx.setVariable("performanceData", analyzeData.performanceGraph().windowDifficulties());
+        ctx.setVariable("realtimePpData", analyzeData.performanceGraph().realtimePp());
         ctx.setVariable("missTimes", analyzeData.performanceGraph().misses());
         ctx.setVariable("hit50Times", analyzeData.performanceGraph().hit50s());
         ctx.setVariable("hit100Times", analyzeData.performanceGraph().hit100s());

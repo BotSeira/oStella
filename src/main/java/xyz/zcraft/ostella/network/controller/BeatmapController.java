@@ -4,10 +4,12 @@ import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import xyz.zcraft.ostella.data.BeatmapAnalysisData;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.PerfPlusApi;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -15,12 +17,13 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.MultiplayerRoom;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
+import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.beatmap.WindowDifficulty;
@@ -40,12 +43,14 @@ public class BeatmapController {
     final AsyncService executor;
     final TokenManager tokenManager;
     final Router router;
+    final PerfPlusApi perfPlusApi;
 
     public BeatmapController(Router router) {
         this.router = router;
         this.renderer = router.renderer;
         this.tokenManager = router.tokenManager;
         this.executor = router.executor;
+        this.perfPlusApi = new PerfPlusApi(router.conf.performancePlus().endpoint());
     }
 
     public void lookupBeatmap(@NotNull Context context) {
@@ -220,6 +225,79 @@ public class BeatmapController {
                         throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
                     }
                 }, renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    public void renderBeatmapAnalysisById(@NotNull Context context) {
+        final long beatmapId = requirePathLong(context, "beatmapId");
+        final String requestedMods = optionalString(context, "mod");
+        final List<String> mods;
+        try {
+            mods = PerfPlusApi.parseModAcronyms(requestedMods);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+        if (!perfPlusApi.isConfigured()) {
+            throw new ApiException(ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE,
+                    "performancePlus.endpoint is not configured");
+        }
+
+        final String normalizedMods = String.join("", mods);
+        context.future(() -> executor
+                .enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), beatmapId))
+                .thenApply(beatmapset -> {
+                    if (beatmapset == null)
+                        throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
+                    BeatmapExtended beatmap = beatmapset.getBeatmaps().stream()
+                            .filter(candidate -> Objects.equals(candidate.getId(), beatmapId))
+                            .findFirst()
+                            .orElseThrow(() -> new ApiException(
+                                    ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
+                    beatmap.setBeatmapset(beatmapset);
+                    context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
+                    context.header("X-Beatmapset-Id", String.valueOf(beatmap.getBeatmapsetId()));
+                    return beatmap;
+                })
+                .thenCompose(beatmap -> {
+                    final DiffSpec diffSpec;
+                    final BeatmapPatternAnalysis patterns;
+                    try {
+                        OsuBeatmap parsed = BeatmapParser.parseBeatmap(
+                                CacheService.getBeatmapPath(beatmap.getId()));
+                        diffSpec = OsuParser.getDiffSpecForMap(parsed, normalizedMods);
+                        patterns = BeatmapPatternAnalyzer.analyze(parsed, diffSpec.getDifficulty());
+                    } catch (ParseException e) {
+                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+                    } catch (AnalyzeException e) {
+                        throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
+                    }
+
+                    return perfPlusApi.calculateBeatmap(beatmapId, normalizedMods)
+                            .thenApply(performance -> {
+                                if (performance == null) {
+                                    throw new ApiException(ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE,
+                                            "performance+ is not configured");
+                                }
+                                return new BeatmapAnalysisData(
+                                        beatmap,
+                                        diffSpec,
+                                        mods,
+                                        performance,
+                                        patterns);
+                            })
+                            .exceptionally(error -> {
+                                if (error.getCause() instanceof ApiException apiException) {
+                                    throw apiException;
+                                }
+                                Exception wrapped = error instanceof Exception exception
+                                        ? exception
+                                        : new RuntimeException(error);
+                                throw new ApiException(ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE,
+                                        "Failed to calculate performance+ for beatmap " + beatmapId,
+                                        wrapped);
+                            });
+                })
+                .thenApplyAsync(renderer::renderBeatmapAnalysis, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 

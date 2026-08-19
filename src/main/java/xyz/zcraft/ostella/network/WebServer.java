@@ -45,6 +45,7 @@ public class WebServer implements Closeable {
 
             cfg.routes
                     .get("/beatmaps/lookup", router.beatmapController::lookupBeatmap)
+                    .get("/beatmaps/{beatmapId}/analysis", router.beatmapController::renderBeatmapAnalysisById)
                     .get("/beatmaps/{beatmapId}", router.beatmapController::renderBeatmapById)
                     .post("/beatmaps/{beatmapId}/leaderboards", router.leaderboardController::getMapLeaderboard)
                     .get("/beatmaps/{beatmapId}/background", router.beatmapController::getBackground)
@@ -125,7 +126,8 @@ public class WebServer implements Closeable {
                                  ErrorCode.USER_FETCH_FAILED,
                                  ErrorCode.RENDER_QUEUE_FULL -> ctx.status(429);
 
-                            case ErrorCode.RENDERER_UNAVAILABLE -> ctx.status(502);
+                            case ErrorCode.RENDERER_UNAVAILABLE,
+                                 ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE -> ctx.status(502);
 
                             default -> ctx.status(500);
                         }

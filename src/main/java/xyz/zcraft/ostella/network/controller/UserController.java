@@ -17,11 +17,12 @@ import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
@@ -221,42 +222,41 @@ public class UserController {
 
     public void getTodayBestScores(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
+        final String daysParam = context.queryParam("days");
+        final int days = daysParam == null ? 1 : requirePositiveInt(context, "days");
+        final Instant cutoff = Instant.now().minus(days, ChronoUnit.DAYS);
         final CompletableFuture<List<Score>> bestScoresFuture = executor.enqueueAsync(() ->
                 OsuAPI.getUserScores(
                         tokenManager.getTokenData(), userId, ScoreType.BEST, OsuAPI.MAX_USER_SCORES_LIMIT
                 ));
-        final CompletableFuture<List<Score>> recentPassedScoresFuture = executor.enqueueAsync(() ->
-                OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), userId, ScoreType.RECENT_PASS, OsuAPI.MAX_USER_SCORES_LIMIT
-                ));
 
         context.future(() -> bestScoresFuture
-                .thenCombine(recentPassedScoresFuture, UserController::intersectBestAndRecent)
-                .thenCompose(todayBestScores -> {
-                    if (todayBestScores.scores().isEmpty()) {
-                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No new best scores found today");
+                .thenApply(bestScores -> filterBestScoresSince(bestScores, cutoff))
+                .thenCompose(recentBestScores -> {
+                    if (recentBestScores.scores().isEmpty()) {
+                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No best scores found in the last " + days + " days");
                     }
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
                             .thenApplyAsync(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
-                                for (Score score : todayBestScores.scores()) {
+                                for (Score score : recentBestScores.scores()) {
                                     router.ensurePp(score);
                                 }
                                 context.header("X-User-Id", String.valueOf(user.getId()));
                                 context.header(
                                         "X-Score-Ids",
-                                        todayBestScores.scores().stream()
+                                        recentBestScores.scores().stream()
                                                 .map(Score::getId)
                                                 .map(String::valueOf)
                                                 .collect(Collectors.joining(","))
                                 );
                                 return renderer.renderScores(
                                         user,
-                                        todayBestScores.scores(),
+                                        recentBestScores.scores(),
                                         ScoreType.BEST,
                                         List.of(),
-                                        todayBestScores.originalPositions(),
-                                        "Today's New Best Scores"
+                                        recentBestScores.originalPositions(),
+                                        "Best Scores Achieved in the Last " + days + (days == 1 ? " Day" : " Days")
                                 );
                             }, renderer.getRenderExecutor());
                 })
@@ -298,21 +298,18 @@ public class UserController {
         return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
     }
 
-    static FilteredScores intersectBestAndRecent(List<Score> bestScores, List<Score> recentScores) {
-        Set<Long> recentScoreIds = new HashSet<>();
-        for (Score score : recentScores) {
-            if (score.getId() != null) {
-                recentScoreIds.add(score.getId());
-            }
-        }
-
+    static FilteredScores filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
         List<Score> result = new ArrayList<>();
         List<Integer> bestPositions = new ArrayList<>();
         for (int index = 0; index < bestScores.size(); index++) {
             Score bestScore = bestScores.get(index);
-            if (bestScore.getId() != null && recentScoreIds.contains(bestScore.getId())) {
-                result.add(bestScore);
-                bestPositions.add(index + 1);
+            try {
+                if (bestScore.getEndedAt() != null && !Instant.parse(bestScore.getEndedAt()).isBefore(cutoff)) {
+                    result.add(bestScore);
+                    bestPositions.add(index + 1);
+                }
+            } catch (DateTimeParseException e) {
+                LOG.warn("Ignoring best score {} with invalid ended_at: {}", bestScore.getId(), bestScore.getEndedAt());
             }
         }
         return new FilteredScores(List.copyOf(result), List.copyOf(bestPositions));
