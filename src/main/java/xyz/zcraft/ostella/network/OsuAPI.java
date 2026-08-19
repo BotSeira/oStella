@@ -8,6 +8,7 @@ import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
+import xyz.zcraft.ostella.data.MultiplayerMatchDetails;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
@@ -540,6 +541,34 @@ public class OsuAPI {
             return room;
         } catch (JsonSyntaxException | IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Failed to fetch room " + roomId, e);
+        }
+    }
+
+    public static MultiplayerMatchDetails getMatch(TokenData tokenData, long matchId) {
+        LOG.debug("Fetching stable multiplayer match {}", matchId);
+        try {
+            final var request = newRequestBuilder(tokenData, "/matches/" + matchId + "?limit=101")
+                    .GET()
+                    .build();
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer match " + matchId + " was not found");
+            }
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.ROOM_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for match " + matchId
+                );
+            }
+
+            MultiplayerMatchDetails match = GSON.fromJson(response.body(), MultiplayerMatchDetails.class);
+            if (match == null || match.getMatch() == null || match.getMatch().getId() <= 0) {
+                throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for match " + matchId);
+            }
+            return match;
+        } catch (JsonSyntaxException | IOException | InterruptedException e) {
+            throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Failed to fetch match " + matchId, e);
         }
     }
 
