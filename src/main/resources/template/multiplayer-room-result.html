@@ -1,10 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>oStella - Multiplayer Room Result</title>
+    <title>oStella — Multiplayer Result</title>
     <script>window.__OSTELLA_RENDER_READY__ = false;</script>
     <style>
+        :root {
+            --page: #0d1020;
+            --surface: #151829;
+            --surface-deep: #111423;
+            --line: rgba(255, 255, 255, 0.11);
+            --line-strong: rgba(255, 255, 255, 0.2);
+            --text: #f8fafc;
+            --muted: #b0bbcf;
+            --faint: #748099;
+            --accent: #f472b6;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -13,27 +25,29 @@
 
         body {
             width: fit-content;
+            min-width: 1208px;
             height: fit-content;
             padding: 24px;
-            color: #f8fafc;
-            background: #0d1020;
-            font-family: 'Dejavu Sans', 'Microsoft YaHei UI', sans-serif;
+            color: var(--text);
+            background: var(--page);
+            font-family: "DejaVu Sans", "Microsoft YaHei UI", sans-serif;
+            font-variant-numeric: tabular-nums;
         }
 
-        .card {
-            width: 1120px;
+        .board {
+            width: 1160px;
             overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, .09);
-            border-radius: 24px;
-            background: linear-gradient(145deg, #171a30 0%, #101426 100%);
-            box-shadow: 0 22px 60px rgba(0, 0, 0, .52);
+            border: 1px solid var(--line-strong);
+            border-radius: 18px;
+            background: var(--surface);
+            box-shadow: 0 22px 60px rgba(0, 0, 0, 0.46);
         }
 
         .hero {
             position: relative;
-            min-height: 310px;
+            min-height: 260px;
             overflow: hidden;
-            background: linear-gradient(125deg, #352950, #20284a 52%, #172036);
+            background: #20243b;
         }
 
         .hero-bg {
@@ -41,251 +55,309 @@
             inset: 0;
             width: 100%;
             height: 100%;
+            opacity: 0.48;
             object-fit: cover;
-            opacity: .52;
-            filter: saturate(.92) contrast(1.05);
+            filter: saturate(0.82) contrast(1.05);
         }
 
         .hero-shade {
             position: absolute;
             inset: 0;
-            background: linear-gradient(90deg, rgba(13, 16, 32, .95) 0%, rgba(13, 16, 32, .66) 58%, rgba(13, 16, 32, .32) 100%),
-            linear-gradient(0deg, #171a30 0%, transparent 48%);
+            background:
+                    linear-gradient(90deg, rgba(13, 16, 32, 0.96) 0%, rgba(13, 16, 32, 0.72) 58%, rgba(13, 16, 32, 0.38) 100%),
+                    linear-gradient(0deg, rgba(21, 24, 41, 0.98) 0%, transparent 52%);
         }
 
         .hero-content {
             position: relative;
             z-index: 1;
-            min-height: 310px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            padding: 26px 30px 30px;
+            display: grid;
+            min-height: 260px;
+            grid-template-rows: auto 1fr auto;
+            padding: 27px 34px 28px;
         }
 
         .room-line,
+        .hero-footer,
         .map-meta,
         .queued-by,
-        .summary-line,
-        .footer {
+        .summary-line {
             display: flex;
             align-items: center;
         }
 
         .room-line {
             justify-content: space-between;
-            gap: 20px;
+            gap: 28px;
+        }
+
+        .eyebrow,
+        .table-head,
+        .player-meta,
+        .metric-label {
+            color: var(--faint);
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
         }
 
         .eyebrow {
             color: #f0abfc;
-            font-size: 15px;
-            font-weight: 800;
-            letter-spacing: .14em;
-            text-transform: uppercase;
         }
 
         .room-name {
-            margin-top: 5px;
-            max-width: 760px;
+            max-width: 790px;
+            margin-top: 6px;
             overflow: hidden;
-            color: #fff;
             font-size: 25px;
             font-weight: 800;
+            line-height: 1.1;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .room-id {
-            padding: 9px 14px;
-            border: 1px solid rgba(255, 255, 255, .14);
-            border-radius: 999px;
-            color: #d8b4fe;
-            background: rgba(8, 10, 24, .55);
-            font-size: 15px;
+        .round-meta {
+            flex: 0 0 auto;
+            padding-left: 24px;
+            border-left: 1px solid var(--line-strong);
+            color: var(--muted);
+            font-size: 16px;
             font-weight: 700;
+            text-align: right;
+        }
+
+        .map-title-block {
+            align-self: end;
+            min-width: 0;
+            padding: 26px 0 19px;
+        }
+
+        .title-line {
+            display: flex;
+            min-width: 0;
+            align-items: baseline;
+            gap: 12px;
         }
 
         .song-title {
-            max-width: 970px;
+            max-width: 780px;
             overflow: hidden;
             font-size: 42px;
             font-weight: 900;
-            letter-spacing: -.035em;
-            line-height: 1.05;
+            letter-spacing: -0.035em;
+            line-height: 1.02;
             text-overflow: ellipsis;
+            text-shadow: 0 3px 18px rgba(0, 0, 0, 0.52);
             white-space: nowrap;
-            text-shadow: 0 3px 18px rgba(0, 0, 0, .55);
         }
 
         .song-title-sub {
-            max-width: 970px;
+            max-width: 310px;
             overflow: hidden;
+            color: var(--muted);
             font-size: 18px;
-            font-weight: normal;
-            letter-spacing: -.035em;
-            line-height: 1.05;
+            font-weight: 600;
             text-overflow: ellipsis;
+            text-shadow: 0 3px 18px rgba(0, 0, 0, 0.52);
             white-space: nowrap;
-            text-shadow: 0 3px 18px rgba(0, 0, 0, .55);
         }
 
         .song-artist {
-            margin-top: 8px;
+            margin-top: 9px;
             color: #dbe4f3;
-            font-size: 21px;
+            font-size: 20px;
             font-weight: 500;
         }
 
+        .hero-footer {
+            justify-content: space-between;
+            gap: 24px;
+        }
+
         .map-meta {
+            min-width: 0;
             flex-wrap: wrap;
-            gap: 9px;
-            margin-top: 18px;
+            gap: 8px;
         }
 
         .pill {
-            padding: 6px 11px;
-            border: 1px solid rgba(255, 255, 255, .1);
-            border-radius: 9px;
+            padding: 6px 10px;
+            border: 1px solid var(--line);
+            border-radius: 7px;
             color: #dbe4f3;
-            background: rgba(8, 10, 24, .58);
+            background: rgba(8, 10, 24, 0.58);
             font-size: 14px;
             font-weight: 700;
         }
 
         .pill.diff {
+            border-color: rgba(244, 114, 182, 0.3);
             color: #ffe4f4;
-            border-color: rgba(244, 114, 182, .35);
-            background: rgba(190, 24, 93, .27);
         }
 
         .queued-by {
+            flex: 0 0 auto;
             gap: 10px;
-            color: #cbd5e1;
+            color: var(--muted);
             font-size: 15px;
         }
 
-        .avatar {
+        .queued-by .avatar {
+            width: 34px;
+            height: 34px;
+            border: 1px solid var(--line-strong);
+            border-radius: 50%;
             object-fit: cover;
         }
 
         .queued-by strong {
-            color: #fff;
+            color: var(--text);
         }
 
         .results {
-            padding: 0 24px 22px;
+            padding: 25px 32px 30px;
         }
 
         .summary-line {
             justify-content: space-between;
-            padding: 4px 6px 16px;
+            gap: 20px;
+            padding-bottom: 18px;
         }
 
         .summary-title {
-            font-size: 22px;
+            font-size: 26px;
             font-weight: 850;
+            letter-spacing: -0.025em;
         }
 
         .summary-count {
-            color: #94a3b8;
-            font-size: 15px;
+            color: var(--muted);
+            font-size: 16px;
+            font-weight: 700;
         }
 
         .table-head,
         .player-row {
             display: grid;
-            grid-template-columns: 68px 245px minmax(180px, 1fr) 105px 100px 142px 84px;
-            column-gap: 12px;
+            grid-template-columns: 70px 250px minmax(200px, 1fr) 135px 105px 150px 95px;
+            column-gap: 8px;
             align-items: center;
         }
 
         .table-head {
-            padding: 0 18px 9px;
-            color: #7f8ca6;
-            font-size: 12px;
-            font-weight: 800;
-            letter-spacing: .08em;
-            text-transform: uppercase;
+            min-height: 38px;
+            padding: 0 12px;
+            border-top: 1px solid var(--line-strong);
+            border-bottom: 1px solid var(--line);
         }
 
-        .table-head > div:not(:nth-child(2)):not(:nth-child(3)) {
+        .table-head > div:nth-child(n + 4) {
             text-align: right;
         }
 
         .player-list {
-            display: flex;
-            flex-direction: column;
-            gap: 9px;
+            border-bottom: 1px solid var(--line-strong);
         }
 
         .player-row {
-            min-height: 82px;
-            padding: 12px 18px;
-            border: 1px solid rgba(255, 255, 255, .055);
-            border-radius: 15px;
-            background: linear-gradient(90deg, rgba(255, 255, 255, .055), rgba(255, 255, 255, .025));
+            position: relative;
+            min-height: 96px;
+            padding: 14px 12px;
+            border-top: 1px solid var(--line);
+        }
+
+        .player-row:first-child {
+            border-top: 0;
+        }
+
+        .player-row:nth-child(even) {
+            background: rgba(255, 255, 255, 0.018);
         }
 
         .player-row.top-1 {
-            border-color: rgba(250, 204, 21, .30);
-            background: linear-gradient(90deg, rgba(250, 204, 21, .11), rgba(255, 255, 255, .025));
+            box-shadow: inset 4px 0 0 var(--accent);
+            background: rgba(244, 114, 182, 0.055);
         }
 
         .position {
-            color: #a9b4ca;
-            font-size: 25px;
+            color: var(--muted);
+            font-size: 30px;
             font-weight: 900;
-            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.04em;
+            line-height: 1;
         }
 
         .top-1 .position {
-            color: #fde047;
+            color: var(--accent);
         }
 
         .player {
-            min-width: 0;
             display: flex;
+            min-width: 0;
             align-items: center;
-            gap: 11px;
+            gap: 13px;
         }
 
         .player .avatar,
-        .player {
-            flex: 0 0 auto;
-            width: 46px;
-            height: 46px;
-            border-radius: 12px;
+        .avatar-placeholder {
+            flex: 0 0 54px;
+            width: 54px;
+            height: 54px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            object-fit: cover;
+        }
+
+        .avatar-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--faint);
+            background: rgba(255, 255, 255, 0.04);
+            font-size: 20px;
+            font-weight: 800;
+        }
+
+        .player-copy,
+        .difficulty {
+            min-width: 0;
         }
 
         .player-name {
-            min-width: 0;
             overflow: hidden;
-            font-size: 18px;
-            font-weight: 800;
+            font-size: 20px;
+            font-weight: 850;
+            line-height: 1.15;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .difficulty {
-            min-width: 0;
+        .player-meta {
+            margin-top: 7px;
+            overflow: hidden;
+            font-size: 12px;
+            letter-spacing: 0.05em;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .difficulty-name {
             overflow: hidden;
             color: #e7edf8;
-            font-size: 15px;
+            font-size: 17px;
             font-weight: 750;
+            line-height: 1.2;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
         .difficulty-sub {
             display: flex;
-            gap: 8px;
-            margin-top: 5px;
-            color: #94a3b8;
-            font-size: 12px;
+            gap: 9px;
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 14px;
             font-weight: 700;
         }
 
@@ -294,70 +366,113 @@
         }
 
         .metric {
+            min-width: 0;
             text-align: right;
-            font-size: 17px;
+        }
+
+        .metric-label {
+            display: none;
+        }
+
+        .metric strong {
+            display: block;
+            overflow: hidden;
+            font-size: 19px;
             font-weight: 850;
-            font-variant-numeric: tabular-nums;
+            line-height: 1.1;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .metric.score {
-            font-size: 20px;
+        .result-grade {
+            margin-right: 6px;
+            color: var(--accent);
         }
 
-        .metric.pp {
-            font-size: 20px;
+        .metric.combo strong {
+            font-size: 19px;
+        }
+
+        .metric.score strong,
+        .metric.pp strong {
+            font-size: 22px;
+            letter-spacing: -0.025em;
+        }
+
+        .metric.pp strong {
+            color: #f5d0fe;
+        }
+
+        .player-row.failed::after {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            color: rgba(248, 250, 252, 0.32);
+            content: "FAILED";
+            font-size: 10px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+        }
+
+        .player-row.failed .metric strong {
+            color: var(--muted);
         }
 
         .empty {
-            padding: 42px 20px;
-            border: 1px dashed rgba(255, 255, 255, .14);
-            border-radius: 15px;
-            color: #94a3b8;
+            padding: 46px 20px;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            color: var(--muted);
             text-align: center;
-            font-size: 18px;
+            font-size: 19px;
         }
 
         .footer {
+            display: flex;
+            align-items: center;
             justify-content: space-between;
-            padding: 14px 30px 17px;
-            border-top: 1px solid rgba(255, 255, 255, .06);
-            color: #69758c;
-            font-size: 12px;
+            gap: 20px;
+            padding: 16px 34px 18px;
+            border-top: 1px solid var(--line);
+            color: var(--faint);
+            background: var(--surface-deep);
+            font-size: 13px;
         }
     </style>
 </head>
 <body>
-<main class="card">
+<main class="board">
     <section class="hero">
-        <img alt="Beatmap cover" class="hero-bg"
+        <img alt="" class="hero-bg"
              th:if="${result.beatmap.coverUrl() != null}"
              th:src="${result.beatmap.coverUrl()}">
         <div class="hero-shade"></div>
         <div class="hero-content">
             <div class="room-line">
                 <div>
-                    <div class="eyebrow">Multiplayer · Round Result</div>
+                    <div class="eyebrow">Multiplayer · Round result</div>
                     <div class="room-name" th:text="${result.roomName}">Room Name</div>
                 </div>
-                <div class="room-id" th:text="${'#' + result.roomId + ' · Round ' + result.playlistItemId}">
+                <div class="round-meta"
+                     th:text="${'#' + result.roomId + ' · Round ' + result.playlistItemId}">
                     #123 · Round 456
                 </div>
             </div>
 
-            <div>
-                <div style="display: flex; gap: 10px; align-items: end;">
+            <div class="map-title-block">
+                <div class="title-line">
                     <div class="song-title" th:text="${result.beatmap.title()}">Song Title</div>
                     <div class="song-title-sub"
-                         style="padding-bottom: 2px;"
-                         th:if="${MiscUtil.strEquals(result.beatmap().title(), result.beatmap().titleUnicode())}"
-                         th:text="${result.beatmap.titleUnicode()}">
-                        Song Title Sub
-                    </div>
+                         th:if="${!MiscUtil.strEquals(result.beatmap().title(), result.beatmap().titleUnicode())}"
+                         th:text="${result.beatmap.titleUnicode()}">Song Title Unicode</div>
                 </div>
                 <div class="song-artist"
                      th:text="${result.beatmap.artist() + ' · mapped by ' + result.beatmap.creator()}">
                     Artist · mapped by Mapper
                 </div>
+            </div>
+
+            <div class="hero-footer">
                 <div class="map-meta">
                     <span class="pill diff"
                           th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : Osu.formatStarRating(result.beatmap.difficultyRating())) + '★'}">
@@ -374,28 +489,27 @@
                     </span>
                     <span class="pill" th:text="${'Beatmap #' + result.beatmap.id()}">Beatmap #1</span>
                 </div>
-            </div>
-
-            <div class="queued-by">
-                <img alt="Queue owner avatar" class="avatar"
-                     th:if="${result.queuedBy.avatarUrl != null}"
-                     th:src="${result.queuedBy.avatarUrl}">
-                <span>Queued by <strong th:text="${result.queuedBy.username}">Player</strong></span>
+                <div class="queued-by">
+                    <img alt="" class="avatar"
+                         th:if="${result.queuedBy.avatarUrl != null}"
+                         th:src="${result.queuedBy.avatarUrl}">
+                    <span>Queued by <strong th:text="${result.queuedBy.username}">Player</strong></span>
+                </div>
             </div>
         </div>
     </section>
 
     <section class="results">
         <div class="summary-line">
-            <div class="summary-title">Player Scores</div>
-            <div class="summary-count" th:text="${result.players.size() + ' Players'}">4 Players</div>
+            <div class="summary-title">Leaderboard</div>
+            <div class="summary-count" th:text="${result.players.size() + ' players'}">8 players</div>
         </div>
 
         <div class="table-head" th:if="${!result.players.isEmpty()}">
             <div>Rank</div>
             <div>Player</div>
-            <div>Difficulty / MOD</div>
-            <div>Accuracy</div>
+            <div>Difficulty / Mods</div>
+            <div>Result</div>
             <div>Combo</div>
             <div>Score</div>
             <div>PP</div>
@@ -407,11 +521,16 @@
                  th:each="player : ${result.players}">
                 <div class="position" th:text="${'#' + player.position}">#1</div>
                 <div class="player">
-                    <img alt="Player avatar" class="avatar"
+                    <img alt="" class="avatar"
                          th:if="${player.avatarUrl != null}"
                          th:src="${player.avatarUrl}">
-                    <div style="min-width: 0">
+                    <div class="avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
+                    <div class="player-copy">
                         <div class="player-name" th:text="${player.username}">Player</div>
+                        <div class="player-meta"
+                             th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">
+                            UID 2 · AU
+                        </div>
                     </div>
                 </div>
                 <div class="difficulty">
@@ -421,23 +540,29 @@
                         <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
                     </div>
                 </div>
-                <div class="metric"
-                     th:text="${player.grade} + ' · ' + ${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">
-                    S · 98.50%
+                <div class="metric result">
+                    <strong>
+                        <span class="result-grade" th:text="${player.grade}">S</span>
+                        <span th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">98.50%</span>
+                    </strong>
                 </div>
-                <div class="metric" th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</div>
-                <div class="metric score"
-                     th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">
-                    1,000,000
+                <div class="metric combo">
+                    <strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</strong>
                 </div>
-                <div class="metric pp"
-                     th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">
-                    123.4pp
+                <div class="metric score">
+                    <strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">
+                        1,000,000
+                    </strong>
+                </div>
+                <div class="metric pp">
+                    <strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">
+                        123.4pp
+                    </strong>
                 </div>
             </div>
         </div>
 
-        <div class="empty" th:if="${result.players.isEmpty()}">No Scores Available For The Round</div>
+        <div class="empty" th:if="${result.players.isEmpty()}">No scores available for this round.</div>
     </section>
 
     <footer class="footer">
