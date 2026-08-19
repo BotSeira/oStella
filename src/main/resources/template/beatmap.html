@@ -365,7 +365,7 @@
         }
 
         .spec-back > .spec-group {
-            padding: 0 10px;
+            padding: 0 6px;
             border-left: 1px solid rgba(255, 255, 255, 0.08);
         }
 
@@ -785,16 +785,16 @@
                 </div>
                 <div class="spec-pp-detail">
                     <div class="diff-group">
-                        <span class="diff-type">Reading</span>
-                        <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getReading(), 1, 1)}">3.3</span>
-                    </div>
-                    <div class="diff-group">
                         <span class="diff-type">Aim</span>
                         <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getAim(), 1, 1)}">2.5</span>
                     </div>
                     <div class="diff-group">
                         <span class="diff-type">Speed</span>
                         <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getSpeed(), 1, 1)}">1.8</span>
+                    </div>
+                    <div class="diff-group">
+                        <span class="diff-type">Reading</span>
+                        <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getReading(), 1, 1)}">3.3</span>
                     </div>
                 </div>
             </div>
