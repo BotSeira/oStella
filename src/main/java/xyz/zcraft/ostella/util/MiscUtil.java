@@ -53,7 +53,7 @@ public class MiscUtil {
         return merged;
     }
 
-    public static boolean equals(Object a, Object b) {
+    public static boolean strEquals(String a, String b) {
         return Objects.equals(a, b);
     }
 }

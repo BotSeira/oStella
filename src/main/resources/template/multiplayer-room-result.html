@@ -349,7 +349,7 @@
                     <div class="song-title" th:text="${result.beatmap.title()}">Song Title</div>
                     <div class="song-title-sub"
                          style="padding-bottom: 2px;"
-                         th:if="${MiscUtil.equals(result.beatmap().title(), result.beatmap().titleUnicode())}"
+                         th:if="${MiscUtil.strEquals(result.beatmap().title(), result.beatmap().titleUnicode())}"
                          th:text="${result.beatmap.titleUnicode()}">
                         Song Title Sub
                     </div>

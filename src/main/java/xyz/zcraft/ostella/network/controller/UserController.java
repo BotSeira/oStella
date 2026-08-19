@@ -16,6 +16,7 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
+import xyz.zcraft.osu.model.UserExtended;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
@@ -32,6 +33,8 @@ import static xyz.zcraft.ostella.util.RequestUtil.*;
 public class UserController {
     private static final Logger LOG = LogManager.getLogger(UserController.class);
     private static final Gson GSON = new Gson();
+    private static final int USER_INFO_SCORE_SAMPLE_COUNT = 100;
+    private static final int USER_INFO_DISPLAY_SCORE_COUNT = 5;
 
     public final RenderService renderer;
     public final AsyncService executor;
@@ -220,6 +223,43 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 
+    public void getUserInfo(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+        final CompletableFuture<UserExtended> userFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUser(tokenManager.getTokenData(), userId));
+        final CompletableFuture<List<Score>> topScoresFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(),
+                        userId,
+                        ScoreType.BEST,
+                        USER_INFO_SCORE_SAMPLE_COUNT
+                ));
+
+        context.future(() -> userFuture.thenCombine(topScoresFuture, UserInfoData::new)
+                .thenApplyAsync(data -> {
+                    if (data.user() == null) {
+                        throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
+                    }
+                    List<Score> displayScores = data.topScores().stream()
+                            .limit(USER_INFO_DISPLAY_SCORE_COUNT)
+                            .toList();
+                    for (Score score : displayScores) {
+                        router.ensurePp(score);
+                    }
+
+                    context.header("X-User-Id", String.valueOf(data.user().getId()));
+                    context.header(
+                            "X-Score-Ids",
+                            displayScores.stream()
+                                    .map(Score::getId)
+                                    .map(String::valueOf)
+                                    .collect(Collectors.joining(","))
+                    );
+                    return renderer.renderUserInfo(data.user(), data.topScores());
+                }, renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
     public void getTodayBestScores(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
         final String daysParam = context.queryParam("days");
@@ -320,6 +360,9 @@ public class UserController {
     }
 
     record FilteredScores(List<Score> scores, List<Integer> originalPositions) {
+    }
+
+    private record UserInfoData(UserExtended user, List<Score> topScores) {
     }
 
     public void getFriends(@NotNull Context context) {

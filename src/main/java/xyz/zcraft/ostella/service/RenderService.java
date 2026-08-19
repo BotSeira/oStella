@@ -15,6 +15,7 @@ import xyz.zcraft.ostella.data.Placement;
 import xyz.zcraft.ostella.data.BeatmapAnalysisData;
 import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.UserPerformanceSummary;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
@@ -166,6 +167,19 @@ public class RenderService implements AutoCloseable {
 
     public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type) {
         return renderScores(user, scores, type, List.of());
+    }
+
+    public byte[] renderUserInfo(UserExtended user, List<Score> topScores) {
+        Context ctx = createContext();
+        ctx.setVariable("user", user);
+        ctx.setVariable("scores", topScores.stream().limit(5).toList());
+        ctx.setVariable("performance", UserPerformanceSummary.from(user, topScores));
+        ctx.setVariable("activity", UserFormatUtil.getRecentMonthlyActivity(user));
+        ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("user-info", ctx);
+        return takeScreenshot(finalHtml);
     }
 
     public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type, List<String> filters) {
