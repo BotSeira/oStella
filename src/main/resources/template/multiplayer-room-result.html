@@ -65,9 +65,8 @@
         .hero-shade {
             position: absolute;
             inset: 0;
-            background:
-                    linear-gradient(90deg, rgba(13, 16, 32, 0.96) 0%, rgba(13, 16, 32, 0.72) 58%, rgba(13, 16, 32, 0.38) 100%),
-                    linear-gradient(0deg, rgba(21, 24, 41, 0.98) 0%, transparent 52%);
+            background: linear-gradient(90deg, rgba(13, 16, 32, 0.96) 0%, rgba(13, 16, 32, 0.72) 58%, rgba(13, 16, 32, 0.38) 100%),
+            linear-gradient(0deg, rgba(21, 24, 41, 0.98) 0%, transparent 52%);
         }
 
         .hero-content {
@@ -492,10 +491,10 @@
             z-index: -2;
             inset: 0;
             background: linear-gradient(105deg,
-                    transparent 0%,
-                    rgba(var(--rank-rgb), 0.18) 26%,
-                    rgba(var(--rank-rgb), 0.5) 68%,
-                    rgba(var(--rank-rgb), 0.82) 100%);
+            transparent 0%,
+            rgba(var(--rank-rgb), 0.18) 26%,
+            rgba(var(--rank-rgb), 0.5) 68%,
+            rgba(var(--rank-rgb), 0.82) 100%);
             clip-path: polygon(22% 0, 100% 0, 100% 100%, 0 100%);
             content: "";
         }
@@ -594,9 +593,10 @@
         }
 
         .duel {
+            --duel-cut: 24px;
             position: relative;
             display: grid;
-            min-height: 390px;
+            min-height: 360px;
             overflow: hidden;
             border-top: 1px solid var(--line-strong);
             border-bottom: 1px solid var(--line-strong);
@@ -609,46 +609,79 @@
             z-index: 2;
             top: -12%;
             bottom: -12%;
-            left: calc(50% - 28px);
-            width: 56px;
-            background: linear-gradient(102deg,
-                    transparent 47%,
-                    var(--line-strong) 48%,
-                    var(--line-strong) 51%,
-                    transparent 52%);
+            left: 50%;
+            width: 1px;
+            background: var(--line-strong);
             content: "";
             pointer-events: none;
-            transform: rotate(4deg);
+            transform: rotate(7deg);
+            transform-origin: center;
         }
 
         .duelist {
             position: relative;
             isolation: isolate;
             min-width: 0;
-            overflow: hidden;
+            overflow: visible;
             padding: 30px 52px 28px 30px;
         }
 
         .duel-cover {
             position: absolute;
             z-index: -2;
-            inset: 0;
-            width: 100%;
+            top: 0;
+            bottom: 0;
+            width: 200%;
             height: 100%;
             opacity: 0.34;
             object-fit: cover;
             filter: saturate(0.82) contrast(1.08);
         }
 
+        .duelist.left .duel-cover {
+            left: 0;
+            clip-path: polygon(
+                    0 0,
+                    calc(50% + var(--duel-cut)) 0,
+                    calc(50% - var(--duel-cut)) 100%,
+                    0 100%);
+        }
+
+        .duelist.right .duel-cover {
+            right: 0;
+            clip-path: polygon(
+                    calc(50% + var(--duel-cut)) 0,
+                    100% 0,
+                    100% 100%,
+                    calc(50% - var(--duel-cut)) 100%);
+        }
+
         .duelist::after {
             position: absolute;
             z-index: -1;
-            inset: 0;
+            top: 0;
+            bottom: 0;
+            width: 200%;
             background: linear-gradient(90deg, rgba(21, 24, 41, 0.64), rgba(21, 24, 41, 0.96));
             content: "";
         }
 
+        .duelist.left::after {
+            left: 0;
+            clip-path: polygon(
+                    0 0,
+                    calc(50% + var(--duel-cut)) 0,
+                    calc(50% - var(--duel-cut)) 100%,
+                    0 100%);
+        }
+
         .duelist.right::after {
+            right: 0;
+            clip-path: polygon(
+                    calc(50% + var(--duel-cut)) 0,
+                    100% 0,
+                    100% 100%,
+                    calc(50% - var(--duel-cut)) 100%);
             background: linear-gradient(270deg, rgba(21, 24, 41, 0.64), rgba(21, 24, 41, 0.96));
         }
 
@@ -753,11 +786,26 @@
         }
 
         .duel-score {
+            position: relative;
+            z-index: 3;
+            width: max-content;
+            max-width: calc(100% - 18px);
             margin-top: 18px;
             font-size: 38px;
             font-weight: 900;
             letter-spacing: 5px;
             line-height: 1;
+        }
+
+        .duel-delta {
+            align-self: end;
+            padding: 0 24px;
+            font-size: 24px;
+        }
+
+        .duelist.right .duel-score {
+            /*margin-left: auto;*/
+            text-align: right;
         }
 
         .duel-diff {
@@ -798,7 +846,7 @@
         .duel-metric strong {
             display: block;
             margin-top: 4px;
-            font-size: 24px;
+            font-size: 28px;
             font-weight: 850;
         }
 
@@ -1194,7 +1242,7 @@
 
         .team-meter {
             position: relative;
-            height: 16px;
+            height: 24px;
             overflow: hidden;
             border: 1px solid var(--line);
             border-radius: 999px;
@@ -1301,7 +1349,8 @@
                     <div class="song-title" th:text="${result.beatmap.title()}">Song Title</div>
                     <div class="song-title-sub"
                          th:if="${!MiscUtil.strEquals(result.beatmap().title(), result.beatmap().titleUnicode())}"
-                         th:text="${result.beatmap.titleUnicode()}">Song Title Unicode</div>
+                         th:text="${result.beatmap.titleUnicode()}">Song Title Unicode
+                    </div>
                 </div>
                 <div class="song-artist"
                      th:text="${result.beatmap.artist() + ' · mapped by ' + result.beatmap.creator()}">
@@ -1427,7 +1476,7 @@
         </div>
 
         <div class="duel" th:if="${result.isDuel()}"
-             th:with="left=${result.players[0]}, right=${result.players[1]}">
+             th:with="left=${result.duelPlayers[0]}, right=${result.duelPlayers[1]}">
             <article class="duelist left" th:classappend="${left.position == 1 ? 'winner' : ''}">
                 <img alt="" class="duel-cover"
                      th:if="${left.profileCoverUrl != null}"
@@ -1445,24 +1494,40 @@
                     </div>
                     <div class="duel-grade"
                          th:classappend="${left.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(left.grade)}"
-                         th:text="${left.grade == null ? '--' : left.grade}">S</div>
+                         th:text="${left.grade == null ? '--' : left.grade}">S
+                    </div>
                 </div>
-                <div class="duel-score"
-                     th:text="${left.totalScore == null ? '--' : #numbers.formatInteger(left.totalScore, 1, 'COMMA')}">
-                    1,000,000
+                <div style="display: flex; ">
+                    <div class="duel-score"
+                         th:text="${left.totalScore == null ? '--' : #numbers.formatInteger(left.totalScore, 1, 'COMMA')}">
+                        1,000,000
+                    </div>
+                    <div class="duel-delta" th:if="${left.scoreGap != null}" th:text="'-' + ${#numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">-123,456</div>
                 </div>
                 <div class="duel-diff">
                     <th:block th:text="${left.difficultyName}">Insane</th:block>
-                    · <th:block th:text="${left.difficultyRating == null ? '--★' : Osu.formatStarRating(left.difficultyRating) + '★'}">5.20★</th:block>
+                    ·
+                    <th:block
+                            th:text="${left.difficultyRating == null ? '--★' : Osu.formatStarRating(left.difficultyRating) + '★'}">
+                        5.20★
+                    </th:block>
                     <span th:text="${'+' + left.mods}">+HDDT</span>
                 </div>
                 <div class="duel-metrics">
-                    <div class="duel-metric"><span>Accuracy</span><strong th:text="${left.accuracy == null ? '--' : Osu.formatAccuracy(left.accuracy)}">98.50%</strong></div>
-                    <div class="duel-metric"><span>Combo</span><strong th:text="${left.maxCombo == null ? '--' : left.maxCombo + 'x'}">850x</strong></div>
+                    <div class="duel-metric"><span>Accuracy</span><strong
+                            th:text="${left.accuracy == null ? '--' : Osu.formatAccuracy(left.accuracy)}">98.50%</strong>
+                    </div>
+                    <div class="duel-metric"><span>Combo</span><strong
+                            th:text="${left.maxCombo == null ? '--' : left.maxCombo + 'x'}">850x</strong></div>
                     <div class="duel-metric"><span>Miss</span><strong th:text="${left.misses}">0</strong></div>
-                    <div class="duel-metric"><span>PP</span><strong th:text="${left.pp == null ? '--' : #numbers.formatDecimal(left.pp, 1, 1) + 'pp'}">123.4pp</strong></div>
-                    <div class="duel-metric"><span>Rank</span><strong th:text="${left.grade == null ? '--' : left.grade}">S</strong></div>
-                    <div class="duel-metric"><span>Score gap</span><strong th:text="${left.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">—</strong></div>
+                    <div class="duel-metric"><span>PP</span><strong
+                            th:text="${left.pp == null ? '--' : #numbers.formatDecimal(left.pp, 1, 1) + 'pp'}">123.4pp</strong>
+                    </div>
+                    <div class="duel-metric"><span>Rank</span><strong
+                            th:text="${left.grade == null ? '--' : left.grade}">S</strong></div>
+<!--                    <div class="duel-metric"><span>Score gap</span><strong-->
+<!--                            th:text="${left.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">—</strong>-->
+<!--                    </div>-->
                 </div>
             </article>
 
@@ -1489,24 +1554,40 @@
                     </div>
                     <div class="duel-grade"
                          th:classappend="${right.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(right.grade)}"
-                         th:text="${right.grade == null ? '--' : right.grade}">A</div>
+                         th:text="${right.grade == null ? '--' : right.grade}">A
+                    </div>
                 </div>
-                <div class="duel-score"
-                     th:text="${right.totalScore == null ? '--' : #numbers.formatInteger(right.totalScore, 1, 'COMMA')}">
-                    985,000
+                <div style="display: flex; margin-left: auto; justify-content: end;">
+                    <div class="duel-delta" th:if="${right.scoreGap != null}" th:text="'-' + ${#numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">-123,456</div>
+                    <div class="duel-score"
+                         th:text="${right.totalScore == null ? '--' : #numbers.formatInteger(right.totalScore, 1, 'COMMA')}">
+                        985,000
+                    </div>
                 </div>
                 <div class="duel-diff">
                     <th:block th:text="${right.difficultyName}">Insane</th:block>
-                    · <th:block th:text="${right.difficultyRating == null ? '--★' : Osu.formatStarRating(right.difficultyRating) + '★'}">5.20★</th:block>
+                    ·
+                    <th:block
+                            th:text="${right.difficultyRating == null ? '--★' : Osu.formatStarRating(right.difficultyRating) + '★'}">
+                        5.20★
+                    </th:block>
                     <span th:text="${'+' + right.mods}">+HD</span>
                 </div>
                 <div class="duel-metrics">
-                    <div class="duel-metric"><span>Accuracy</span><strong th:text="${right.accuracy == null ? '--' : Osu.formatAccuracy(right.accuracy)}">97.80%</strong></div>
-                    <div class="duel-metric"><span>Combo</span><strong th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong></div>
+                    <div class="duel-metric"><span>Accuracy</span><strong
+                            th:text="${right.accuracy == null ? '--' : Osu.formatAccuracy(right.accuracy)}">97.80%</strong>
+                    </div>
+                    <div class="duel-metric"><span>Combo</span><strong
+                            th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong></div>
                     <div class="duel-metric"><span>Miss</span><strong th:text="${right.misses}">1</strong></div>
-                    <div class="duel-metric"><span>PP</span><strong th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong></div>
-                    <div class="duel-metric"><span>Rank</span><strong th:text="${right.grade == null ? '--' : right.grade}">A</strong></div>
-                    <div class="duel-metric"><span>Score gap</span><strong th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong></div>
+                    <div class="duel-metric"><span>PP</span><strong
+                            th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong>
+                    </div>
+                    <div class="duel-metric"><span>Rank</span><strong
+                            th:text="${right.grade == null ? '--' : right.grade}">A</strong></div>
+<!--                    <div class="duel-metric"><span>Score gap</span><strong-->
+<!--                            th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong>-->
+<!--                    </div>-->
                 </div>
             </article>
         </div>
@@ -1520,31 +1601,51 @@
                             <div class="team-label" th:text="${red.name}">Red Team</div>
                             <div class="team-count" th:text="${red.players.size() + ' players'}">4 players</div>
                         </div>
-                        <div class="team-total" th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">3,000,000</div>
+                        <div class="team-total" th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">
+                            3,000,000
+                        </div>
                     </div>
                     <div class="team-members">
-                        <article class="team-member" th:each="player : ${red.players}" th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}">
+                        <article class="team-member" th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                                 th:each="player : ${red.players}">
                             <div class="team-player-head">
                                 <div class="global-place" th:text="${'#' + player.position}">#1</div>
-                                <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}" th:src="${player.avatarUrl}">
+                                <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}"
+                                     th:src="${player.avatarUrl}">
                                 <div class="team-avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
                                 <div class="team-player-copy">
                                     <div class="team-player-name" th:text="${player.username}">Player</div>
-                                    <div class="team-player-meta" th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">UID 2 · AU</div>
+                                    <div class="team-player-meta"
+                                         th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">
+                                        UID 2 · AU
+                                    </div>
                                 </div>
                                 <div class="team-grade" th:text="${player.grade == null ? '--' : player.grade}">S</div>
                             </div>
                             <div class="team-diff">
                                 <th:block th:text="${player.difficultyName}">Insane</th:block>
-                                · <th:block th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">5.20★</th:block>
+                                ·
+                                <th:block
+                                        th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">
+                                    5.20★
+                                </th:block>
                                 <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
                             </div>
                             <div class="team-metrics">
-                                <div class="team-metric score"><strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">1,000,000</strong></div>
-                                <div class="team-metric"><span>Acc</span><strong th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">98.50%</strong></div>
-                                <div class="team-metric"><span>Combo</span><strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</strong></div>
-                                <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">0</strong></div>
-                                <div class="team-metric"><span>PP</span><strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">123.4pp</strong></div>
+                                <div class="team-metric score"><strong
+                                        th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">1,000,000</strong>
+                                </div>
+                                <div class="team-metric"><span>Acc</span><strong
+                                        th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">98.50%</strong>
+                                </div>
+                                <div class="team-metric"><span>Combo</span><strong
+                                        th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</strong>
+                                </div>
+                                <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">0</strong>
+                                </div>
+                                <div class="team-metric"><span>PP</span><strong
+                                        th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">123.4pp</strong>
+                                </div>
                             </div>
                         </article>
                         <div class="team-empty" th:if="${red.players.isEmpty()}">No red team scores.</div>
@@ -1557,33 +1658,54 @@
                             <div class="team-label" th:text="${blue.name}">Blue Team</div>
                             <div class="team-count" th:text="${blue.players.size() + ' players'}">4 players</div>
                         </div>
-                        <div class="team-total" th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">2,950,000</div>
+                        <div class="team-total" th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">
+                            2,950,000
+                        </div>
                     </div>
                     <div class="team-members">
-                        <article class="team-member" th:each="player : ${blue.players}" th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}">
+                        <article class="team-member" th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                                 th:each="player : ${blue.players}">
                             <div class="team-player-head">
                                 <div class="global-place" th:text="${'#' + player.position}">#2</div>
-                                <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}" th:src="${player.avatarUrl}">
+                                <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}"
+                                     th:src="${player.avatarUrl}">
                                 <div class="team-avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
                                 <div class="team-player-copy">
                                     <div class="team-player-name" th:text="${player.username}">Player</div>
-                                    <div class="team-player-meta" th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">UID 3 · JP</div>
+                                    <div class="team-player-meta"
+                                         th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">
+                                        UID 3 · JP
+                                    </div>
                                 </div>
                                 <div class="team-grade"
                                      th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
-                                     th:text="${player.grade == null ? '--' : player.grade}">A</div>
+                                     th:text="${player.grade == null ? '--' : player.grade}">A
+                                </div>
                             </div>
                             <div class="team-diff">
                                 <th:block th:text="${player.difficultyName}">Insane</th:block>
-                                · <th:block th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">5.20★</th:block>
+                                ·
+                                <th:block
+                                        th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">
+                                    5.20★
+                                </th:block>
                                 <span class="mod" th:text="${'+' + player.mods}">+HD</span>
                             </div>
                             <div class="team-metrics">
-                                <div class="team-metric score"><strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">985,000</strong></div>
-                                <div class="team-metric"><span>Acc</span><strong th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">97.80%</strong></div>
-                                <div class="team-metric"><span>Combo</span><strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">820x</strong></div>
-                                <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">1</strong></div>
-                                <div class="team-metric"><span>PP</span><strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">118.7pp</strong></div>
+                                <div class="team-metric score"><strong
+                                        th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">985,000</strong>
+                                </div>
+                                <div class="team-metric"><span>Acc</span><strong
+                                        th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">97.80%</strong>
+                                </div>
+                                <div class="team-metric"><span>Combo</span><strong
+                                        th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">820x</strong>
+                                </div>
+                                <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">1</strong>
+                                </div>
+                                <div class="team-metric"><span>PP</span><strong
+                                        th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">118.7pp</strong>
+                                </div>
                             </div>
                         </article>
                         <div class="team-empty" th:if="${blue.players.isEmpty()}">No blue team scores.</div>
@@ -1593,8 +1715,10 @@
 
             <div class="team-meter-wrap">
                 <div class="team-meter-copy">
-                    <span class="red-copy" th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">3,000,000</span>
-                    <span class="blue-copy" th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">2,950,000</span>
+                    <span class="red-copy"
+                          th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">3,000,000</span>
+                    <span class="blue-copy"
+                          th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">2,950,000</span>
                 </div>
                 <div class="team-meter"
                      th:classappend="${'winner-' + result.winningTeam}"
@@ -1602,10 +1726,10 @@
                     <div class="team-meter-fill"></div>
                 </div>
                 <div class="team-meter-result"
-                      th:classappend="${'result-' + result.winningTeam}"
-                      th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' By +' + #numbers.formatInteger(red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore, 1, 'COMMA')}">
-                        Red Team wins By +50,000
-                    </div>
+                     th:classappend="${'result-' + result.winningTeam}"
+                     th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' By +' + #numbers.formatInteger(red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore, 1, 'COMMA')}">
+                    Red Team wins By +50,000
+                </div>
             </div>
 
             <div class="unassigned-team" th:if="${!result.unassignedPlayers.isEmpty()}">
@@ -1613,7 +1737,8 @@
                 <article class="team-member" th:each="player : ${result.unassignedPlayers}">
                     <div class="team-player-head">
                         <div class="global-place" th:text="${'#' + player.position}">#3</div>
-                        <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}" th:src="${player.avatarUrl}">
+                        <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}"
+                             th:src="${player.avatarUrl}">
                         <div class="team-avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
                         <div class="team-player-copy">
                             <div class="team-player-name" th:text="${player.username}">Player</div>
@@ -1621,18 +1746,26 @@
                         </div>
                         <div class="team-grade"
                              th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
-                             th:text="${player.grade == null ? '--' : player.grade}">B</div>
+                             th:text="${player.grade == null ? '--' : player.grade}">B
+                        </div>
                     </div>
                     <div class="team-diff">
                         <th:block th:text="${player.difficultyName}">Insane</th:block>
                         <span class="mod" th:text="${'+' + player.mods}">+NM</span>
                     </div>
                     <div class="team-metrics">
-                        <div class="team-metric"><span>Score</span><strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">900,000</strong></div>
-                        <div class="team-metric"><span>Acc</span><strong th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">96.00%</strong></div>
-                        <div class="team-metric"><span>Combo</span><strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">700x</strong></div>
+                        <div class="team-metric"><span>Score</span><strong
+                                th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">900,000</strong>
+                        </div>
+                        <div class="team-metric"><span>Acc</span><strong
+                                th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">96.00%</strong>
+                        </div>
+                        <div class="team-metric"><span>Combo</span><strong
+                                th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">700x</strong></div>
                         <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">2</strong></div>
-                        <div class="team-metric"><span>PP</span><strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">100.0pp</strong></div>
+                        <div class="team-metric"><span>PP</span><strong
+                                th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">100.0pp</strong>
+                        </div>
                     </div>
                 </article>
             </div>

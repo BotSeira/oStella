@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.data;
 
+import java.util.Comparator;
 import java.util.List;
 
 public record MultiplayerResultData(long roomId, String roomName, long playlistItemId, String playedAt,
@@ -49,6 +50,15 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
 
     public boolean isDuel() {
         return !isTeamVs() && players.size() == 2;
+    }
+
+    public List<PlayerResult> duelPlayers() {
+        if (!isDuel()) {
+            return players;
+        }
+        return players.stream()
+                .sorted(Comparator.comparingLong(PlayerResult::userId))
+                .toList();
     }
 
     public record BeatmapInfo(long id, String title, String titleUnicode, String artist, String creator,
