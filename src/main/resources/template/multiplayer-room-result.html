@@ -1139,10 +1139,13 @@
 
         .team-meter-result {
             color: var(--muted);
-            font-size: 19px;
+            font-size: 30px;
             font-weight: 900;
             letter-spacing: 0.04em;
             text-transform: uppercase;
+            width: 100%;
+            text-align: center;
+            margin-top: 8px;
         }
 
         .team-meter-result.result-red {
@@ -1563,11 +1566,6 @@
             <div class="team-meter-wrap">
                 <div class="team-meter-copy">
                     <span class="red-copy" th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">3,000,000</span>
-                    <span class="team-meter-result"
-                          th:classappend="${'result-' + result.winningTeam}"
-                          th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' · +' + #numbers.formatInteger(red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore, 1, 'COMMA')}">
-                        Red Team wins · +50,000
-                    </span>
                     <span class="blue-copy" th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">2,950,000</span>
                 </div>
                 <div class="team-meter"
@@ -1575,6 +1573,11 @@
                      th:style="${'--lead: ' + #numbers.formatDecimal(result.teamLeadPercent, 1, 2) + '%'}">
                     <div class="team-meter-fill"></div>
                 </div>
+                <div class="team-meter-result"
+                      th:classappend="${'result-' + result.winningTeam}"
+                      th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' By +' + #numbers.formatInteger(red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore, 1, 'COMMA')}">
+                        Red Team wins By +50,000
+                    </div>
             </div>
 
             <div class="unassigned-team" th:if="${!result.unassignedPlayers.isEmpty()}">
