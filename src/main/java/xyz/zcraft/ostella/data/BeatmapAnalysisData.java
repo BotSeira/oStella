@@ -35,6 +35,12 @@ public record BeatmapAnalysisData(
                 .toList();
     }
 
+    public List<PerfPlusApi.SkillPerformance> skillsByPercentage() {
+        return performance.skills().stream()
+                .sorted(Comparator.comparingDouble(PerfPlusApi.SkillPerformance::percentage).reversed())
+                .toList();
+    }
+
     public PerfPlusApi.SkillPerformance primarySkill() {
         return performance.skills().stream()
                 .max(java.util.Comparator.comparingDouble(PerfPlusApi.SkillPerformance::pp))

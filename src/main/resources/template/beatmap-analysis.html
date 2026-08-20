@@ -217,6 +217,21 @@
             padding: 16px;
         }
 
+        .analysis-columns {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            align-items: stretch;
+            gap: 14px;
+            margin: 0 24px 20px;
+        }
+
+        .analysis-columns .section {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            margin: 0;
+        }
+
         .section-header {
             display: flex;
             align-items: baseline;
@@ -295,6 +310,22 @@
             gap: 9px;
         }
 
+        .analysis-columns .skills-grid,
+        .analysis-columns .types-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .low-percentage-results {
+            width: 100%;
+            padding-top: 8px;
+            margin-top: auto;
+            margin-bottom: -4px;
+            color: #a0a0b8;
+            font-size: 0.82em;
+            line-height: 1.35;
+            text-align: right;
+        }
+
         .type-card {
             padding: 10px 12px;
         }
@@ -302,15 +333,6 @@
         .type-name {
             color: #fff;
             font-size: 0.9em;
-        }
-
-        .type-description {
-            margin-top: 4px;
-            overflow: hidden;
-            color: #9292a8;
-            font-size: 0.74em;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
         .type-fill {
@@ -338,15 +360,6 @@
             font-weight: 900;
             height: 100%;
             align-content: center;
-        }
-
-        .aim-description {
-            margin-top: 5px;
-            overflow: hidden;
-            color: #9292a8;
-            font-size: 0.72em;
-            text-overflow: ellipsis;
-            white-space: nowrap;
         }
 
         .footer {
@@ -447,53 +460,61 @@
         </div>
     </div>
 
-    <div class="section">
-        <div class="section-header">
-            <div class="section-title">PP Composition</div>
-            <div class="section-note">data from pp+</div>
-        </div>
-        <div class="skills-grid">
-            <div class="skill-card" th:each="skill : ${performancePlus.skills()}">
-                <div class="skill-head">
-                    <span class="skill-name" th:text="${skill.name()}">Jump Aim</span>
-                    <span class="skill-share"
-                          th:text="${#numbers.formatDecimal(skill.percentage(),1,1) + '%'}">17.0%</span>
-                </div>
-                <div class="skill-value" th:text="${#numbers.formatDecimal(skill.pp(),1,1) + 'pp'}">144.1pp</div>
-                <div class="bar-track">
-                    <div class="skill-fill" th:style="${'width:' + skill.percentage() + '%;'}"></div>
+    <div class="analysis-columns">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">PP Composition</div>
+                <div class="section-note">data from pp+</div>
+            </div>
+            <div class="skills-grid">
+                <div class="skill-card" th:each="skill : ${analysis.skillsByPercentage()}"
+                     th:if="${skill.percentage() > 10}">
+                    <div class="skill-head">
+                        <span class="skill-name" th:text="${skill.name()}">Jump Aim</span>
+                        <span class="skill-share"
+                              th:text="${#numbers.formatDecimal(skill.percentage(),1,1) + '%'}">17.0%</span>
+                    </div>
+                    <div class="skill-value" th:text="${#numbers.formatDecimal(skill.pp(),1,1) + 'pp'}">144.1pp</div>
+                    <div class="bar-track">
+                        <div class="skill-fill" th:style="${'width:' + skill.percentage() + '%;'}"></div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <div class="section">
-        <div class="section-header">
-            <div class="section-title">Potential Map Type</div>
-<!--            <div class="section-note">hit-object timing · placement · sliders · map properties</div>-->
-        </div>
-        <div class="types-grid">
-            <div class="type-card" th:each="type : ${types}" th:if="${type.percentage() > 10}">
-                <div class="type-head">
-                    <span class="type-name" th:style="${'color:' + type.color() + ';'}"
-                          th:text="${type.name()}">Stream</span>
-                    <span class="type-share"
-                          th:text="${#numbers.formatDecimal(type.percentage(),1,1) + '%'}">19.8%</span>
-                </div>
-<!--                <div class="type-description" th:text="${type.description()}">-->
-<!--                    Sustained tapping supported by continuous flow aim-->
-<!--                </div>-->
-                <div class="bar-track">
-                    <div class="type-fill"
-                         th:style="${'width:' + type.percentage() + '%;background:' + type.color() + ';'}"></div>
-                </div>
+            <div class="low-percentage-results"
+                 th:if="${Beatmaps.hasLowPercentageSkillResult(analysis.skillsByPercentage(), 10.0)}"
+                 th:text="'Not Likely: ' + ${Beatmaps.getLowPercentageSkillString(analysis.skillsByPercentage(), 10.0)}">
+                Not Likely: Accuracy(8%), Stamina(1%)
             </div>
         </div>
 
-        <div style="color: #a0a0b8; font-size: 0.9em; width: 100%; text-align: right; padding-top: 8px; margin-bottom: -4px;"
-             th:if="${Beatmaps.hasLowPercentageResult(types, 10.0)}"
-             th:text="'Low percentage results: ' + ${Beatmaps.getLowPercentageTypeString(types, 10.0)}">
-            Low percentage results: Stream(8%), Flow(1%)
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">Potential Map Type</div>
+<!--                <div class="section-note">hit-object timing · placement · sliders · map properties</div>-->
+            </div>
+            <div class="types-grid">
+                <div class="type-card" th:each="type : ${types}" th:if="${type.percentage() > 10}">
+                    <div class="type-head">
+                        <span class="type-name" th:style="${'color:' + type.color() + ';'}"
+                              th:text="${type.name()}">Stream</span>
+                        <span class="type-share"
+                              th:text="${#numbers.formatDecimal(type.percentage(),1,1) + '%'}">19.8%</span>
+                    </div>
+<!--                    <div class="type-description" th:text="${type.description()}">-->
+<!--                        Sustained tapping supported by continuous flow aim-->
+<!--                    </div>-->
+                    <div class="bar-track">
+                        <div class="type-fill"
+                             th:style="${'width:' + type.percentage() + '%;background:' + type.color() + ';'}"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="low-percentage-results"
+                 th:if="${Beatmaps.hasLowPercentageResult(types, 10.0)}"
+                 th:text="'Not Likely: ' + ${Beatmaps.getLowPercentageTypeString(types, 10.0)}">
+                Not Likely: Stream(8%), Flow(1%)
+            </div>
         </div>
     </div>
 

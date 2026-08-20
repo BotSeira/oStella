@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.util.format;
 
 import xyz.zcraft.ostella.data.BeatmapAnalysisData;
+import xyz.zcraft.ostella.network.PerfPlusApi;
 import xyz.zcraft.osu.model.Beatmap;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
@@ -48,6 +49,18 @@ public class BeatmapFormatUtil {
     public static boolean hasLowPercentageResult(List<BeatmapAnalysisData.PatternView> types, double threshold) {
         return types.stream()
                 .anyMatch(type -> type.percentage() <= threshold);
+    }
+
+    public static String getLowPercentageSkillString(List<PerfPlusApi.SkillPerformance> skills, double threshold) {
+        return skills.stream()
+                .filter(skill -> skill.percentage() <= threshold)
+                .map(skill -> "%s(%.1f%%)".formatted(skill.name(), skill.percentage()))
+                .collect(Collectors.joining(", "));
+    }
+
+    public static boolean hasLowPercentageSkillResult(List<PerfPlusApi.SkillPerformance> skills, double threshold) {
+        return skills.stream()
+                .anyMatch(skill -> skill.percentage() <= threshold);
     }
 
     public static boolean doShowAimBreakdown(BeatmapAnalysisData analysisData) {
