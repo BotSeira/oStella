@@ -186,13 +186,13 @@
             position: relative;
             z-index: 1;
             align-self: center;
-            padding: 10px 38px 10px 34px;
+            padding: 10px 38px 10px 15px;
             border-left: 1px solid var(--line-strong);
         }
 
         .rank-value {
             margin-top: 8px;
-            overflow: hidden;
+            overflow: visible;
             font-size: 58px;
             font-weight: 900;
             letter-spacing: -0.07em;
@@ -823,7 +823,7 @@
         <aside class="headline-rank">
             <div class="rank-label">Global rank</div>
             <div class="rank-value"
-                 th:text="${Users.formatRank(((user.statistics != null) ? user.statistics.globalRank : null))}">#12,345</div>
+                 th:text="${Users.formatRank(((user.statistics != null) ? user.statistics.globalRank : null))}">#1,234,567</div>
             <div class="rank-secondary">
                 <div>
                     <span>Country</span>
