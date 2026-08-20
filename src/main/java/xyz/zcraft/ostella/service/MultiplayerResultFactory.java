@@ -9,6 +9,7 @@ import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
+import xyz.zcraft.osu.model.UserExtended;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -25,6 +26,18 @@ public final class MultiplayerResultFactory {
             List<MultiplayerRoomScore> roomScores,
             User owner
     ) {
+        return create(room, item, roomScores, owner, "lazer", "scorev2", room.getType());
+    }
+
+    public static MultiplayerResultData create(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem item,
+            List<MultiplayerRoomScore> roomScores,
+            User owner,
+            String client,
+            String scoringType,
+            String teamType
+    ) {
         BeatmapExtended map = item.getBeatmap();
         MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map);
         MultiplayerResultData.UserInfo queuedBy = toUserInfo(owner, item.getOwnerId());
@@ -39,6 +52,7 @@ public final class MultiplayerResultFactory {
 
         List<MultiplayerResultData.PlayerResult> players = new ArrayList<>(sorted.size());
         int fallbackPosition = 1;
+        Long previousScore = null;
         for (MultiplayerRoomScore roomScore : sorted) {
             Score score = roomScore.score();
             if (score == null) {
@@ -49,6 +63,10 @@ public final class MultiplayerResultFactory {
             int position = roomScore.position() == null || roomScore.position() <= 0
                     ? fallbackPosition
                     : roomScore.position();
+            Long totalScore = score.getTotalScore();
+            Long scoreGap = previousScore == null || totalScore == null
+                    ? null
+                    : Math.abs(previousScore - totalScore);
             players.add(new MultiplayerResultData.PlayerResult(
                     position,
                     score.getUserId() == null ? user == null ? 0 : user.getId() : score.getUserId(),
@@ -58,29 +76,165 @@ public final class MultiplayerResultFactory {
                     user == null || user.getAvatarUrl() == null || user.getAvatarUrl().isBlank()
                             ? null
                             : user.getAvatarUrl(),
+                    profileCoverUrl(user),
                     user == null ? null : user.getCountryCode(),
                     playerMap == null || playerMap.getVersion() == null ? "Unknown Diff" : playerMap.getVersion(),
                     playerMap == null ? null : playerMap.getDifficultyRating(),
                     modString(score.getMods()),
                     score.getAccuracy(),
                     score.getMaxCombo(),
-                    score.getTotalScore(),
+                    totalScore,
                     score.getPp(),
                     score.getRank() == null ? "-" : score.getRank(),
-                    Boolean.TRUE.equals(score.getPassed())
+                    Boolean.TRUE.equals(score.getPassed()),
+                    statistic(score, "miss", "count_miss"),
+                    scoreGap,
+                    normalizeTeam(roomScore.team())
             ));
+            if (totalScore != null) {
+                previousScore = totalScore;
+            }
             fallbackPosition++;
         }
+
+        long roundTotal = players.stream()
+                .map(MultiplayerResultData.PlayerResult::totalScore)
+                .filter(value -> value != null)
+                .mapToLong(Long::longValue)
+                .sum();
+        long scoredPlayers = players.stream()
+                .filter(player -> player.totalScore() != null)
+                .count();
+        long roundAverage = scoredPlayers == 0 ? 0 : Math.round((double) roundTotal / scoredPlayers);
+
+        boolean teamVs = isTeamVs(teamType);
+        Comparator<MultiplayerResultData.PlayerResult> teamOrder = Comparator
+                .comparing(
+                        MultiplayerResultData.PlayerResult::totalScore,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                )
+                .thenComparingInt(MultiplayerResultData.PlayerResult::position);
+        List<MultiplayerResultData.PlayerResult> redPlayers = teamVs
+                ? players.stream().filter(player -> "red".equals(player.team())).sorted(teamOrder).toList()
+                : List.of();
+        List<MultiplayerResultData.PlayerResult> bluePlayers = teamVs
+                ? players.stream().filter(player -> "blue".equals(player.team())).sorted(teamOrder).toList()
+                : List.of();
+        List<MultiplayerResultData.PlayerResult> unassignedPlayers = teamVs
+                ? players.stream().filter(player -> player.team() == null).sorted(teamOrder).toList()
+                : List.of();
+        long redTotal = teamTotal(redPlayers);
+        long blueTotal = teamTotal(bluePlayers);
+        List<MultiplayerResultData.TeamResult> teams = teamVs
+                ? List.of(
+                        new MultiplayerResultData.TeamResult("red", "Red Team", redTotal, redPlayers),
+                        new MultiplayerResultData.TeamResult("blue", "Blue Team", blueTotal, bluePlayers)
+                )
+                : List.of();
+        String winningTeam = !teamVs || redTotal == blueTotal ? "tie" : redTotal > blueTotal ? "red" : "blue";
+        long higherTeamScore = Math.max(redTotal, blueTotal);
+        double teamLeadPercent = higherTeamScore == 0
+                ? 0
+                : Math.min(50, Math.sqrt(Math.abs(redTotal - blueTotal) / (double) higherTeamScore) * 50.0);
 
         return new MultiplayerResultData(
                 room.getId(),
                 room.getName() == null ? "MP #" + room.getId() : room.getName(),
                 item.getId(),
                 item.getPlayedAt(),
+                clientLabel(client),
+                scoringTypeLabel(scoringType),
+                teamTypeLabel(teamType),
+                roundTotal,
+                roundAverage,
+                teamLeadPercent,
+                winningTeam,
                 mapInfo,
                 queuedBy,
-                players
+                players,
+                teams,
+                unassignedPlayers
         );
+    }
+
+    private static long statistic(Score score, String... names) {
+        if (score.getStatistics() == null) {
+            return 0;
+        }
+        for (String name : names) {
+            Long value = score.getStatistics().get(name);
+            if (value != null) {
+                return value;
+            }
+        }
+        return 0;
+    }
+
+    private static long teamTotal(List<MultiplayerResultData.PlayerResult> players) {
+        return players.stream()
+                .map(MultiplayerResultData.PlayerResult::totalScore)
+                .filter(value -> value != null)
+                .mapToLong(Long::longValue)
+                .sum();
+    }
+
+    private static boolean isTeamVs(String teamType) {
+        if (teamType == null) {
+            return false;
+        }
+        String normalized = teamType.toLowerCase(Locale.ROOT).replace('_', '-');
+        return normalized.contains("team") && !normalized.contains("head");
+    }
+
+    private static String normalizeTeam(String team) {
+        if (team == null || team.isBlank()) {
+            return null;
+        }
+        return switch (team.toLowerCase(Locale.ROOT)) {
+            case "red", "1" -> "red";
+            case "blue", "2" -> "blue";
+            default -> null;
+        };
+    }
+
+    private static String profileCoverUrl(User user) {
+        if (!(user instanceof UserExtended extended)) {
+            return null;
+        }
+        UserExtended.Cover cover = extended.getCover();
+        return firstNonBlankOrNull(
+                extended.getCoverUrl(),
+                cover == null ? null : cover.getCustomUrl(),
+                cover == null ? null : cover.getUrl()
+        );
+    }
+
+    private static String clientLabel(String client) {
+        return client != null && client.equalsIgnoreCase("stable") ? "Stable" : "Lazer";
+    }
+
+    private static String scoringTypeLabel(String scoringType) {
+        if (scoringType == null || scoringType.isBlank()) {
+            return "ScoreV1";
+        }
+        return switch (scoringType.toLowerCase(Locale.ROOT).replace("_", "")) {
+            case "scorev2" -> "ScoreV2";
+            case "accuracy" -> "Accuracy";
+            case "combo" -> "Combo";
+            default -> "ScoreV1";
+        };
+    }
+
+    private static String teamTypeLabel(String teamType) {
+        if (teamType == null || teamType.isBlank()) {
+            return "Head to Head";
+        }
+        return switch (teamType.toLowerCase(Locale.ROOT).replace('_', '-')) {
+            case "team-vs", "team-versus" -> "Team VS";
+            case "tag-team-vs", "tag-team-versus" -> "Tag Team VS";
+            case "tag-coop", "tag-co-op" -> "Tag Co-op";
+            default -> "Head to Head";
+        };
     }
 
     private static MultiplayerResultData.BeatmapInfo toBeatmapInfo(long beatmapId, BeatmapExtended map) {

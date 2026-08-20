@@ -23,6 +23,7 @@ import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.MultiplayerRoom;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
+import xyz.zcraft.osu.model.UserExtended;
 
 import java.util.Comparator;
 import java.util.HashMap;
@@ -137,8 +138,17 @@ public class MultiplayerController {
                 tokenManager.getTokenData(), roomId, playlistItemId
         );
         enrichScores(roomScores, item);
+        enrichDuelProfiles(roomScores);
         User owner = resolveOwner(room, item.getOwnerId());
-        return MultiplayerResultFactory.create(room, item, roomScores, owner);
+        return MultiplayerResultFactory.create(
+                room,
+                item,
+                roomScores,
+                owner,
+                "lazer",
+                "scorev2",
+                room.getType()
+        );
     }
 
     private MultiplayerResultData getStableResultData(long matchId, long gameId) {
@@ -160,9 +170,18 @@ public class MultiplayerController {
         enrichPlaylistItem(item);
 
         List<MultiplayerRoomScore> scores = stableScores(match, game, item);
+        enrichDuelProfiles(scores);
         User stableLobby = new User();
         stableLobby.setUsername("Stable lobby");
-        return MultiplayerResultFactory.create(room, item, scores, stableLobby);
+        return MultiplayerResultFactory.create(
+                room,
+                item,
+                scores,
+                stableLobby,
+                "stable",
+                game.getScoringType(),
+                game.getTeamType()
+        );
     }
 
     private List<MultiplayerRoomScore> stableScores(
@@ -175,16 +194,37 @@ public class MultiplayerController {
             match.getUsers().stream().filter(Objects::nonNull).forEach(user -> users.put(user.getId(), user));
         }
 
-        List<Score> scores = (game.getScores() == null ? List.<JsonObject>of() : game.getScores()).stream()
-                .map(value -> stableScore(value, game, item, users))
-                .sorted(stableScoreComparator(game.getScoringType()))
+        Comparator<Score> scoreComparator = stableScoreComparator(game.getScoringType());
+        List<MultiplayerRoomScore> scores = (game.getScores() == null
+                ? List.<JsonObject>of()
+                : game.getScores()).stream()
+                .map(value -> new MultiplayerRoomScore(
+                        stableScore(value, game, item, users),
+                        null,
+                        scoreTeam(value)
+                ))
+                .sorted((left, right) -> scoreComparator.compare(left.score(), right.score()))
                 .toList();
 
         List<MultiplayerRoomScore> result = new java.util.ArrayList<>(scores.size());
         for (int index = 0; index < scores.size(); index++) {
-            result.add(new MultiplayerRoomScore(scores.get(index), index + 1));
+            MultiplayerRoomScore roomScore = scores.get(index);
+            result.add(new MultiplayerRoomScore(roomScore.score(), index + 1, roomScore.team()));
         }
         return List.copyOf(result);
+    }
+
+    private static String scoreTeam(JsonObject score) {
+        if (score.has("team") && !score.get("team").isJsonNull()) {
+            return score.get("team").getAsString();
+        }
+        if (score.has("match") && score.get("match").isJsonObject()) {
+            JsonObject match = score.getAsJsonObject("match");
+            if (match.has("team") && !match.get("team").isJsonNull()) {
+                return match.get("team").getAsString();
+            }
+        }
+        return null;
     }
 
     private Score stableScore(
@@ -349,6 +389,28 @@ public class MultiplayerController {
             return room.getHost();
         }
         return ownerId > 0 ? OsuAPI.getUser(tokenManager.getTokenData(), ownerId) : room.getHost();
+    }
+
+    private void enrichDuelProfiles(List<MultiplayerRoomScore> roomScores) {
+        if (roomScores.size() != 2) {
+            return;
+        }
+        for (MultiplayerRoomScore roomScore : roomScores) {
+            Score score = roomScore.score();
+            if (score == null || score.getUser() instanceof UserExtended) {
+                continue;
+            }
+            long userId = score.getUserId() == null
+                    ? score.getUser() == null ? 0 : score.getUser().getId()
+                    : score.getUserId();
+            if (userId <= 0) {
+                continue;
+            }
+            UserExtended user = OsuAPI.getUser(tokenManager.getTokenData(), userId);
+            if (user != null) {
+                score.setUser(user);
+            }
+        }
     }
 
     static MultiplayerRoomWatchState toWatchState(MultiplayerRoomDetails room) {

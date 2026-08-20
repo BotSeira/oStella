@@ -15,6 +15,8 @@
             --muted: #b0bbcf;
             --faint: #748099;
             --accent: #f472b6;
+            --red-team: #fb7185;
+            --blue-team: #60a5fa;
         }
 
         * {
@@ -225,6 +227,10 @@
             padding-bottom: 18px;
         }
 
+        .summary-copy {
+            min-width: 0;
+        }
+
         .summary-title {
             font-size: 26px;
             font-weight: 850;
@@ -232,16 +238,49 @@
         }
 
         .summary-count {
+            margin-top: 5px;
             color: var(--muted);
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
+        }
+
+        .round-stats {
+            display: flex;
+            flex: 0 0 auto;
+            gap: 26px;
+        }
+
+        .round-stat {
+            min-width: 150px;
+            text-align: right;
+        }
+
+        .round-stat + .round-stat {
+            padding-left: 26px;
+            border-left: 1px solid var(--line);
+        }
+
+        .round-stat span {
+            display: block;
+            color: var(--faint);
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .round-stat strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 21px;
+            font-weight: 850;
         }
 
         .table-head,
         .player-row {
             display: grid;
-            grid-template-columns: 70px 246px minmax(200px, 1fr) 100px 180px 110px 76px;
-            column-gap: 8px;
+            grid-template-columns: 58px 200px minmax(180px, 1fr) 92px 60px 230px 92px 64px;
+            column-gap: 6px;
             align-items: center;
         }
 
@@ -266,7 +305,7 @@
 
         .player-row {
             position: relative;
-            min-height: 100px;
+            min-height: 104px;
             padding: 14px 12px;
             border-top: 1px solid var(--line);
         }
@@ -305,9 +344,9 @@
 
         .player .avatar,
         .avatar-placeholder {
-            flex: 0 0 54px;
-            width: 54px;
-            height: 54px;
+            flex: 0 0 48px;
+            width: 48px;
+            height: 48px;
             border: 1px solid var(--line);
             border-radius: 10px;
             object-fit: cover;
@@ -330,7 +369,7 @@
 
         .player-name {
             overflow: hidden;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 850;
             line-height: 1.15;
             text-overflow: ellipsis;
@@ -349,7 +388,7 @@
         .difficulty-name {
             overflow: hidden;
             color: #e7edf8;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 750;
             line-height: 1.2;
             text-overflow: ellipsis;
@@ -402,12 +441,12 @@
         }
 
         .metric.score strong {
-            font-size: 24px;
+            font-size: 22px;
             letter-spacing: -0.025em;
         }
 
         .metric.pp strong {
-            font-size: 22px;
+            font-size: 19px;
             letter-spacing: -0.025em;
         }
 
@@ -513,7 +552,7 @@
         .player-row.failed::after {
             position: absolute;
             top: 8px;
-            right: 94px;
+            right: 76px;
             color: rgba(248, 250, 252, 0.32);
             content: "FAILED";
             font-size: 10px;
@@ -523,6 +562,606 @@
 
         .player-row.failed .metric strong {
             color: var(--muted);
+        }
+
+        .score-gap {
+            display: block;
+            margin-top: 7px;
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 16px;
+            font-weight: 800;
+            line-height: 1;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .metric.misses strong {
+            color: #fecdd3;
+        }
+
+        .duel {
+            position: relative;
+            display: grid;
+            min-height: 390px;
+            overflow: hidden;
+            border-top: 1px solid var(--line-strong);
+            border-bottom: 1px solid var(--line-strong);
+            grid-template-columns: 1fr 1fr;
+            background: rgba(255, 255, 255, 0.014);
+        }
+
+        .duel::before {
+            position: absolute;
+            z-index: 2;
+            top: -12%;
+            bottom: -12%;
+            left: calc(50% - 28px);
+            width: 56px;
+            background: linear-gradient(102deg,
+                    transparent 47%,
+                    var(--line-strong) 48%,
+                    var(--line-strong) 51%,
+                    transparent 52%);
+            content: "";
+            pointer-events: none;
+            transform: rotate(4deg);
+        }
+
+        .duelist {
+            position: relative;
+            isolation: isolate;
+            min-width: 0;
+            overflow: hidden;
+            padding: 30px 52px 28px 30px;
+        }
+
+        .duel-cover {
+            position: absolute;
+            z-index: -2;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.34;
+            object-fit: cover;
+            filter: saturate(0.82) contrast(1.08);
+        }
+
+        .duelist::after {
+            position: absolute;
+            z-index: -1;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(21, 24, 41, 0.64), rgba(21, 24, 41, 0.96));
+            content: "";
+        }
+
+        .duelist.right::after {
+            background: linear-gradient(270deg, rgba(21, 24, 41, 0.64), rgba(21, 24, 41, 0.96));
+        }
+
+        .duelist.right {
+            padding-right: 30px;
+            padding-left: 52px;
+            text-align: right;
+        }
+
+        .duelist.winner {
+            box-shadow: inset 0 4px 0 var(--accent);
+        }
+
+        .duelist.winner::after {
+            background: linear-gradient(90deg, rgba(244, 114, 182, 0.13), rgba(21, 24, 41, 0.94));
+        }
+
+        .duelist.right.winner::after {
+            background: linear-gradient(270deg, rgba(244, 114, 182, 0.13), rgba(21, 24, 41, 0.94));
+        }
+
+        .duel-player-head {
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .duelist.right .duel-player-head {
+            flex-direction: row-reverse;
+        }
+
+        .duel-avatar,
+        .duel-avatar-placeholder {
+            flex: 0 0 68px;
+            width: 68px;
+            height: 68px;
+            border: 1px solid var(--line-strong);
+            border-radius: 14px;
+            object-fit: cover;
+        }
+
+        .duel-avatar-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--faint);
+            background: rgba(255, 255, 255, 0.04);
+            font-size: 24px;
+            font-weight: 850;
+        }
+
+        .duel-place {
+            color: var(--accent);
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .duel-name {
+            max-width: 330px;
+            margin-top: 3px;
+            overflow: hidden;
+            font-size: 27px;
+            font-weight: 900;
+            letter-spacing: -0.025em;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .duel-user-meta {
+            margin-top: 5px;
+            color: var(--faint);
+            font-size: 14px;
+            font-weight: 750;
+        }
+
+        .duel-winner {
+            position: absolute;
+            top: 50%;
+            padding: 6px 10px;
+            border: 1px solid rgba(244, 114, 182, 0.4);
+            border-radius: 6px;
+            color: #ffe4f4;
+            background: rgba(244, 114, 182, 0.12);
+            box-shadow: 0 5px 16px rgba(0, 0, 0, 0.28);
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            white-space: nowrap;
+            transform: translateY(-50%);
+        }
+
+        .duel-winner.left-winner {
+            right: 59px;
+        }
+
+        .duel-winner.right-winner {
+            left: 59px;
+        }
+
+        .duel-score {
+            margin-top: 18px;
+            font-size: 38px;
+            font-weight: 900;
+            letter-spacing: 5px;
+            line-height: 1;
+        }
+
+        .duel-diff {
+            margin-top: 14px;
+            overflow: hidden;
+            color: #e7edf8;
+            font-size: 18px;
+            font-weight: 750;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .duel-diff span {
+            color: #f5d0fe;
+        }
+
+        .duel-metrics {
+            display: grid;
+            gap: 13px 10px;
+            margin-top: 20px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .duelist.right .duel-metric {
+            text-align: right;
+        }
+
+        .duel-metric span,
+        .team-metric span {
+            display: block;
+            color: var(--faint);
+            font-size: 12px;
+            font-weight: 850;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .duel-metric strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 24px;
+            font-weight: 850;
+        }
+
+        .duel-grade,
+        .team-grade {
+            --rank-rgb: 116, 128, 153;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(var(--rank-rgb), 0.6);
+            color: #fff;
+            background: rgba(var(--rank-rgb), 0.22);
+            font-weight: 900;
+        }
+
+        .duel-grade {
+            min-width: 52px;
+            min-height: 38px;
+            border-radius: 9px;
+            font-size: 28px;
+        }
+
+        .duel-center {
+            position: absolute;
+            z-index: 3;
+            top: 50%;
+            left: 50%;
+            width: 48px;
+            height: 48px;
+            transform: translate(-50%, -50%);
+        }
+
+        .duel-center strong {
+            display: flex;
+            width: 48px;
+            height: 48px;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--line-strong);
+            border-radius: 50%;
+            color: #f5d0fe;
+            background: var(--surface-deep);
+            box-shadow: 0 8px 22px rgba(0, 0, 0, 0.38);
+            font-size: 16px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+        }
+
+        .grade-xh {
+            --rank-rgb: 213, 229, 255;
+        }
+
+        .grade-x {
+            --rank-rgb: 250, 204, 21;
+        }
+
+        .grade-sh {
+            --rank-rgb: 160, 205, 255;
+        }
+
+        .grade-s {
+            --rank-rgb: 34, 211, 238;
+        }
+
+        .grade-a {
+            --rank-rgb: 74, 222, 128;
+        }
+
+        .grade-b {
+            --rank-rgb: 56, 189, 248;
+        }
+
+        .grade-c {
+            --rank-rgb: 167, 139, 250;
+        }
+
+        .grade-d,
+        .grade-f {
+            --rank-rgb: 244, 63, 94;
+        }
+
+        .team-columns {
+            display: grid;
+            gap: 0;
+            border-top: 1px solid var(--line-strong);
+            border-bottom: 1px solid var(--line-strong);
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        }
+
+        .team-panel {
+            min-width: 0;
+            border: 0;
+            background: transparent;
+        }
+
+        .team-panel.red {
+            border-top: 3px solid var(--red-team);
+        }
+
+        .team-panel.blue {
+            border-top: 3px solid var(--blue-team);
+            border-left: 1px solid var(--line-strong);
+        }
+
+        .team-header {
+            display: flex;
+            min-height: 68px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 11px 16px 10px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .team-label {
+            font-size: 26px;
+            font-weight: 900;
+        }
+
+        .team-panel.red .team-label,
+        .team-panel.red .team-total {
+            color: #fecdd3;
+        }
+
+        .team-panel.blue .team-label,
+        .team-panel.blue .team-total {
+            color: #dbeafe;
+        }
+
+        .team-count {
+            margin-top: 2px;
+            color: var(--faint);
+            font-size: 16px;
+            font-weight: 750;
+        }
+
+        .team-total {
+            font-size: 34px;
+            font-weight: 900;
+            letter-spacing: 4px;
+        }
+
+        .team-members {
+            display: grid;
+        }
+
+        .team-member {
+            min-width: 0;
+            padding: 10px 14px 11px;
+            border-top: 1px solid var(--line);
+        }
+
+        .team-member:first-child {
+            border-top: 0;
+        }
+
+        .team-player-head {
+            display: grid;
+            min-width: 0;
+            align-items: center;
+            gap: 8px;
+            grid-template-columns: 36px 40px minmax(0, 1fr) 44px;
+        }
+
+        .global-place {
+            color: var(--muted);
+            font-size: 19px;
+            font-weight: 900;
+        }
+
+        .team-avatar,
+        .team-avatar-placeholder {
+            width: 40px;
+            height: 40px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            object-fit: cover;
+        }
+
+        .team-avatar-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--faint);
+            background: rgba(255, 255, 255, 0.04);
+            font-weight: 850;
+        }
+
+        .team-player-copy {
+            min-width: 0;
+        }
+
+        .team-player-name {
+            overflow: hidden;
+            font-size: 18px;
+            font-weight: 850;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .team-player-meta {
+            margin-top: 2px;
+            overflow: hidden;
+            color: var(--faint);
+            font-size: 11px;
+            font-weight: 750;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .team-grade {
+            width: 44px;
+            height: 34px;
+            border-radius: 7px;
+            font-size: 19px;
+        }
+
+        .team-diff {
+            margin-top: 6px;
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 750;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .team-diff .mod {
+            margin-left: 7px;
+        }
+
+        .team-metrics {
+            display: grid;
+            gap: 7px;
+            margin-top: 6px;
+            grid-template-columns: 1.45fr repeat(4, minmax(0, 0.8fr));
+        }
+
+        .team-metric {
+            min-width: 0;
+            text-align: right;
+        }
+
+        .team-metric:first-child {
+            text-align: left;
+        }
+
+        .team-metric span {
+            font-size: 11px;
+        }
+
+        .team-metric strong {
+            display: block;
+            margin-top: 2px;
+            overflow: hidden;
+            font-size: 15px;
+            font-weight: 850;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .team-empty {
+            padding: 34px 16px;
+            color: var(--faint);
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .team-meter-wrap {
+            margin-top: 13px;
+            padding: 0 0 2px;
+        }
+
+        .team-meter-copy {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 7px;
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .team-meter-copy .red-copy {
+            color: #fecdd3;
+            font-size: 15px;
+        }
+
+        .team-meter-copy .blue-copy {
+            color: #dbeafe;
+            font-size: 15px;
+        }
+
+        .team-meter-result {
+            color: var(--muted);
+            font-size: 19px;
+            font-weight: 900;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .team-meter-result.result-red {
+            color: #fecdd3;
+            text-shadow: 0 0 18px rgba(251, 113, 133, 0.28);
+        }
+
+        .team-meter-result.result-blue {
+            color: #dbeafe;
+            text-shadow: 0 0 18px rgba(96, 165, 250, 0.28);
+        }
+
+        .team-meter-result.result-tie {
+            color: #f8fafc;
+        }
+
+        .team-meter {
+            position: relative;
+            height: 16px;
+            overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.045);
+        }
+
+        .team-meter::after {
+            position: absolute;
+            z-index: 2;
+            top: -3px;
+            bottom: -3px;
+            left: calc(50% - 1px);
+            width: 2px;
+            background: rgba(255, 255, 255, 0.52);
+            content: "";
+        }
+
+        .team-meter-fill {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            min-width: 4px;
+        }
+
+        .winner-red .team-meter-fill {
+            right: 50%;
+            width: var(--lead);
+            background: var(--red-team);
+            box-shadow: 0 0 16px rgba(251, 113, 133, 0.62);
+        }
+
+        .winner-blue .team-meter-fill {
+            left: 50%;
+            width: var(--lead);
+            background: var(--blue-team);
+            box-shadow: 0 0 16px rgba(96, 165, 250, 0.62);
+        }
+
+        .winner-tie .team-meter-fill {
+            left: calc(50% - 2px);
+            width: 4px;
+            background: #e2e8f0;
+        }
+
+        .unassigned-team {
+            margin-top: 10px;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+
+        .unassigned-title {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--line);
+            color: var(--faint);
+            font-size: 11px;
+            font-weight: 850;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         .empty {
@@ -581,6 +1220,9 @@
 
             <div class="hero-footer">
                 <div class="map-meta">
+                    <span class="pill" th:text="${result.client}">Lazer</span>
+                    <span class="pill" th:text="${result.scoringType}">ScoreV2</span>
+                    <span class="pill" th:text="${result.teamType}">Head to Head</span>
                     <span class="pill diff"
                           th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : Osu.formatStarRating(result.beatmap.difficultyRating())) + '★'}">
                         Insane · 5.20★
@@ -608,21 +1250,38 @@
 
     <section class="results">
         <div class="summary-line">
-            <div class="summary-title">Leaderboard</div>
-            <div class="summary-count" th:text="${result.players.size() + ' players'}">8 players</div>
+            <div class="summary-copy">
+                <div class="summary-title"
+                     th:text="${result.isTeamVs() ? 'Team VS' : (result.isDuel() ? 'Duel result' : 'Leaderboard')}">
+                    Leaderboard
+                </div>
+                <div class="summary-count" th:text="${result.players.size() + ' players'}">8 players</div>
+            </div>
+            <div class="round-stats">
+                <div class="round-stat">
+                    <span>Round total</span>
+                    <strong th:text="${#numbers.formatInteger(result.totalScore, 1, 'COMMA')}">5,000,000</strong>
+                </div>
+                <div class="round-stat">
+                    <span>Round average</span>
+                    <strong th:text="${#numbers.formatInteger(result.averageScore, 1, 'COMMA')}">625,000</strong>
+                </div>
+            </div>
         </div>
 
-        <div class="table-head" th:if="${!result.players.isEmpty()}">
+        <div class="table-head"
+             th:if="${!result.players.isEmpty() && !result.isDuel() && !result.isTeamVs()}">
             <div>Place</div>
             <div>Player</div>
             <div>Difficulty / Mods</div>
             <div>Acc / Cb</div>
+            <div>Miss</div>
             <div>Score</div>
             <div>PP</div>
             <div class="rank-head">Rank</div>
         </div>
 
-        <div class="player-list">
+        <div class="player-list" th:if="${!result.isDuel() && !result.isTeamVs()}">
             <div class="player-row"
                  th:classappend="${(player.position == 1 ? 'top-1 ' : '') + (!player.passed ? 'failed' : '')}"
                  th:each="player : ${result.players}">
@@ -652,13 +1311,20 @@
                     <span class="combo-value"
                           th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</span>
                 </div>
+                <div class="metric misses">
+                    <strong th:text="${player.misses}">0</strong>
+                </div>
                 <div class="metric score">
                     <strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">
                         1,000,000
                     </strong>
+                    <span class="score-gap"
+                          th:text="${player.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(player.scoreGap, 1, 'COMMA')}">
+                        Δ12,345
+                    </span>
                 </div>
                 <div class="metric pp">
-                    <strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1)}">
+                    <strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">
                         123.4pp
                     </strong>
                 </div>
@@ -666,6 +1332,220 @@
                      th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}">
                     <strong th:text="${player.grade == null ? '--' : player.grade}">S</strong>
                 </div>
+            </div>
+        </div>
+
+        <div class="duel" th:if="${result.isDuel()}"
+             th:with="left=${result.players[0]}, right=${result.players[1]}">
+            <article class="duelist left" th:classappend="${left.position == 1 ? 'winner' : ''}">
+                <img alt="" class="duel-cover"
+                     th:if="${left.profileCoverUrl != null}"
+                     th:src="${left.profileCoverUrl}">
+                <div class="duel-player-head">
+                    <img alt="" class="duel-avatar" th:if="${left.avatarUrl != null}" th:src="${left.avatarUrl}">
+                    <div class="duel-avatar-placeholder" th:unless="${left.avatarUrl != null}">?</div>
+                    <div class="player-copy">
+                        <div class="duel-place" th:text="${'#' + left.position}">#1</div>
+                        <div class="duel-name" th:text="${left.username}">Player One</div>
+                        <div class="duel-user-meta"
+                             th:text="${'UID ' + left.userId + (left.countryCode == null ? '' : ' · ' + left.countryCode)}">
+                            UID 2 · AU
+                        </div>
+                    </div>
+                    <div class="duel-grade"
+                         th:classappend="${left.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(left.grade)}"
+                         th:text="${left.grade == null ? '--' : left.grade}">S</div>
+                </div>
+                <div class="duel-score"
+                     th:text="${left.totalScore == null ? '--' : #numbers.formatInteger(left.totalScore, 1, 'COMMA')}">
+                    1,000,000
+                </div>
+                <div class="duel-diff">
+                    <th:block th:text="${left.difficultyName}">Insane</th:block>
+                    · <th:block th:text="${left.difficultyRating == null ? '--★' : Osu.formatStarRating(left.difficultyRating) + '★'}">5.20★</th:block>
+                    <span th:text="${'+' + left.mods}">+HDDT</span>
+                </div>
+                <div class="duel-metrics">
+                    <div class="duel-metric"><span>Accuracy</span><strong th:text="${left.accuracy == null ? '--' : Osu.formatAccuracy(left.accuracy)}">98.50%</strong></div>
+                    <div class="duel-metric"><span>Combo</span><strong th:text="${left.maxCombo == null ? '--' : left.maxCombo + 'x'}">850x</strong></div>
+                    <div class="duel-metric"><span>Miss</span><strong th:text="${left.misses}">0</strong></div>
+                    <div class="duel-metric"><span>PP</span><strong th:text="${left.pp == null ? '--' : #numbers.formatDecimal(left.pp, 1, 1) + 'pp'}">123.4pp</strong></div>
+                    <div class="duel-metric"><span>Rank</span><strong th:text="${left.grade == null ? '--' : left.grade}">S</strong></div>
+                    <div class="duel-metric"><span>Score gap</span><strong th:text="${left.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">—</strong></div>
+                </div>
+            </article>
+
+            <div class="duel-center">
+                <span class="duel-winner left-winner" th:if="${left.position == 1}">Winner</span>
+                <strong>VS</strong>
+                <span class="duel-winner right-winner" th:if="${right.position == 1}">Winner</span>
+            </div>
+
+            <article class="duelist right" th:classappend="${right.position == 1 ? 'winner' : ''}">
+                <img alt="" class="duel-cover"
+                     th:if="${right.profileCoverUrl != null}"
+                     th:src="${right.profileCoverUrl}">
+                <div class="duel-player-head">
+                    <img alt="" class="duel-avatar" th:if="${right.avatarUrl != null}" th:src="${right.avatarUrl}">
+                    <div class="duel-avatar-placeholder" th:unless="${right.avatarUrl != null}">?</div>
+                    <div class="player-copy">
+                        <div class="duel-place" th:text="${'#' + right.position}">#2</div>
+                        <div class="duel-name" th:text="${right.username}">Player Two</div>
+                        <div class="duel-user-meta"
+                             th:text="${'UID ' + right.userId + (right.countryCode == null ? '' : ' · ' + right.countryCode)}">
+                            UID 3 · JP
+                        </div>
+                    </div>
+                    <div class="duel-grade"
+                         th:classappend="${right.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(right.grade)}"
+                         th:text="${right.grade == null ? '--' : right.grade}">A</div>
+                </div>
+                <div class="duel-score"
+                     th:text="${right.totalScore == null ? '--' : #numbers.formatInteger(right.totalScore, 1, 'COMMA')}">
+                    985,000
+                </div>
+                <div class="duel-diff">
+                    <th:block th:text="${right.difficultyName}">Insane</th:block>
+                    · <th:block th:text="${right.difficultyRating == null ? '--★' : Osu.formatStarRating(right.difficultyRating) + '★'}">5.20★</th:block>
+                    <span th:text="${'+' + right.mods}">+HD</span>
+                </div>
+                <div class="duel-metrics">
+                    <div class="duel-metric"><span>Accuracy</span><strong th:text="${right.accuracy == null ? '--' : Osu.formatAccuracy(right.accuracy)}">97.80%</strong></div>
+                    <div class="duel-metric"><span>Combo</span><strong th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong></div>
+                    <div class="duel-metric"><span>Miss</span><strong th:text="${right.misses}">1</strong></div>
+                    <div class="duel-metric"><span>PP</span><strong th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong></div>
+                    <div class="duel-metric"><span>Rank</span><strong th:text="${right.grade == null ? '--' : right.grade}">A</strong></div>
+                    <div class="duel-metric"><span>Score gap</span><strong th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong></div>
+                </div>
+            </article>
+        </div>
+
+        <div class="team-battle" th:if="${result.isTeamVs()}"
+             th:with="red=${result.teams[0]}, blue=${result.teams[1]}">
+            <div class="team-columns">
+                <section class="team-panel red">
+                    <div class="team-header">
+                        <div>
+                            <div class="team-label" th:text="${red.name}">Red Team</div>
+                            <div class="team-count" th:text="${red.players.size() + ' players'}">4 players</div>
+                        </div>
+                        <div class="team-total" th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">3,000,000</div>
+                    </div>
+                    <div class="team-members">
+                        <article class="team-member" th:each="player : ${red.players}">
+                            <div class="team-player-head">
+                                <div class="global-place" th:text="${'#' + player.position}">#1</div>
+                                <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}" th:src="${player.avatarUrl}">
+                                <div class="team-avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
+                                <div class="team-player-copy">
+                                    <div class="team-player-name" th:text="${player.username}">Player</div>
+                                    <div class="team-player-meta" th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">UID 2 · AU</div>
+                                </div>
+                                <div class="team-grade"
+                                     th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                                     th:text="${player.grade == null ? '--' : player.grade}">S</div>
+                            </div>
+                            <div class="team-diff">
+                                <th:block th:text="${player.difficultyName}">Insane</th:block>
+                                · <th:block th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">5.20★</th:block>
+                                <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
+                            </div>
+                            <div class="team-metrics">
+                                <div class="team-metric"><span>Score</span><strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">1,000,000</strong></div>
+                                <div class="team-metric"><span>Acc</span><strong th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">98.50%</strong></div>
+                                <div class="team-metric"><span>Combo</span><strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">850x</strong></div>
+                                <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">0</strong></div>
+                                <div class="team-metric"><span>PP</span><strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">123.4pp</strong></div>
+                            </div>
+                        </article>
+                        <div class="team-empty" th:if="${red.players.isEmpty()}">No red team scores.</div>
+                    </div>
+                </section>
+
+                <section class="team-panel blue">
+                    <div class="team-header">
+                        <div>
+                            <div class="team-label" th:text="${blue.name}">Blue Team</div>
+                            <div class="team-count" th:text="${blue.players.size() + ' players'}">4 players</div>
+                        </div>
+                        <div class="team-total" th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">2,950,000</div>
+                    </div>
+                    <div class="team-members">
+                        <article class="team-member" th:each="player : ${blue.players}">
+                            <div class="team-player-head">
+                                <div class="global-place" th:text="${'#' + player.position}">#2</div>
+                                <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}" th:src="${player.avatarUrl}">
+                                <div class="team-avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
+                                <div class="team-player-copy">
+                                    <div class="team-player-name" th:text="${player.username}">Player</div>
+                                    <div class="team-player-meta" th:text="${'UID ' + player.userId + (player.countryCode == null ? '' : ' · ' + player.countryCode)}">UID 3 · JP</div>
+                                </div>
+                                <div class="team-grade"
+                                     th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                                     th:text="${player.grade == null ? '--' : player.grade}">A</div>
+                            </div>
+                            <div class="team-diff">
+                                <th:block th:text="${player.difficultyName}">Insane</th:block>
+                                · <th:block th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">5.20★</th:block>
+                                <span class="mod" th:text="${'+' + player.mods}">+HD</span>
+                            </div>
+                            <div class="team-metrics">
+                                <div class="team-metric"><span>Score</span><strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">985,000</strong></div>
+                                <div class="team-metric"><span>Acc</span><strong th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">97.80%</strong></div>
+                                <div class="team-metric"><span>Combo</span><strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">820x</strong></div>
+                                <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">1</strong></div>
+                                <div class="team-metric"><span>PP</span><strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">118.7pp</strong></div>
+                            </div>
+                        </article>
+                        <div class="team-empty" th:if="${blue.players.isEmpty()}">No blue team scores.</div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="team-meter-wrap">
+                <div class="team-meter-copy">
+                    <span class="red-copy" th:text="${#numbers.formatInteger(red.totalScore, 1, 'COMMA')}">3,000,000</span>
+                    <span class="team-meter-result"
+                          th:classappend="${'result-' + result.winningTeam}"
+                          th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' · +' + #numbers.formatInteger(red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore, 1, 'COMMA')}">
+                        Red Team wins · +50,000
+                    </span>
+                    <span class="blue-copy" th:text="${#numbers.formatInteger(blue.totalScore, 1, 'COMMA')}">2,950,000</span>
+                </div>
+                <div class="team-meter"
+                     th:classappend="${'winner-' + result.winningTeam}"
+                     th:style="${'--lead: ' + #numbers.formatDecimal(result.teamLeadPercent, 1, 2) + '%'}">
+                    <div class="team-meter-fill"></div>
+                </div>
+            </div>
+
+            <div class="unassigned-team" th:if="${!result.unassignedPlayers.isEmpty()}">
+                <div class="unassigned-title">Unassigned players · API team data unavailable</div>
+                <article class="team-member" th:each="player : ${result.unassignedPlayers}">
+                    <div class="team-player-head">
+                        <div class="global-place" th:text="${'#' + player.position}">#3</div>
+                        <img alt="" class="team-avatar" th:if="${player.avatarUrl != null}" th:src="${player.avatarUrl}">
+                        <div class="team-avatar-placeholder" th:unless="${player.avatarUrl != null}">?</div>
+                        <div class="team-player-copy">
+                            <div class="team-player-name" th:text="${player.username}">Player</div>
+                            <div class="team-player-meta" th:text="${'UID ' + player.userId}">UID 4</div>
+                        </div>
+                        <div class="team-grade"
+                             th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                             th:text="${player.grade == null ? '--' : player.grade}">B</div>
+                    </div>
+                    <div class="team-diff">
+                        <th:block th:text="${player.difficultyName}">Insane</th:block>
+                        <span class="mod" th:text="${'+' + player.mods}">+NM</span>
+                    </div>
+                    <div class="team-metrics">
+                        <div class="team-metric"><span>Score</span><strong th:text="${player.totalScore == null ? '--' : #numbers.formatInteger(player.totalScore, 1, 'COMMA')}">900,000</strong></div>
+                        <div class="team-metric"><span>Acc</span><strong th:text="${player.accuracy == null ? '--' : Osu.formatAccuracy(player.accuracy)}">96.00%</strong></div>
+                        <div class="team-metric"><span>Combo</span><strong th:text="${player.maxCombo == null ? '--' : player.maxCombo + 'x'}">700x</strong></div>
+                        <div class="team-metric"><span>Miss</span><strong th:text="${player.misses}">2</strong></div>
+                        <div class="team-metric"><span>PP</span><strong th:text="${player.pp == null ? '--' : #numbers.formatDecimal(player.pp, 1, 1) + 'pp'}">100.0pp</strong></div>
+                    </div>
+                </article>
             </div>
         </div>
 

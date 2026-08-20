@@ -57,6 +57,9 @@ public class MultiplayerMatchDetails {
         @SerializedName("scoring_type")
         private String scoringType;
 
+        @SerializedName("team_type")
+        private String teamType;
+
         private BeatmapExtended beatmap;
         private List<JsonObject> scores;
     }

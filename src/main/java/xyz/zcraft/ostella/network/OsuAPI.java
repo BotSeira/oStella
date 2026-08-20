@@ -608,7 +608,7 @@ public class OsuAPI {
                 Integer position = object.has("position") && !object.get("position").isJsonNull()
                         ? object.get("position").getAsInt()
                         : null;
-                scores.add(new MultiplayerRoomScore(score, position));
+                scores.add(new MultiplayerRoomScore(score, position, multiplayerTeam(object)));
             }
             return List.copyOf(scores);
         } catch (JsonSyntaxException | IOException | InterruptedException e) {
@@ -618,6 +618,19 @@ public class OsuAPI {
                     e
             );
         }
+    }
+
+    private static String multiplayerTeam(JsonObject score) {
+        if (score.has("team") && !score.get("team").isJsonNull()) {
+            return score.get("team").getAsString();
+        }
+        if (score.has("match") && score.get("match").isJsonObject()) {
+            JsonObject match = score.getAsJsonObject("match");
+            if (match.has("team") && !match.get("team").isJsonNull()) {
+                return match.get("team").getAsString();
+            }
+        }
+        return null;
     }
 
 

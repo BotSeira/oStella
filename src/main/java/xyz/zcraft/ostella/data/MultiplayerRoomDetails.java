@@ -12,6 +12,7 @@ public class MultiplayerRoomDetails {
     private long id;
     private String name;
     private String status;
+    private String type;
     private boolean active;
 
     @SerializedName("ends_at")
