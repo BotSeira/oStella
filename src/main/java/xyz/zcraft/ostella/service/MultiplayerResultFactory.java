@@ -135,7 +135,7 @@ public final class MultiplayerResultFactory {
         long higherTeamScore = Math.max(redTotal, blueTotal);
         double teamLeadPercent = higherTeamScore == 0
                 ? 0
-                : Math.min(50, Math.sqrt(Math.abs(redTotal - blueTotal) / (double) higherTeamScore) * 50.0);
+                : Math.min(50, Math.sqrt(Math.abs(redTotal - blueTotal) / (double) roundAverage) * 75.0);
 
         return new MultiplayerResultData(
                 room.getId(),

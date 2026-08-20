@@ -900,6 +900,11 @@
             border-bottom: 1px solid var(--line);
         }
 
+        .team-panel.blue .team-header {
+            flex-direction: row-reverse;
+            text-align: right;
+        }
+
         .team-label {
             font-size: 26px;
             font-weight: 900;
@@ -947,10 +952,17 @@
             min-width: 0;
             align-items: center;
             gap: 8px;
+            grid-template-areas: "place avatar copy grade";
             grid-template-columns: 36px 40px minmax(0, 1fr) 44px;
         }
 
+        .team-panel.blue .team-player-head {
+            grid-template-areas: "grade copy avatar place";
+            grid-template-columns: 44px minmax(0, 1fr) 40px 36px;
+        }
+
         .global-place {
+            grid-area: place;
             color: var(--muted);
             font-size: 19px;
             font-weight: 900;
@@ -958,6 +970,7 @@
 
         .team-avatar,
         .team-avatar-placeholder {
+            grid-area: avatar;
             width: 40px;
             height: 40px;
             border: 1px solid var(--line);
@@ -975,7 +988,13 @@
         }
 
         .team-player-copy {
+            grid-area: copy;
             min-width: 0;
+        }
+
+        .team-panel.blue .team-player-copy,
+        .team-panel.blue .team-diff {
+            text-align: right;
         }
 
         .team-player-name {
@@ -997,6 +1016,7 @@
         }
 
         .team-grade {
+            grid-area: grade;
             width: 44px;
             height: 34px;
             border-radius: 7px;
@@ -1024,12 +1044,50 @@
             grid-template-columns: 1.45fr repeat(4, minmax(0, 0.8fr));
         }
 
+        .team-panel.red .team-metrics {
+            grid-template-columns: repeat(4, minmax(0, 0.8fr)) 1.45fr;
+        }
+
         .team-metric {
             min-width: 0;
+            text-align: center;
+        }
+
+        .team-panel .team-metric {
+            grid-row: 1;
+        }
+
+        .team-panel.red .team-metric:nth-child(1) {
+            grid-column: 5;
             text-align: right;
         }
 
-        .team-metric:first-child {
+        .team-panel.red .team-metric:nth-child(2) {
+            grid-column: 4;
+        }
+
+        .team-panel.red .team-metric:nth-child(3) {
+            grid-column: 3;
+        }
+
+        .team-panel.red .team-metric:nth-child(4) {
+            grid-column: 2;
+        }
+
+        .team-panel.red .team-metric:nth-child(5) {
+            grid-column: 1;
+            text-align: left;
+        }
+
+        .team-panel.blue .team-metric:nth-child(1) {
+            text-align: left;
+        }
+
+        .team-panel.blue .team-metric:nth-child(5) {
+            text-align: right;
+        }
+
+        .unassigned-team .team-metric:first-child {
             text-align: left;
         }
 
