@@ -544,6 +544,55 @@ public class OsuAPI {
         }
     }
 
+    public static MultiplayerRoomDetails.PlaylistItem getRoomEventPlaylistItem(
+            TokenData tokenData,
+            long roomId,
+            long playlistItemId
+    ) {
+        LOG.debug("Fetching events for multiplayer room {} playlist item {}", roomId, playlistItemId);
+        try {
+            final var request = newRequestBuilder(tokenData, "/rooms/" + roomId + "/events")
+                    .GET()
+                    .build();
+            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 404) {
+                return null;
+            }
+            if (response.statusCode() >= 400) {
+                throw new ApiException(
+                        ErrorCode.ROOM_FETCH_FAILED,
+                        "osu! API returned status " + response.statusCode() + " for room events " + roomId
+                );
+            }
+
+            return eventPlaylistItem(response.body(), playlistItemId);
+        } catch (JsonSyntaxException | IOException | InterruptedException e) {
+            throw new ApiException(
+                    ErrorCode.ROOM_FETCH_FAILED,
+                    "Failed to fetch events for room " + roomId,
+                    e
+            );
+        }
+    }
+
+    static MultiplayerRoomDetails.PlaylistItem eventPlaylistItem(String body, long playlistItemId) {
+        JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+        JsonArray playlistItems = root.has("playlist_items") && root.get("playlist_items").isJsonArray()
+                ? root.getAsJsonArray("playlist_items")
+                : new JsonArray();
+        for (JsonElement element : playlistItems) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject object = element.getAsJsonObject();
+            if (object.has("id") && object.get("id").getAsLong() == playlistItemId) {
+                return GSON.fromJson(object, MultiplayerRoomDetails.PlaylistItem.class);
+            }
+        }
+        return null;
+    }
+
     public static MultiplayerMatchDetails getMatch(TokenData tokenData, long matchId) {
         LOG.debug("Fetching stable multiplayer match {}", matchId);
         try {

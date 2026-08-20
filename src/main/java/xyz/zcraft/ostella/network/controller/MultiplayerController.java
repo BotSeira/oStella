@@ -137,6 +137,7 @@ public class MultiplayerController {
         List<MultiplayerRoomScore> roomScores = OsuAPI.getRoomPlaylistScores(
                 tokenManager.getTokenData(), roomId, playlistItemId
         );
+        enrichLazerTeamSnapshot(room, item, roomScores);
         enrichScores(roomScores, item);
         enrichDuelProfiles(roomScores);
         User owner = resolveOwner(room, item.getOwnerId());
@@ -149,6 +150,30 @@ public class MultiplayerController {
                 "scorev2",
                 room.getType()
         );
+    }
+
+    private void enrichLazerTeamSnapshot(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem item,
+            List<MultiplayerRoomScore> roomScores
+    ) {
+        String roomType = room.getType();
+        boolean teamVs = roomType != null
+                && roomType.toLowerCase(Locale.ROOT).replace('-', '_').contains("team");
+        boolean missingTeam = roomScores.stream().anyMatch(roomScore ->
+                roomScore.team() == null || roomScore.team().isBlank());
+        if (!teamVs || !missingTeam) {
+            return;
+        }
+
+        MultiplayerRoomDetails.PlaylistItem eventItem = OsuAPI.getRoomEventPlaylistItem(
+                tokenManager.getTokenData(), room.getId(), item.getId()
+        );
+        if (eventItem == null || eventItem.getDetails() == null) {
+            LOG.warn("Room events contain no details for playlist item {} in room {}", item.getId(), room.getId());
+            return;
+        }
+        item.setDetails(eventItem.getDetails());
     }
 
     private MultiplayerResultData getStableResultData(long matchId, long gameId) {
