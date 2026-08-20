@@ -11,10 +11,7 @@ import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
 import xyz.zcraft.osu.model.UserExtended;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public final class MultiplayerResultFactory {
     private MultiplayerResultFactory() {
@@ -89,7 +86,7 @@ public final class MultiplayerResultFactory {
                     Boolean.TRUE.equals(score.getPassed()),
                     statistic(score, "miss", "count_miss"),
                     scoreGap,
-                    normalizeTeam(roomScore.team())
+                    normalizeTeam(firstNonBlankOrNull(roomScore.team(), item.teamFor(score.getUserId())))
             ));
             if (totalScore != null) {
                 previousScore = totalScore;
@@ -99,7 +96,7 @@ public final class MultiplayerResultFactory {
 
         long roundTotal = players.stream()
                 .map(MultiplayerResultData.PlayerResult::totalScore)
-                .filter(value -> value != null)
+                .filter(Objects::nonNull)
                 .mapToLong(Long::longValue)
                 .sum();
         long scoredPlayers = players.stream()
@@ -173,7 +170,7 @@ public final class MultiplayerResultFactory {
     private static long teamTotal(List<MultiplayerResultData.PlayerResult> players) {
         return players.stream()
                 .map(MultiplayerResultData.PlayerResult::totalScore)
-                .filter(value -> value != null)
+                .filter(Objects::nonNull)
                 .mapToLong(Long::longValue)
                 .sum();
     }

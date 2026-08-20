@@ -6,6 +6,7 @@ import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.User;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 public class MultiplayerRoomDetails {
@@ -46,5 +47,22 @@ public class MultiplayerRoomDetails {
 
         private boolean expired;
         private BeatmapExtended beatmap;
+
+        private Details details;
+
+        public String teamFor(Long userId) {
+            if (userId == null || userId <= 0 || details == null || details.getTeams() == null) {
+                return null;
+            }
+            return details.getTeams().get(String.valueOf(userId));
+        }
+    }
+
+    @Data
+    public static class Details {
+        @SerializedName("room_type")
+        private String roomType;
+
+        private Map<String, String> teams;
     }
 }
