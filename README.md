@@ -10,6 +10,7 @@ and also provides a standalone API for other clients to consume.
 
 - PNG score panels for best and recent scores, beatmap, beatmapset, and so on!
 - PNG score analysis for a specific score
+- PNG beatmap PP+ composition and hit-object pattern analysis
 - PNG player comparison leaderboard endpoint (`/maplb`, `/leaderboard`)
 - Replay video orchestration for solo and multiplayer showcases via a separate osuRenderer service (`/replay`)
 - Current multiplayer room info endpoint (`/mp`)
@@ -73,6 +74,10 @@ Local administration commands are documented in [docs/console.md](docs/console.m
 The default config file is generated as `config.yml` when you first start the service.
 You can also copy the example config from [ostella-example-config.yml](/src/main/resources/ostella-example-config.yml)
 
+To show the performance+ skill breakdown in score analysis images and enable beatmap analysis, set
+`performancePlus.endpoint` to the calculator's API base URL (for example,
+`http://localhost:5000/api`). No other performance+ setting is required.
+
 ### 2) Install Playwright Dependencies
 
 ```shell
@@ -104,6 +109,7 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 |--------|--------------------------------------|--------------------------------|----------------------------------------------------|----------|
 | GET    | `/beatmaps/lookup`                   | Resolve beatmap IDs            | See section below                                  | JSON     |
 | GET    | `/beatmaps/{beatmapId}`              | Beatmap card image             | path `beatmapId` (+ optional query param `mod`)    | PNG      |
+| GET    | `/beatmaps/{beatmapId}/analysis`     | PP+ and object-pattern analysis | path `beatmapId` (+ optional query param `mod`)   | PNG      |
 | POST   | `/beatmaps/{beatmapId}/leaderboards` | Compare players on one beatmap | path `beatmapId` + POST Body `{"uids":[user ids]}` | PNG      |
 
 ### Beatmapsets
@@ -143,6 +149,7 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 | POST   | `/users/leaderboards`           | User PP leaderboard image | `{"uids":[user ids]}`            | PNG      |
 | GET    | `/users/{userId}/scores/bestof` | Best-of-N scores image    | path `userId`, query `n` (count) | PNG      |
 | GET    | `/users/{userId}/scores/recent` | Recent scores image       | path `userId`, query `n` (count) | PNG      |
+| GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1) | PNG |
 
 ### Replays (enabled when `replayRender.enabled` is true)
 
@@ -209,6 +216,10 @@ The rest of key-value pairs will be  available as direct variables in the templa
 
 Template rendering is powered by [Thymeleaf](https://www.thymeleaf.org/), 
 and you can use Thymeleaf syntax in your templates to access the data.
+
+Use `Osu.formatStarRating(value)` and `Osu.formatAccuracy(value)` for values that
+should match osu!'s in-game display. These helpers floor star ratings to two
+decimal places and accuracy ratios to four decimal places before formatting.
 
 #### External Assets
 

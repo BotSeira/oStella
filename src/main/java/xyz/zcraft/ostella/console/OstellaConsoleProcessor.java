@@ -230,7 +230,6 @@ public final class OstellaConsoleProcessor {
                   replayRender.enabled = %s
                   replayRender.workers = %s
                   replayRender.apiKey = %s
-                  performancePlus.enabled = %s
                   performancePlus.endpoint = %s
                 """.formatted(config.webserver().port(), config.webserver().maxThreads(), config.webserver().minThreads(),
                 config.webserver().idleTimeout(), config.ostella().requestPerSecond(),
@@ -239,7 +238,9 @@ public final class OstellaConsoleProcessor {
                 config.osu().clientId(), config.replayRender().enabled(),
                 String.join(", ", config.replayRender().workers()),
                 config.replayRender().apiKey().isBlank() ? "not set" : "configured (redacted)",
-                config.performancePlus().enabled(), config.performancePlus().endpoint()).stripTrailing());
+                config.performancePlus().endpoint().isBlank()
+                        ? "not set"
+                        : config.performancePlus().endpoint()).stripTrailing());
     }
 
     private Result log(ConsoleInputParser.ParsedInput input) {

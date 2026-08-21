@@ -7,6 +7,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -15,7 +16,11 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
+import xyz.zcraft.osu.model.UserExtended;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,6 +33,8 @@ import static xyz.zcraft.ostella.util.RequestUtil.*;
 public class UserController {
     private static final Logger LOG = LogManager.getLogger(UserController.class);
     private static final Gson GSON = new Gson();
+    private static final int USER_INFO_SCORE_SAMPLE_COUNT = 100;
+    private static final int USER_INFO_DISPLAY_SCORE_COUNT = 5;
 
     public final RenderService renderer;
     public final AsyncService executor;
@@ -112,11 +119,11 @@ public class UserController {
 
     public void getRecentScores(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireInt(context, "n");
+        final int n = requireScoreListLimit(context);
         final boolean fail = requireBoolean(context, "fail", false);
+        final List<ScoreFilter> filters = requireScoreFilters(context);
 
         final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
-
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
                         tokenManager.getTokenData(), u, type, n)
                 )
@@ -125,14 +132,21 @@ public class UserController {
                             if (user == null) {
                                 throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
                             }
-                            context.header("X-User-Id", String.valueOf(user.getId()));
-                            context.header("X-Score-Ids", scores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-
                             for (Score score : scores) {
                                 router.ensurePp(score);
                             }
 
-                            return renderer.renderScores(user, scores, fail ? ScoreType.RECENT : ScoreType.RECENT_PASS);
+                            FilteredScores filteredScores = applyFilters(scores, filters);
+                            context.header("X-User-Id", String.valueOf(user.getId()));
+                            context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
+
+                            return renderer.renderScores(
+                                    user,
+                                    filteredScores.scores(),
+                                    type,
+                                    filterLabels(filters),
+                                    filteredScores.originalPositions()
+                            );
                         }, renderer.getRenderExecutor()))
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
@@ -181,8 +195,8 @@ public class UserController {
 
     public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireInt(context, "n");
-
+        final int n = requireScoreListLimit(context);
+        final List<ScoreFilter> filters = requireScoreFilters(context);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
                         tokenManager.getTokenData(), u, ScoreType.BEST, n
                 ))
@@ -191,12 +205,164 @@ public class UserController {
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
                             .thenApplyAsync(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                for (Score score : scores) {
+                                    router.ensurePp(score);
+                                }
+                                FilteredScores filteredScores = applyFilters(scores, filters);
                                 context.header("X-User-Id", String.valueOf(user.getId()));
-                                context.header("X-Score-Ids", scores.stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-                                return renderer.renderScores(user, scores, ScoreType.BEST);
+                                context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
+                                return renderer.renderScores(
+                                        user,
+                                        filteredScores.scores(),
+                                        ScoreType.BEST,
+                                        filterLabels(filters),
+                                        filteredScores.originalPositions()
+                                );
                             }, renderer.getRenderExecutor());
                 })
                 .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    public void getUserInfo(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+        final CompletableFuture<UserExtended> userFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUser(tokenManager.getTokenData(), userId));
+        final CompletableFuture<List<Score>> topScoresFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(),
+                        userId,
+                        ScoreType.BEST,
+                        USER_INFO_SCORE_SAMPLE_COUNT
+                ));
+
+        context.future(() -> userFuture.thenCombine(topScoresFuture, UserInfoData::new)
+                .thenApplyAsync(data -> {
+                    if (data.user() == null) {
+                        throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
+                    }
+                    List<Score> displayScores = data.topScores().stream()
+                            .limit(USER_INFO_DISPLAY_SCORE_COUNT)
+                            .toList();
+                    for (Score score : displayScores) {
+                        router.ensurePp(score);
+                    }
+
+                    context.header("X-User-Id", String.valueOf(data.user().getId()));
+                    context.header(
+                            "X-Score-Ids",
+                            displayScores.stream()
+                                    .map(Score::getId)
+                                    .map(String::valueOf)
+                                    .collect(Collectors.joining(","))
+                    );
+                    return renderer.renderUserInfo(data.user(), data.topScores());
+                }, renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    public void getTodayBestScores(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+        final String daysParam = context.queryParam("days");
+        final int days = daysParam == null ? 1 : requirePositiveInt(context, "days");
+        final Instant cutoff = Instant.now().minus(days, ChronoUnit.DAYS);
+        final CompletableFuture<List<Score>> bestScoresFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(), userId, ScoreType.BEST, OsuAPI.MAX_USER_SCORES_LIMIT
+                ));
+
+        context.future(() -> bestScoresFuture
+                .thenApply(bestScores -> filterBestScoresSince(bestScores, cutoff))
+                .thenCompose(recentBestScores -> {
+                    if (recentBestScores.scores().isEmpty()) {
+                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No best scores found in the last " + days + " days");
+                    }
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                            .thenApplyAsync(user -> {
+                                if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                for (Score score : recentBestScores.scores()) {
+                                    router.ensurePp(score);
+                                }
+                                context.header("X-User-Id", String.valueOf(user.getId()));
+                                context.header(
+                                        "X-Score-Ids",
+                                        recentBestScores.scores().stream()
+                                                .map(Score::getId)
+                                                .map(String::valueOf)
+                                                .collect(Collectors.joining(","))
+                                );
+                                return renderer.renderScores(
+                                        user,
+                                        recentBestScores.scores(),
+                                        ScoreType.BEST,
+                                        List.of(),
+                                        recentBestScores.originalPositions(),
+                                        "Best Scores Achieved in the Last " + days + (days == 1 ? " Day" : " Days")
+                                );
+                            }, renderer.getRenderExecutor());
+                })
+                .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    private static List<ScoreFilter> requireScoreFilters(Context context) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+    }
+
+    private static int requireScoreListLimit(Context context) {
+        int limit = requirePositiveInt(context, "n");
+        if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
+            throw new ApiException(
+                    ErrorCode.ILLEGAL_ARGUMENT,
+                    "Score limit must not exceed " + OsuAPI.MAX_USER_SCORES_LIMIT
+            );
+        }
+        return limit;
+    }
+
+    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> originalPositions = new ArrayList<>();
+        for (int index = 0; index < scores.size(); index++) {
+            Score score = scores.get(index);
+            if (filters.stream().allMatch(filter -> filter.matches(score))) {
+                result.add(score);
+                originalPositions.add(index + 1);
+            }
+        }
+        if (!filters.isEmpty() && result.isEmpty()) {
+            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
+    }
+
+    static FilteredScores filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> bestPositions = new ArrayList<>();
+        for (int index = 0; index < bestScores.size(); index++) {
+            Score bestScore = bestScores.get(index);
+            try {
+                if (bestScore.getEndedAt() != null && !Instant.parse(bestScore.getEndedAt()).isBefore(cutoff)) {
+                    result.add(bestScore);
+                    bestPositions.add(index + 1);
+                }
+            } catch (DateTimeParseException e) {
+                LOG.warn("Ignoring best score {} with invalid ended_at: {}", bestScore.getId(), bestScore.getEndedAt());
+            }
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(bestPositions));
+    }
+
+    private static List<String> filterLabels(List<ScoreFilter> filters) {
+        return filters.stream().map(ScoreFilter::displayText).toList();
+    }
+
+    record FilteredScores(List<Score> scores, List<Integer> originalPositions) {
+    }
+
+    private record UserInfoData(UserExtended user, List<Score> topScores) {
     }
 
     public void getFriends(@NotNull Context context) {

@@ -219,12 +219,19 @@
             justify-self: end;
         }
 
-        .replay-badge {
+        .replay-container{
+            display: flex;
             background: rgba(102, 255, 204, 0.1);
             color: #66ffcc;
             border: 1px solid #66ffcc;
-            padding: 2px 8px;
             border-radius: 12px;
+            justify-content: center;
+            width: 40px;
+            height: 26px;
+        }
+
+        .replay-badge {
+            transform: translate(2px);
             font-size: 0.85em;
             font-weight: bold;
         }
@@ -485,7 +492,7 @@
             <div class="diff-row">
                 <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
                     <span th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)}"
-                          th:text="${'★' + #numbers.formatDecimal(diff.getStar(), 1, 2)}">★6.84</span>
+                          th:text="${'★' + Osu.formatStarRating(diff.getStar())}">★6.84</span>
                 </div>
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getStar() - score.getBeatmap().getDifficultyRating())}"
@@ -514,7 +521,9 @@
                      src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
             </div>
             <div class="score-time">
-                <span class="replay-badge" th:if="${replayPresent}">▶</span>
+                <div class="replay-container">
+                    <span class="replay-badge" th:if="${score.getHasReplay()}">▶</span>
+                </div>
                 <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>
             </div>
             <span class="score-time-long" th:text="${score.getEndedAt()}">2026-04-19T16:19:16Z</span>
@@ -601,7 +610,7 @@
         <!--suppress XmlUnresolvedReference -->
         <div class="data-block" style="align-items: flex-end; text-align: right;">
             <div class="data-label">Acc / Combo</div>
-            <div class="data-primary" th:text="${#numbers.formatDecimal(score.getAccuracy() * 100, 1, 2)} + '%'">
+            <div class="data-primary" th:text="${Osu.formatAccuracy(score.getAccuracy())}">
                 98.50%
             </div>
             <div class="data-sub">

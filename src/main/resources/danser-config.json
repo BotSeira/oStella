@@ -59,6 +59,15 @@
       "EnableRainbow": false
     }
   },
+  "CursorDance": {
+    "Movers": [
+      {
+        "Mover": "linear",
+        "SliderDance": false,
+        "RandomSliderDance": false
+      }
+    ]
+  },
   "Knockout": {
     "Mode": 2,
     "BubbleMinimumCombo": 20,

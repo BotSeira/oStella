@@ -45,6 +45,7 @@ public class WebServer implements Closeable {
 
             cfg.routes
                     .get("/beatmaps/lookup", router.beatmapController::lookupBeatmap)
+                    .get("/beatmaps/{beatmapId}/analysis", router.beatmapController::renderBeatmapAnalysisById)
                     .get("/beatmaps/{beatmapId}", router.beatmapController::renderBeatmapById)
                     .post("/beatmaps/{beatmapId}/leaderboards", router.leaderboardController::getMapLeaderboard)
                     .get("/beatmaps/{beatmapId}/background", router.beatmapController::getBackground)
@@ -65,6 +66,9 @@ public class WebServer implements Closeable {
 
                     .get("/multiplayer/rooms/current", router.multiplayerController::getCurrentRoom)
                     .get("/multiplayer/rooms/current/item", router.multiplayerController::getCurrentRoomItem)
+                    .get("/multiplayer/rooms/{roomId}/watch", router.multiplayerController::getRoomWatchState)
+                    .get("/multiplayer/rooms/{roomId}/playlist/{playlistItemId}/result",
+                            router.multiplayerController::renderRoomResult)
 
                     .post("/users", router.userController::getUsers)
                     .post("/users/lookup", router.userController::lookupUser)
@@ -72,8 +76,10 @@ public class WebServer implements Closeable {
                     .get("/users/me/friends", router.userController::getFriends)
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)
                     .post("/users/scores/recent/batch", router.userController::getRecentScoresBatch)
+                    .get("/users/{userId}", router.userController::getUserInfo)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
+                    .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
 
                     .get("/daily", router::getDaily)
                     .get("/health", router::getServerStatus)
@@ -88,6 +94,7 @@ public class WebServer implements Closeable {
             if (conf.replayRender().enabled()) {
                 cfg.routes
                         .post("/replays/renders/score/{scoreId}", router.replayController::queueReplayRenderOfId)
+                        .post("/replays/renders/preview/{beatmapId}", router.replayController::renderBeatmapPreview)
                         .post("/replays/renders/showcase/scores", router.replayController::renderShowcaseOfIds)
                         .post("/replays/renders/showcase/{beatmapId}", router.replayController::renderShowcaseOfUsers)
 
@@ -120,7 +127,8 @@ public class WebServer implements Closeable {
                                  ErrorCode.USER_FETCH_FAILED,
                                  ErrorCode.RENDER_QUEUE_FULL -> ctx.status(429);
 
-                            case ErrorCode.RENDERER_UNAVAILABLE -> ctx.status(502);
+                            case ErrorCode.RENDERER_UNAVAILABLE,
+                                 ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE -> ctx.status(502);
 
                             default -> ctx.status(500);
                         }

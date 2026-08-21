@@ -23,6 +23,7 @@
             background-color: #1a1a2e;
             color: #ffffff;
             font-family: 'Dejavu Sans', Tahoma, Geneva, Verdana, sans-serif !important;
+            font-variant-numeric: tabular-nums;
         }
 
         .root {
@@ -142,16 +143,14 @@
         }
 
         .mapper {
-            height: stretch;
-            display: flex;
-            align-items: end;
-            justify-content: center;
             margin-left: auto;
+            display: flex;
+            min-width: 0;
+            align-items: baseline;
+            justify-content: flex-end;
             gap: 8px;
             font-size: 1.2em;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         .mapper-by {
@@ -160,19 +159,26 @@
 
         .mapper-name {
             font-size: 1.5em;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .title-sub {
             display: flex;
+            align-items: baseline;
             font-weight: lighter;
-            margin-bottom: 6px;
-            gap: 8px;
+            margin-bottom: 12px;
+            gap: 10px;
+            min-width: 0;
         }
 
         .song-trans {
             font-size: 1.5em;
             font-family: serif;
             margin-top: -1px;
+            max-width: 42%;
+            flex: 0 1 auto;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -180,6 +186,8 @@
 
         .song-artist {
             font-size: 1.8em;
+            min-width: 0;
+            flex: 1 1 220px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -187,7 +195,7 @@
 
         .beatmap-id {
             font-size: 1.2em;
-            margin-left: auto;
+            flex: 0 0 auto;
             align-self: end;
             letter-spacing: 1px;
             color: #a0a0b8;
@@ -197,13 +205,13 @@
         .diff {
             display: flex;
             align-items: center;
-            justify-content: center;
             gap: 10px;
         }
 
         .diff-title {
             font-size: 2em;
             font-weight: bold;
+            min-width: 0;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -214,16 +222,21 @@
         }
 
         .diff-spec {
-            margin: 8px 0 8px 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
+            margin: 0 0 20px;
+            display: grid;
+            grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.3fr);
+            align-items: stretch;
+            gap: 28px;
             width: 100%;
         }
 
         .pp-spec {
-            display: flex;
-            gap: 10px;
+            display: grid;
+            grid-template-columns: 64px minmax(0, 1fr) auto;
+            align-items: end;
+            gap: 20px;
+            padding-top: 18px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .pp-title {
@@ -235,6 +248,20 @@
         .pp-value {
             font-size: 2em;
             font-weight: bold;
+            color: #fff;
+        }
+
+        .diff-type {
+            font-size: 1.2em;
+            color: #a0a0b8;
+            width: 70px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .diff-value {
+            font-size: 1.2em;
+            font-weight: normal;
             color: #fff;
         }
 
@@ -290,7 +317,7 @@
             gap: 20px;
             align-items: center;
             justify-content: left;
-            margin: 8px 0 8px 0;
+            margin: 0 0 18px;
             font-size: 1.4em;
         }
 
@@ -319,34 +346,55 @@
         }
 
         .meta {
-            margin: 0 16px 8px 16px;
+            margin: 0;
+            padding: 18px 24px 10px;
         }
 
         .spec-back {
             position: relative;
-            display: flex;
-            text-align: end;
-            gap: 8px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            text-align: left;
         }
 
         .spec-front {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             text-align: start;
-            gap: 8px;
-        }
-
-        .spec-pp {
-            display: flex;
-            text-align: center;
-            justify-content: center;
             gap: 24px;
         }
 
-        .spec-pp-detail {
-            margin-left: auto;
+        .spec-back > .spec-group {
+            padding: 0 6px;
+            border-left: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .spec-back > .spec-group:first-child {
+            padding-left: 0;
+            border-left: 0;
+        }
+
+        .spec-pp {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            text-align: left;
+            gap: 20px;
+        }
+
+        .pp-group {
             display: flex;
-            gap: 5px;
+            flex-direction: column;
+        }
+
+        .diff-group {
+            display: flex;
+            gap: 4px;
+        }
+
+        .spec-pp-detail {
             align-items: end;
+            padding-left: 10px;
+            border-left: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .spec-pp-detail .pp-value {
@@ -358,10 +406,16 @@
             font-size: 1.2em;
             color: #a0a0b8;
             margin-top: -8px;
+            text-align: end;
+        }
+
+        #total-length {
+            text-align: start;
         }
 
         .bottom {
-            margin-top: 16px;
+            margin-top: 12px;
+            padding: 0 4px;
             display: flex;
             justify-content: space-between;
             font-size: 1em;
@@ -369,23 +423,32 @@
         }
 
         .user-stat {
-            gap: 30px;
-            margin: 16px 16px 16px 16px;
+            margin: 0;
+            padding: 22px 24px 20px;
+        }
+
+        .user-stat-layout {
+            display: grid;
+            grid-template-columns: minmax(330px, 0.9fr) minmax(0, 1.1fr);
+            align-items: stretch;
+            gap: 28px;
         }
 
         .stat-wrapper {
-            width: 500px;
+            width: auto;
+            min-width: 0;
         }
 
         .stat {
             display: flex;
+            align-items: flex-start;
             gap: 12px;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
         }
 
         .stat-label {
             text-transform: uppercase;
-            width: 80px;
+            width: 76px;
             text-align: right;
             flex-shrink: 0;
             color: #a0a0b8;
@@ -397,7 +460,13 @@
             align-items: center;
             gap: 12px;
             width: 100%;
-            max-width: 250px;
+            max-width: 280px;
+        }
+
+        .stat > span {
+            min-width: 0;
+            line-height: 1.4;
+            overflow-wrap: anywhere;
         }
 
         .progress-track {
@@ -424,18 +493,25 @@
 
         .chart-row-layout {
             display: flex;
-            align-items: center;
-            gap: 24px;
-            margin-top: 20px;
-            margin-bottom: 12px;
+            align-items: stretch;
+            gap: 16px;
+            margin: 0;
+            min-width: 0;
             width: 100%;
+        }
+
+        .chart-wrapper {
+            flex-grow: 1;
+            min-width: 0;
+            height: 128px;
+            position: relative;
         }
 
         .side-legend {
             display: flex;
             flex-direction: column;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
             font-size: 0.95em;
             color: #a0a0b8;
             flex-shrink: 0;
@@ -443,6 +519,11 @@
 
         .spec-diff {
             margin-bottom: -4px;
+            text-align: end;
+        }
+
+        .spec-item {
+            align-self: end;
         }
 
         /*noinspection CssUnusedSymbol*/
@@ -473,7 +554,9 @@
             display: flex;
             flex-wrap: wrap;
             gap: 8px;
-            margin-top: 12px;
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .tag-badge {
@@ -501,7 +584,7 @@
 
         .spec-wrapper {
             background: rgba(0, 0, 0, 0.3);
-            padding: 12px 24px;
+            padding: 10px 24px 10px;
             gap: 32px;
             border-top: 1px solid rgba(255, 255, 255, 0.05);
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -579,14 +662,14 @@
             <div class="diff">
                 <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
                     <div class="diff-rating" th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)} + ';'"
-                         th:text="'★' + ${#numbers.formatDecimal(diff.getStar(), 1, 2)}">★5.78
+                         th:text="'★' + ${Osu.formatStarRating(diff.getStar())}">★5.78
                     </div>
                 </div>
                 <span class="spec-diff spec-star-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getStar() - beatmap.getDifficultyRating())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getStar() - beatmap.getDifficultyRating())}">▲1.23
                     </span>
-                <div class="diff-title" th:text="${beatmap.version}">This Is An Example Diff</div>
+                <div class="diff-title" th:text="${beatmap.version}">Example</div>
                 <div class="mapper">
                     <span class="mapper-by">By</span>
                     <span class="mapper-name" th:text="${Beatmaps.getOwnersString(beatmap)}">ExampleMapper</span>
@@ -628,7 +711,7 @@
                         <span class="spec-label-top">Length</span>
                         <span class="spec-value"
                               th:text="${DiffSpecs.getLengthStr(diff)}">1:15</span>
-                        <span class="spec-sub"
+                        <span class="spec-sub" id="total-length"
                               th:text="'~' + ${DiffSpecs.getTotalLengthStr(diff)}">~ 1:58</span>
                     </div>
                     <div class="spec-group">
@@ -701,21 +784,24 @@
                     </div>
                 </div>
                 <div class="spec-pp-detail">
-                    <span>//</span>
-                    <div class="pp-group">
-                        <span class="pp-value" th:text="${#numbers.formatDecimal(diff.getAim(), 1, 1)}">2.5</span>
-                        <span class="pp-sub">Aim</span>
+                    <div class="diff-group">
+                        <span class="diff-type">Aim</span>
+                        <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getAim(), 1, 1)}">2.5</span>
                     </div>
-                    <div class="pp-group">
-                        <span class="pp-value" th:text="${#numbers.formatDecimal(diff.getSpeed(), 1, 1)}">1.8</span>
-                        <span class="pp-sub">Spd</span>
+                    <div class="diff-group">
+                        <span class="diff-type">Speed</span>
+                        <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getSpeed(), 1, 1)}">1.8</span>
+                    </div>
+                    <div class="diff-group">
+                        <span class="diff-type">Reading</span>
+                        <span class="diff-value" th:text="${#numbers.formatDecimal(diff.getReading(), 1, 1)}">3.3</span>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="user-stat">
-            <div style="display: flex;">
+            <div class="user-stat-layout">
                 <div class="stat-wrapper">
                     <div class="stat">
                         <div class="stat-label">Pass%</div>
@@ -738,7 +824,7 @@
                     </div>
                 </div>
                 <div class="chart-row-layout">
-                    <div class="chart-wrapper" style="flex-grow: 1; height: 100px; position: relative;">
+                    <div class="chart-wrapper">
                         <canvas id="failChart"></canvas>
                     </div>
                     <div class="side-legend">

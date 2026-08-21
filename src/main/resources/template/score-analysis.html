@@ -286,6 +286,78 @@
             height: 100%;
         }
 
+        .performance-plus-container {
+            margin: 0 24px 24px 24px;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        .performance-plus-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .performance-plus-total {
+            color: #ffffff;
+            font-size: 1.2em;
+            font-weight: 900;
+        }
+
+        .performance-plus-note {
+            color: #a0a0b8;
+            font-size: 0.8em;
+            font-weight: normal;
+            letter-spacing: normal;
+            text-transform: none;
+        }
+
+        .performance-plus-skills {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .performance-plus-skill {
+            min-width: 0;
+            padding: 10px;
+            border-radius: 9px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .performance-plus-skill-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            color: #a0a0b8;
+            font-size: 0.78em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .performance-plus-value {
+            margin-top: 3px;
+            font-size: 1.35em;
+            font-weight: 900;
+        }
+
+        .performance-plus-track {
+            height: 5px;
+            margin-top: 7px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .performance-plus-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #2fb8f8, #9cff22);
+        }
+
         .chart-box {
             background: rgba(0, 0, 0, 0.2);
             border-radius: 12px;
@@ -423,7 +495,7 @@
     <div class="diff-row">
         <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
             <span th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)}"
-                  th:text="'★' + ${#numbers.formatDecimal(diff.getStar(), 1, 2)}">★6.84</span>
+                  th:text="'★' + ${Osu.formatStarRating(diff.getStar())}">★6.84</span>
         </div>
         <div class="diff-name" th:style="'color: ' + ${DiffSpecs.getDiffColor(diff)}"
              th:text="${score.getBeatmap().getVersion()}">Example Difficulty
@@ -460,7 +532,7 @@
             <div class="data-block" style="align-items: flex-end; text-align: right;">
                 <div class="data-label">Accuracy</div>
                 <div class="data-primary"
-                     th:text="${#numbers.formatDecimal(score.getAccuracy() * 100, 1, 2)} + '%'">85.42%
+                     th:text="${Osu.formatAccuracy(score.getAccuracy())}">85.42%
                 </div>
                 <div class="data-sub"
                      th:text="${Scores.getHitResultString(score)}">456 / 78 / 9 / 10
@@ -501,6 +573,33 @@
             <div class="chart-title">Performance Graph</div>
             <div class="chart-content">
                 <div id="performanceChart" style="width: 100%; height: 100%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="performance-plus-container" th:if="${performancePlus != null}">
+        <div class="performance-plus-header">
+            <div class="chart-title" style="margin: 0; text-align: left;">
+                Skills
+                <span class="performance-plus-note">data from pp+</span>
+            </div>
+            <div class="performance-plus-total"
+                 th:text="${'TOTAL ' + #numbers.formatDecimal(performancePlus.total(), 1, 1) + 'pp'}">
+                TOTAL 529.9pp
+            </div>
+        </div>
+        <div class="performance-plus-skills">
+            <div class="performance-plus-skill" th:each="skill : ${performancePlus.skills()}">
+                <div class="performance-plus-skill-head">
+                    <span th:text="${skill.name()}">Aim</span>
+                    <span th:text="${#numbers.formatDecimal(skill.percentage(), 1, 1) + '%'}">20.0%</span>
+                </div>
+                <div class="performance-plus-value"
+                     th:text="${#numbers.formatDecimal(skill.pp(), 1, 1) + 'pp'}">186.2pp</div>
+                <div class="performance-plus-track">
+                    <div class="performance-plus-fill"
+                         th:style="${'width: ' + skill.percentage() + '%;'}"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -598,6 +697,9 @@
     const performanceData = /*[[${performanceData}]]*/ [
         [15000, 112.4], [25000, 148.2], [35000, 132.8], [45000, 179.5], [55000, 161.3]
     ];
+    const realtimePpData = /*[[${realtimePpData}]]*/ [
+        [15000, 42.8], [25000, 91.3], [35000, 118.6], [45000, 154.2], [55000, 183.7]
+    ];
     const missTimes = /*[[${missTimes}]]*/ [33000, 52000];
     const hit50Times = /*[[${hit50Times}]]*/ [44000];
     const hit100Times = /*[[${hit100Times}]]*/ [23000, 49000];
@@ -639,8 +741,36 @@
         return times.map(time => [time, difficultyAt(time)]);
     }
 
+    function lastDataTime(data) {
+        return data.length > 0 ? data[data.length - 1][0] : 0;
+    }
+
     const performanceChartDom = document.getElementById('performanceChart');
-    if (performanceChartDom && performanceData.length > 0) {
+    if (performanceChartDom && (performanceData.length > 0 || realtimePpData.length > 0)) {
+        const ppAxis = position => ({
+            type: 'value',
+            position,
+            scale: true,
+            min: 0,
+            name: 'PP',
+            nameGap: 8,
+            nameTextStyle: {
+                fontSize: position === 'left' ? 10 : 0,
+                color: '#a0a0b8',
+            },
+            axisLabel: {
+                color: '#a0a0b8',
+                fontSize: 10,
+                formatter: value => Math.round(value) + 'pp'
+            },
+            axisLine: {show: false},
+            axisTick: {show: false},
+
+            splitLine: position === 'left'
+                ? {lineStyle: {color: 'rgba(255, 255, 255, 0.08)'}}
+                : {show: false}
+        });
+
         const performanceChart = echarts.init(performanceChartDom, 'dark');
         const commonMarkStyle = {
             borderWidth: 1.5,
@@ -656,13 +786,13 @@
                 itemWidth: 12,
                 itemHeight: 9,
                 textStyle: {color: '#d7d7e5', fontSize: 11},
-                data: ['Miss', '50', '100', 'ST', 'SE']
+                data: ['Difficulty', 'PP', 'Miss', '50', '100', 'ST', 'SE']
             },
-            grid: {top: 32, bottom: 30, left: 45, right: 14},
+            grid: {top: 32, bottom: 30, left: 45, right: 54},
             xAxis: {
                 type: 'value',
                 min: 0,
-                max: Math.max(mapEndTime, performanceData[performanceData.length - 1][0]),
+                max: Math.max(mapEndTime, lastDataTime(performanceData), lastDataTime(realtimePpData)),
                 axisLabel: {
                     color: '#a0a0b8',
                     fontSize: 10,
@@ -672,27 +802,39 @@
                 axisTick: {show: false},
                 splitLine: {show: false}
             },
-            yAxis: {
-                type: 'value',
-                scale: true,
-                min: value => Math.max(0, value.min - Math.max(5, (value.max - value.min) * 0.12)),
-                max: value => value.max + Math.max(5, (value.max - value.min) * 0.12),
-                name: 'Window Difficulty',
-                nameGap: 8,
-                nameTextStyle: {color: '#a0a0b8', fontSize: 10},
-                axisLabel: {
-                    color: '#a0a0b8',
-                    fontSize: 10,
-                    formatter: value => Math.round(value)
-                },
-                axisLine: {show: false},
-                axisTick: {show: false},
-                splitLine: {lineStyle: {color: 'rgba(255, 255, 255, 0.08)'}}
-            },
+            yAxis: [
+                ppAxis('left'),
+                ppAxis('right'),
+
+                {
+                    type: 'value',
+                    show: false,
+                    scale: true,
+                    min: value => Math.max(0, value.min - Math.max(5, (value.max - value.min) * 0.12)),
+                    max: value => value.max + Math.max(5, (value.max - value.min) * 0.12),
+
+                    name: 'Difficulty',
+                    nameGap: 8,
+                    nameTextStyle: {
+                        color: '#a0a0b8',
+                        fontSize: 10
+                    },
+                    axisLabel: {
+                        show: false,
+                        color: '#a0a0b8',
+                        fontSize: 10,
+                        formatter: value => Math.round(value)
+                    },
+                    axisLine: {show: false},
+                    axisTick: {show: false},
+                    splitLine: {show: false}
+                }
+            ],
             series: [
                 {
-                    name: 'Window Difficulty',
+                    name: 'Difficulty',
                     type: 'line',
+                    yAxisIndex: 2,
                     data: performanceData,
                     smooth: 0.18,
                     showSymbol: performanceData.length === 1,
@@ -709,8 +851,42 @@
                     }
                 },
                 {
+                    name: 'PP',
+                    type: 'line',
+                    yAxisIndex: 0,
+                    data: realtimePpData,
+                    smooth: 0.12,
+                    showSymbol: realtimePpData.length === 1,
+                    symbolSize: 5,
+                    silent: true,
+                    z: 4,
+                    lineStyle: {
+                        color: '#ff78b4',
+                        width: 2.5
+                    },
+                    itemStyle: {
+                        color: '#ff78b4'
+                    }
+                },
+                {
+                    type: 'line',
+                    yAxisIndex: 1,
+                    data: realtimePpData,
+
+                    showSymbol: false,
+                    silent: true,
+
+                    lineStyle: { opacity: 0 },
+                    itemStyle: { opacity: 0 },
+
+                    emphasis: { disabled: true },
+
+                    z: -1
+                },
+                {
                     name: 'Miss',
                     type: 'scatter',
+                    yAxisIndex: 2,
                     data: performanceMarks(missTimes),
                     symbol: 'path://M2,0L10,8L18,0L20,2L12,10L20,18L18,20L10,12L2,20L0,18L8,10L0,2Z',
                     symbolSize: 14,
@@ -722,9 +898,10 @@
                 {
                     name: '50',
                     type: 'scatter',
+                    yAxisIndex: 2,
                     data: performanceMarks(hit50Times),
                     symbol: 'pin',
-                    symbolSize: 15,
+                    symbolSize: 12,
                     clip: false,
                     silent: true,
                     z: 9,
@@ -733,9 +910,10 @@
                 {
                     name: '100',
                     type: 'scatter',
+                    yAxisIndex: 2,
                     data: performanceMarks(hit100Times),
                     symbol: 'pin',
-                    symbolSize: 15,
+                    symbolSize: 12,
                     clip: false,
                     silent: true,
                     z: 8,
@@ -744,6 +922,7 @@
                 {
                     name: 'ST',
                     type: 'scatter',
+                    yAxisIndex: 2,
                     data: performanceMarks(sliderTickBreakTimes),
                     symbol: 'pin',
                     symbolSize: 11,
@@ -755,9 +934,10 @@
                 {
                     name: 'SE',
                     type: 'scatter',
+                    yAxisIndex: 2,
                     data: performanceMarks(sliderEndBreakTimes),
                     symbol: 'triangle',
-                    symbolSize: 14,
+                    symbolSize: 12,
                     clip: false,
                     silent: true,
                     z: 9,

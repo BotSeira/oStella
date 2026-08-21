@@ -12,9 +12,13 @@ import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.Placement;
+import xyz.zcraft.ostella.data.BeatmapAnalysisData;
+import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.UserPerformanceSummary;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.ostella.util.Colors;
+import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.ostella.util.format.*;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
@@ -32,6 +36,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 public class RenderService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(RenderService.class);
@@ -57,16 +62,17 @@ public class RenderService implements AutoCloseable {
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
         resolver.setTemplateMode(TemplateMode.HTML);
         resolver.setPrefix("/template/"); // Looks in src/main/resources/template/
+        resolver.setCacheable(false);
         resolver.setSuffix(".html");
 
         templateEngine = new TemplateEngine();
         templateEngine.setTemplateResolver(resolver);
 
         FileTemplateResolver resolverLocal = new FileTemplateResolver();
-        resolver.setTemplateMode(TemplateMode.HTML);
-        resolver.setSuffix(".html");
-        resolver.setCacheable(false);
-        resolver.setCheckExistence(true);
+        resolverLocal.setTemplateMode(TemplateMode.HTML);
+        resolverLocal.setSuffix(".html");
+        resolverLocal.setCacheable(false);
+        resolverLocal.setCheckExistence(true);
 
         templateEngineLocal = new TemplateEngine();
         templateEngineLocal.setTemplateResolver(resolverLocal);
@@ -151,25 +157,89 @@ public class RenderService implements AutoCloseable {
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("DiffSpecs", new DiffSpecFormatUtil());
         //noinspection InstantiationOfUtilityClass
+        ctx.setVariable("Osu", new OsuFormatUtil());
+        //noinspection InstantiationOfUtilityClass
         ctx.setVariable("cache", new CacheService());
+        //noinspection InstantiationOfUtilityClass
+        ctx.setVariable("MiscUtil", new MiscUtil());
         return ctx;
     }
 
     public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type) {
+        return renderScores(user, scores, type, List.of());
+    }
+
+    public byte[] renderUserInfo(UserExtended user, List<Score> topScores) {
+        Context ctx = createContext();
+        ctx.setVariable("user", user);
+        ctx.setVariable("scores", topScores.stream().limit(5).toList());
+        ctx.setVariable("performance", UserPerformanceSummary.from(user, topScores));
+        ctx.setVariable("activity", UserFormatUtil.getRecentMonthlyActivity(user));
+        ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("user-info", ctx);
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type, List<String> filters) {
+        return renderScores(
+                user,
+                scores,
+                type,
+                filters,
+                IntStream.rangeClosed(1, scores.size()).boxed().toList()
+        );
+    }
+
+    public byte[] renderScores(
+            UserExtended user,
+            List<Score> scores,
+            ScoreType type,
+            List<String> filters,
+            List<Integer> scorePositions
+    ) {
+        return renderScores(user, scores, type, filters, scorePositions, scoreListTitle(type, filters, scores.size()));
+    }
+
+    public byte[] renderScores(
+            UserExtended user,
+            List<Score> scores,
+            ScoreType type,
+            List<String> filters,
+            List<Integer> scorePositions,
+            String title
+    ) {
+        if (scores.size() != scorePositions.size()) {
+            throw new IllegalArgumentException("Each rendered score must have a display position");
+        }
         Context ctx = createContext();
         ctx.setVariable("user", user);
         ctx.setVariable("scores", scores);
-        ctx.setVariable("type", switch (type) {
-            case BEST -> "Best of " + scores.size() + " Scores";
-            case RECENT -> "Most recent " + scores.size() + " Scores";
-            case RECENT_PASS -> "Most recent " + scores.size() + " Passed Scores";
-        });
+        ctx.setVariable("scorePositions", List.copyOf(scorePositions));
+        ctx.setVariable("filters", List.copyOf(filters));
+        ctx.setVariable("filtered", !filters.isEmpty());
+        ctx.setVariable("type", title);
         ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
         String finalHtml = templateEngine.process("score-list", ctx);
 
         return takeScreenshot(finalHtml);
+    }
+
+    private static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
+        return filters.isEmpty()
+                ? switch (type) {
+                    case BEST -> "Best of " + scoreCount + " Scores";
+                    case RECENT -> "Most recent " + scoreCount + " Scores";
+                    case RECENT_PASS -> "Most recent " + scoreCount + " Passed Scores";
+                }
+                : switch (type) {
+                    case BEST -> "Filtered Scores From Best Scores";
+                    case RECENT -> "Filtered Scores From Recent Scores";
+                    case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
+                };
     }
 
     public byte[] renderMapLeaderboard(BeatmapExtended map, List<Placement> placements, double ppMax) {
@@ -181,6 +251,15 @@ public class RenderService implements AutoCloseable {
 
         String finalHtml = templateEngine.process("map-leaderboard", ctx);
 
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderMultiplayerResult(MultiplayerResultData result) {
+        Context ctx = createContext();
+        ctx.setVariable("result", result);
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("multiplayer-room-result", ctx);
         return takeScreenshot(finalHtml);
     }
 
@@ -203,6 +282,20 @@ public class RenderService implements AutoCloseable {
 
         String finalHtml = templateEngine.process("beatmap", ctx);
 
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderBeatmapAnalysis(BeatmapAnalysisData analysis) {
+        Context ctx = createContext();
+        ctx.setVariable("analysis", analysis);
+        ctx.setVariable("beatmap", analysis.beatmap());
+        ctx.setVariable("diff", analysis.diff());
+        ctx.setVariable("performancePlus", analysis.performance());
+        ctx.setVariable("types", analysis.types());
+        ctx.setVariable("aimTypes", analysis.aimTypes());
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("beatmap-analysis", ctx);
         return takeScreenshot(finalHtml);
     }
 
@@ -233,7 +326,9 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("aimBias", analyzeData.aimBias());
         ctx.setVariable("avgTimingError", analyzeData.avgTimingError());
         ctx.setVariable("analyze", analyzeData.replayAnalyze());
+        ctx.setVariable("performancePlus", analyzeData.performancePlus());
         ctx.setVariable("performanceData", analyzeData.performanceGraph().windowDifficulties());
+        ctx.setVariable("realtimePpData", analyzeData.performanceGraph().realtimePp());
         ctx.setVariable("missTimes", analyzeData.performanceGraph().misses());
         ctx.setVariable("hit50Times", analyzeData.performanceGraph().hit50s());
         ctx.setVariable("hit100Times", analyzeData.performanceGraph().hit100s());

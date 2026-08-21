@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>oStella - Beatmap Analysis</title>
+    <script>window.__OSTELLA_RENDER_READY__ = false;</script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            width: fit-content;
+            height: fit-content;
+            padding: 24px;
+            background: #1a1a2e;
+            color: #fff;
+            font-family: 'Dejavu Sans', Tahoma, Geneva, Verdana, sans-serif !important;
+        }
+
+        .analysis-card {
+            width: 850px;
+            overflow: hidden;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .hero {
+            position: relative;
+            height: 170px;
+            background-position: center;
+            background-size: cover;
+        }
+
+        .hero-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 20px 24px;
+            background: linear-gradient(to bottom, rgba(26, 26, 46, 0.08), rgba(26, 26, 46, 0.65) 58%, #1a1a2e 100%);
+        }
+
+        .mod-list {
+            position: absolute;
+            top: 8px;
+            right: 14px;
+            display: flex;
+            gap: 7px;
+        }
+
+        .mod-badge {
+            display: grid;
+            place-items: center;
+        }
+
+        .mod-back {
+            grid-area: 1 / 1;
+            z-index: 1;
+        }
+
+        .mod-icon {
+            grid-area: 1 / 1;
+            z-index: 2;
+            filter: brightness(0) saturate(100%) invert(16%) sepia(7%) saturate(5011%) hue-rotate(314deg) brightness(107%) contrast(101%);
+        }
+
+        .song-title {
+            max-width: 700px;
+            overflow: hidden;
+            font-size: 1.9em;
+            font-weight: 900;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .song-meta {
+            margin-top: 3px;
+            color: #e2e8f0;
+            font-size: 1.05em;
+        }
+
+        .diff-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 24px 12px;
+        }
+
+        .diff-badge {
+            display: flex;
+            align-items: center;
+            font-weight: 700;
+            padding: 2px 12px;
+            border-radius: 40px;
+            font-size: 1.1em;
+            gap: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .diff-name {
+            min-width: 0;
+            overflow: hidden;
+            font-size: 1.18em;
+            font-weight: 800;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .map-id {
+            margin-left: auto;
+            color: #a0a0b8;
+            letter-spacing: 1px;
+        }
+
+        .stats-strip {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            margin: 0 24px 18px;
+            padding: 11px 14px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 11px;
+            background: rgba(0, 0, 0, 0.22);
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-label, .section-kicker {
+            color: #a0a0b8;
+            font-size: 0.74em;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            margin-top: 2px;
+            font-size: 1.12em;
+            font-weight: 900;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: 1.35fr 1fr;
+            gap: 14px;
+            margin: 0 24px 20px;
+        }
+
+        .summary-panel, .section {
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.22);
+        }
+
+        .summary-panel {
+            padding: 16px 18px;
+        }
+
+        .primary-type {
+            margin-top: 4px;
+            font-size: 2.55em;
+            font-weight: 950;
+            line-height: 1;
+        }
+
+        .primary-share {
+            margin-left: 8px;
+            color: #e2e8f0;
+            font-size: 0.42em;
+        }
+
+        .primary-description {
+            margin-top: 8px;
+            padding-top: 6px;
+            color: #c8c8d8;
+            line-height: 1.35;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .primary-aim strong {
+            color: #ff9fba;
+        }
+
+        .pp-total-row {
+            display: flex;
+            align-items: end;
+            justify-content: space-between;
+        }
+
+        .pp-total {
+            margin-top: 3px;
+            font-size: 2.35em;
+            font-weight: 950;
+            line-height: 1;
+        }
+
+        .dominant-skill {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            color: #e2e8f0;
+        }
+
+        .dominant-skill strong {
+            color: #9cff22;
+        }
+
+        .section {
+            margin: 0 24px 20px;
+            padding: 16px;
+        }
+
+        .analysis-columns {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            align-items: stretch;
+            gap: 14px;
+            margin: 0 24px 20px;
+        }
+
+        .analysis-columns .section {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            margin: 0;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            color: #a0a0b8;
+            font-size: 1.08em;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .section-note {
+            color: #77778f;
+            font-size: 0.78em;
+        }
+
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .skill-card, .type-card {
+            min-width: 0;
+            padding: 11px;
+            border-radius: 9px;
+            background: rgba(255, 255, 255, 0.035);
+        }
+
+        .skill-head, .type-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        .skill-name, .type-name {
+            color: #a0a0b8;
+            font-size: 0.77em;
+            font-weight: 900;
+            text-transform: uppercase;
+        }
+
+        .skill-share, .type-share {
+            color: #c8c8d8;
+            font-size: 0.77em;
+            font-weight: 800;
+        }
+
+        .skill-value {
+            margin-top: 4px;
+            font-size: 1.35em;
+            font-weight: 950;
+        }
+
+        .bar-track {
+            height: 5px;
+            margin-top: 8px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .skill-fill {
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #2fb8f8, #9cff22);
+        }
+
+        .types-grid, .aim-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 9px;
+        }
+
+        .analysis-columns .skills-grid,
+        .analysis-columns .types-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .low-percentage-results {
+            width: 100%;
+            padding-top: 8px;
+            margin-top: auto;
+            margin-bottom: -4px;
+            color: #a0a0b8;
+            font-size: 0.82em;
+            line-height: 1.35;
+            text-align: right;
+        }
+
+        .type-card {
+            padding: 10px 12px;
+        }
+
+        .type-name {
+            color: #fff;
+            font-size: 0.9em;
+        }
+
+        .type-fill {
+            height: 100%;
+            border-radius: inherit;
+        }
+
+        .aim-card {
+            min-width: 0;
+            padding: 10px 12px;
+            border-left: 3px solid #ff6b8a;
+            border-radius: 8px;
+            background: rgba(255, 107, 138, 0.055);
+        }
+
+        .aim-name {
+            font-size: 0.83em;
+            font-weight: 900;
+        }
+
+        .aim-share {
+            float: right;
+            color: #ff9fba;
+            font-size: 0.78em;
+            font-weight: 900;
+            height: 100%;
+            align-content: center;
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 24px 16px;
+            color: #77778f;
+            font-size: 0.82em;
+        }
+    </style>
+</head>
+<body>
+<div class="analysis-card">
+    <div class="hero"
+         style="background-image: url('https://assets.ppy.sh/beatmaps/2414617/covers/slimcover.jpg');"
+         th:style="${'background-image: url(' + cache.getImageSrc(beatmap.getBeatmapset().getCovers().getSlimcover()) + ');'}">
+        <div class="hero-overlay">
+            <div class="mod-list" th:if="${analysis.hasMods()}">
+                <div class="mod-badge" th:each="amod : ${analysis.mods()}">
+                    <svg class="mod-back" fill="#ff6666" height="55" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="55">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <img alt="mod" class="mod-icon"
+                         height="50" src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg" th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="50">
+                </div>
+            </div>
+            <div class="song-title" th:text="${beatmap.getBeatmapset().getTitle()}">Example Song Title</div>
+            <div class="song-meta">
+                <span th:text="${beatmap.getBeatmapset().getArtist()}">Example Artist</span>
+                <span style="color:#77778f; margin:0 7px;">//</span>
+                <span th:text="${Beatmaps.getOwnersString(beatmap)}">Mapper</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="diff-row">
+        <span class="diff-badge"
+              th:style="${'background:' + DiffSpecs.getDiffColor(diff) + ';color:' + DiffSpecs.getDiffTextColor(diff) + ';'}"
+              th:text="${'★' + Osu.formatStarRating(diff.getStar())}">★6.84</span>
+        <span class="diff-name" th:style="${'color:' + DiffSpecs.getDiffColor(diff) + ';'}"
+              th:text="${beatmap.getVersion()}">Insane</span>
+        <span class="map-id" th:text="${'M' + beatmap.getId()}">M123456</span>
+    </div>
+
+    <div class="stats-strip">
+        <div class="stat">
+            <div class="stat-label">CS</div>
+            <div class="stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().cs(),1,2)}">4.00</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">AR</div>
+            <div class="stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().ar(),1,2)}">9.30</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">OD</div>
+            <div class="stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().od(),1,2)}">8.50</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">HP</div>
+            <div class="stat-value" th:text="${#numbers.formatDecimal(diff.getDifficulty().hp(),1,2)}">6.00</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">BPM</div>
+            <div class="stat-value" th:text="${#numbers.formatDecimal(diff.getBpm(),1,0)}">180</div>
+        </div>
+        <div class="stat">
+            <div class="stat-label">Length</div>
+            <div class="stat-value" th:text="${DiffSpecs.getLengthStr(diff)}">2:35</div>
+        </div>
+    </div>
+
+    <div class="summary">
+        <div class="summary-panel">
+            <div class="section-kicker">Primary Map Type</div>
+            <div class="primary-type" th:style="${'color:' + analysis.primaryType().color() + ';'}">
+                <span th:text="${analysis.primaryType().name()}">Tech</span>
+                <span class="primary-share"
+                      th:text="${#numbers.formatDecimal(analysis.primaryType().percentage(),1,1) + '%'}">22.4%</span>
+            </div>
+            <div class="primary-description" th:text="${analysis.primaryType().description()}">
+                Irregular movement, precision and changing flow
+            </div>
+        </div>
+        <div class="summary-panel">
+            <div class="section-kicker">Performance</div>
+            <div class="pp-total-row">
+                <div class="pp-total" th:text="${#numbers.formatDecimal(analysis.diff().getPpSS(),1,1) + 'pp'}">
+                    529.9pp
+                </div>
+            </div>
+            <div class="dominant-skill">
+                Dominant skill:
+                <strong th:text="${analysis.primarySkill().name() + ' · ' + #numbers.formatDecimal(analysis.primarySkill().pp(),1,1) + 'pp'}">
+                    Aim · 186.2pp
+                </strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="analysis-columns">
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">PP Composition</div>
+                <div class="section-note">data from pp+</div>
+            </div>
+            <div class="skills-grid">
+                <div class="skill-card" th:each="skill : ${analysis.skillsByPercentage()}"
+                     th:if="${skill.percentage() > 10}">
+                    <div class="skill-head">
+                        <span class="skill-name" th:text="${skill.name()}">Jump Aim</span>
+                        <span class="skill-share"
+                              th:text="${#numbers.formatDecimal(skill.percentage(),1,1) + '%'}">17.0%</span>
+                    </div>
+                    <div class="skill-value" th:text="${#numbers.formatDecimal(skill.pp(),1,1) + 'pp'}">144.1pp</div>
+                    <div class="bar-track">
+                        <div class="skill-fill" th:style="${'width:' + skill.percentage() + '%;'}"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="low-percentage-results"
+                 th:if="${Beatmaps.hasLowPercentageSkillResult(analysis.skillsByPercentage(), 10.0)}"
+                 th:text="'Not Likely: ' + ${Beatmaps.getLowPercentageSkillString(analysis.skillsByPercentage(), 10.0)}">
+                Not Likely: Accuracy(8%), Stamina(1%)
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">Potential Map Type</div>
+<!--                <div class="section-note">hit-object timing · placement · sliders · map properties</div>-->
+            </div>
+            <div class="types-grid">
+                <div class="type-card" th:each="type : ${types}" th:if="${type.percentage() > 10}">
+                    <div class="type-head">
+                        <span class="type-name" th:style="${'color:' + type.color() + ';'}"
+                              th:text="${type.name()}">Stream</span>
+                        <span class="type-share"
+                              th:text="${#numbers.formatDecimal(type.percentage(),1,1) + '%'}">19.8%</span>
+                    </div>
+<!--                    <div class="type-description" th:text="${type.description()}">-->
+<!--                        Sustained tapping supported by continuous flow aim-->
+<!--                    </div>-->
+                    <div class="bar-track">
+                        <div class="type-fill"
+                             th:style="${'width:' + type.percentage() + '%;background:' + type.color() + ';'}"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="low-percentage-results"
+                 th:if="${Beatmaps.hasLowPercentageResult(types, 10.0)}"
+                 th:text="'Not Likely: ' + ${Beatmaps.getLowPercentageTypeString(types, 10.0)}">
+                Not Likely: Stream(8%), Flow(1%)
+            </div>
+        </div>
+    </div>
+
+    <div class="section" th:if="${Beatmaps.doShowAimBreakdown(analysis)}">
+        <div class="section-header">
+            <div class="section-title">Potential Aim Types</div>
+<!--            <div class="section-note">relative evidence within detected aim patterns</div>-->
+        </div>
+        <div class="aim-grid">
+            <div class="aim-card" th:each="aimType : ${aimTypes}" th:if="${aimType.percentage() > 20}">
+                <span class="aim-name" th:text="${aimType.name()}">Cross-screen Jump Aim</span>
+                <span class="aim-share" th:text="${#numbers.formatDecimal(aimType.percentage(),1,1) + '%'}">23.5%</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>Generated with oStella · PP+ and object-pattern analysis</span>
+        <span th:text="${time}">2026-08-19T12:00:00Z</span>
+    </div>
+</div>
+<script>window.__OSTELLA_RENDER_READY__ = true;</script>
+</body>
+</html>

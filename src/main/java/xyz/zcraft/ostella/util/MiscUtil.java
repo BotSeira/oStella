@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Objects;
 
 public class MiscUtil {
     public static String getRelativeTimeAgo(String isoTimestamp) {
@@ -50,5 +51,9 @@ public class MiscUtil {
             }
         }
         return merged;
+    }
+
+    public static boolean strEquals(String a, String b) {
+        return Objects.equals(a, b);
     }
 }

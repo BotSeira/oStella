@@ -15,14 +15,18 @@ import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
+import xyz.zcraft.ostella.service.BeatmapPreviewService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.LocalScoreService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.ReplayParser;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
+import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.io.IOException;
@@ -74,18 +78,10 @@ public class ReplayController {
                 }
                 context.status(200).result(new Response(true, "Render complete!", obj).toString());
             }
-            case ReplayService.JobStatus.FAILED -> context.status(200).result(
-                    new Response(true, "Render failed",
-                            GSON.toJsonTree(Map.of(
-                                    "status", "failed",
-                                    "id", jobId
-                            ))).toString());
-            case ReplayService.JobStatus.TIMEOUT -> context.status(200).result(
-                    new Response(true, "Render timed out",
-                            GSON.toJsonTree(Map.of(
-                                    "status", "timeout",
-                                    "id", jobId
-                            ))).toString());
+            case ReplayService.JobStatus.FAILED -> respondTerminalStatus(
+                    context, jobId, "failed", "Render failed", jobProgress.error());
+            case ReplayService.JobStatus.TIMEOUT -> respondTerminalStatus(
+                    context, jobId, "timeout", "Render timed out", jobProgress.error());
             case ReplayService.JobStatus.QUEUED -> context.status(200).result(
                     new Response(true, "Render is waiting in queue",
                             GSON.toJsonTree(Map.of(
@@ -221,6 +217,95 @@ public class ReplayController {
 
             return finalizeShowcase(context, scoreFutures, showcaseRequest.qqUpload());
         });
+    }
+
+    private void respondTerminalStatus(Context context, String jobId, String status,
+                                       String message, String error) {
+        JsonObject obj = terminalStatusData(jobId, status, error);
+        context.status(200).result(new Response(true, message, obj).toString());
+    }
+
+    static JsonObject terminalStatusData(String jobId, String status, String error) {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("status", status);
+        obj.addProperty("id", jobId);
+        if (error != null && !error.isBlank()) {
+            obj.addProperty("error", error);
+        }
+        return obj;
+    }
+
+    public void renderBeatmapPreview(@NotNull Context context) {
+        if (replayService == null) return;
+
+        final long beatmapId = requirePathLong(context, "beatmapId");
+        final PreviewRequest request;
+        final String mods;
+        try {
+            request = context.body() == null || context.body().isBlank()
+                    ? new PreviewRequest(null, null)
+                    : GSON.fromJson(context.body(), PreviewRequest.class);
+            mods = BeatmapPreviewService.normalizeMods(request == null ? null : request.mods());
+        } catch (RuntimeException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), beatmapId))
+                .thenCompose(beatmap -> executor.enqueueAsync(() -> {
+                    if (beatmap == null) {
+                        throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found");
+                    }
+                    if (beatmap.getModeInt() != null && beatmap.getModeInt() != 0) {
+                        throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT,
+                                "Only osu!standard beatmaps can be previewed");
+                    }
+
+                    long beatmapsetId = beatmap.getBeatmapsetId();
+                    if (!CacheService.cacheBeatmapsetFile(beatmapsetId)) {
+                        throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED,
+                                "Failed to cache beatmapset");
+                    }
+
+                    try {
+                        OsuBeatmap parsed = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+                        BeatmapPreviewService.PreviewSegment segment =
+                                BeatmapPreviewService.selectSegment(parsed, mods);
+                        Path beatmapset = CacheService.getBeatmapsetArchivePath(beatmapsetId);
+                        ReplayService.QueuedJob queued = replayService.queueRenderPreview(
+                                beatmapId,
+                                beatmapsetId,
+                                beatmapset,
+                                segment.start(),
+                                segment.end(),
+                                mods,
+                                request == null ? null : request.qqUpload()
+                        );
+
+                        JsonObject obj = new JsonObject();
+                        obj.addProperty("status", "queued");
+                        obj.addProperty("position", queued.position());
+                        obj.addProperty("id", queued.id());
+                        obj.addProperty("start", segment.start());
+                        obj.addProperty("end", segment.end());
+                        obj.addProperty("selection", segment.reason());
+                        obj.addProperty("mods", mods.isEmpty() ? "NM" : mods);
+                        obj.add("beatmap", GSON.toJsonTree(beatmap));
+
+                        context.status(202).result(
+                                new Response(true, "Beatmap preview render queued!", obj).toString());
+                        return null;
+                    } catch (ParseException e) {
+                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+                    } catch (AnalyzeException e) {
+                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED,
+                                "Failed to select a beatmap preview segment", e);
+                    } catch (IOException e) {
+                        throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED,
+                                "Failed to prepare beatmapset for osuRenderer", e);
+                    } catch (IllegalArgumentException e) {
+                        throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+                    }
+                })));
     }
 
     @NonNull
@@ -464,5 +549,8 @@ public class ReplayController {
     }
 
     public record ShowcaseRequest(List<String> ids, ReplayService.QqUploadRequest qqUpload) {
+    }
+
+    public record PreviewRequest(String mods, ReplayService.QqUploadRequest qqUpload) {
     }
 }

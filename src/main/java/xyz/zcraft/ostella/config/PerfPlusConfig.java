@@ -1,7 +1,9 @@
 package xyz.zcraft.ostella.config;
 
 public record PerfPlusConfig(
-        boolean enabled,
         String endpoint
 ) {
+    public PerfPlusConfig {
+        endpoint = endpoint == null ? "" : endpoint.strip();
+    }
 }

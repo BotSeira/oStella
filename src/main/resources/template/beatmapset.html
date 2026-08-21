@@ -387,7 +387,7 @@
         <div class="diff-row" th:each="bm, iterStat : ${beatmapset.beatmaps}">
             <div class="star-badge"
                  th:style="'background: ' + ${Colors.getBeatmapDiffColor(bm.getDifficultyRating())} + '; color: ' + ${Colors.getBeatmapDiffTextColor(bm.getDifficultyRating())} + ';'">
-                <div class="star-num" th:text="'★' + ${#numbers.formatDecimal(bm.difficultyRating, 1, 2)}">★5.24
+                <div class="star-num" th:text="'★' + ${Osu.formatStarRating(bm.difficultyRating)}">★5.24
                 </div>
             </div>
 

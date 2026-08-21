@@ -107,10 +107,11 @@ public class CacheService {
     }
 
     public static Path getBeatmapPath(long id, boolean update) {
-        if (!Files.exists(BEATMAP_CACHE.resolve(String.valueOf(id))) || update) {
+        Path beatmapPath = beatmapCachePath(id);
+        if (!Files.exists(beatmapPath) || update) {
             try {
                 LOG.debug("Caching beatmap {}", id);
-                cacheBeatmapFile(id);
+                cacheBeatmapFile(id, beatmapPath);
                 LOG.debug("Beatmap {} cached", id);
             } catch (IOException e) {
                 LOG.error("Failed to download beatmap!", e);
@@ -118,16 +119,20 @@ public class CacheService {
             }
         }
 
-        return BEATMAP_CACHE.resolve(String.valueOf(id)).toAbsolutePath();
+        return beatmapPath.toAbsolutePath();
     }
 
     public static Path getBeatmapPath(long id) {
         return getBeatmapPath(id, false);
     }
 
-    private static void cacheBeatmapFile(long id) throws IOException {
-        Files.deleteIfExists(BEATMAP_CACHE.resolve(String.valueOf(id)));
-        Files.write(BEATMAP_CACHE.resolve(String.valueOf(id)), executor.enqueueAsync(() -> OsuAPI.getBeatmapBytes(id)).join());
+    private static Path beatmapCachePath(long id) {
+        return BEATMAP_CACHE.resolve(id + ".osu");
+    }
+
+    private static void cacheBeatmapFile(long id, Path beatmapPath) throws IOException {
+        Files.deleteIfExists(beatmapPath);
+        Files.write(beatmapPath, executor.enqueueAsync(() -> OsuAPI.getBeatmapBytes(id)).join());
     }
 
     @NotNull
@@ -522,7 +527,7 @@ public class CacheService {
     private static List<Path> cachePaths(String type, long id) throws IOException {
         return switch (type) {
             case "SCORE" -> List.of(SCORE_JSON_CACHE.resolve(id + ".json"));
-            case "BEATMAP" -> List.of(BEATMAP_CACHE.resolve(String.valueOf(id)));
+            case "BEATMAP" -> List.of(beatmapCachePath(id));
             case "REPLAY" -> List.of(REPLAY_CACHE.resolve(id + ".osr"));
             case "BEATMAPSET" -> {
                 if (!Files.exists(BEATMAPSET_CACHE)) yield List.of(BEATMAPSET_CACHE.resolve(id + ".osz"));

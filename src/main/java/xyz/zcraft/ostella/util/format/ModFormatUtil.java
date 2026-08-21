@@ -8,13 +8,21 @@ public class ModFormatUtil {
         return Colors.getModColor(mod.getAcronym());
     }
 
+    public static String getColorHex(String acronym) {
+        return Colors.getModColor(acronym);
+    }
+
     public static String getTextColorHex(Mod mod) {
         return Colors.getModTextColor(mod.getAcronym());
     }
 
     public static String getModIcon(Mod mod) {
+        return getModIcon(mod.getAcronym());
+    }
+
+    public static String getModIcon(String acronym) {
         //https://osu.ppy.sh/assets/images/mod-icon.dacd6669.svg
-        return switch (mod.getAcronym()) {
+        return switch (acronym) {
             case "EZ" -> "https://osu.ppy.sh/assets/images/mod-easy.92150de2.svg";
             case "NF" -> "https://osu.ppy.sh/assets/images/mod-no-fail.325de5a8.svg";
             case "HT" -> "https://osu.ppy.sh/assets/images/mod-half-time.680aa75e.svg";

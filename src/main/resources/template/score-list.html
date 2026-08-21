@@ -37,6 +37,7 @@
         }
 
         .profile-main {
+            position: relative;
             display: flex;
             align-items: center;
             gap: 40px;
@@ -196,6 +197,28 @@
             gap: 40px;
         }
 
+        .filter-summary {
+            position: absolute;
+            bottom: -18px;
+            right: 0;
+            display: flex;
+            flex-wrap: wrap;
+            align-content: center;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .filter-chip {
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 102, 170, 0.55);
+            background: rgba(255, 102, 170, 0.12);
+            color: #ffd0e6;
+            font-size: 1.15em;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
         /*noinspection CssUnusedSymbol*/
         .change-num-up {
             color: #4ade80;
@@ -217,6 +240,7 @@
             display: grid;
             grid-template-columns: repeat(4, 1fr);
             gap: 20px;
+            min-width: 1660px;
         }
 
         .card {
@@ -522,10 +546,16 @@
                         </div>
                     </div>
                 </div>
-                <div class="chart-wrapper" style="width: 650px; height: 80px; margin-top: 15px; margin-left: auto;">
-                    <canvas id="historyChart"></canvas>
+                <div style="max-width: 700px; margin-top: 15px; margin-left: auto;">
+                    <div class="chart-wrapper" style="width: 700px; height: 80px; ">
+                        <canvas id="historyChart"></canvas>
+                    </div>
                 </div>
             </div>
+        </div>
+        <div class="filter-summary" th:if="${filtered}">
+            <span style="font-size: 20px; align-self: center;">Filters | </span>
+            <span class="filter-chip" th:each="filter : ${filters}" th:text="${filter}">Accuracy ≥ 98%</span>
         </div>
     </div>
     <div class="rank-counts-container">
@@ -587,7 +617,7 @@
                  th:style="'background: ' + ${Colors.getBeatmapDiffColor(score.getBeatmap().getDifficultyRating())} + ';'">
                 <div class="diff-rating"
                      th:style="'color: ' + ${Colors.getBeatmapDiffTextColor(score.getBeatmap().getDifficultyRating())} + ';'"
-                     th:text="'★' + ${#numbers.formatDecimal(score.beatmap.difficultyRating, 1, 2)}">
+                     th:text="'★' + ${Osu.formatStarRating(score.beatmap.difficultyRating)}">
                     ★5.78
                 </div>
             </div>
@@ -596,7 +626,7 @@
         </div>
         <div style="display: grid;">
             <span class="acc-number"
-                  th:text="${#numbers.formatDecimal(score.accuracy * 100, 1, 2)} + '% ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
             <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
                 456 / 132 / 12 / 34
             </div>
@@ -613,7 +643,7 @@
         </div>
         <div class="score-record">
             <div style="display: flex; gap: 8px; align-items: center;">
-                <span th:text="'#' + ${iterstat.index + 1}">#1</span>
+                <span th:text="${'#' + scorePositions.get(iterstat.index)}">#1</span>
                 <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
             </div>
             <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
@@ -628,46 +658,48 @@
 
 <!--suppress ThymeleafObsoleteInlineAttributeInspection -->
 <script th:inline="javascript">
-    const historyData = /*[[${user.rankHistory.data}]]*/ [12345, 12222, 11111, 10000, 9876];
+    const historyChart = document.getElementById('historyChart');
+    if (historyChart) {
+        const historyData = /*[[${user.rankHistory.data}]]*/ [12345, 12222, 11111, 10000, 9876];
 
-    let max = 0;
-    for (let i = 0; i < historyData.length; i++) max = max < historyData[i] ? historyData[i] : max;
-    for (let i = 0; i < historyData.length; i++) historyData[i] = max - historyData[i];
+        let max = 0;
+        for (let i = 0; i < historyData.length; i++) max = max < historyData[i] ? historyData[i] : max;
+        for (let i = 0; i < historyData.length; i++) historyData[i] = max - historyData[i];
 
-    const labels = historyData.map((_, index) => index);
-
-    const ctx = document.getElementById('historyChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: historyData,
-                borderColor: '#ff66aa', // osu! pink
-                backgroundColor: 'rgba(255, 102, 170, 0.1)', // Faded pink fill
-                borderWidth: 3,
-                pointRadius: 0, // Hides the dots to make a clean, solid line
-                fill: true,
-                tension: 0.4 // This makes the line beautifully curved instead of jagged
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false, // CRITICAL: Playwright will capture a blank screen if this is true!
-            scales: {
-                x: {display: false}, // Hide the X axis grid
-                y: {
-                    display: false, // Hide the Y axis grid for a clean, minimalist look
-                    // reverse: true // UNCOMMENT THIS IF GRAPHING RANK (Since #1 is better than #10000)
-                }
+        const labels = historyData.map((_, index) => index);
+        const ctx = historyChart.getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: historyData,
+                    borderColor: '#ff66aa', // osu! pink
+                    backgroundColor: 'rgba(255, 102, 170, 0.1)', // Faded pink fill
+                    borderWidth: 3,
+                    pointRadius: 0, // Hides the dots to make a clean, solid line
+                    fill: true,
+                    tension: 0.4 // This makes the line beautifully curved instead of jagged
+                }]
             },
-            plugins: {
-                legend: {display: false},
-                tooltip: {enabled: false}
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false, // CRITICAL: Playwright will capture a blank screen if this is true!
+                scales: {
+                    x: {display: false}, // Hide the X axis grid
+                    y: {
+                        display: false, // Hide the Y axis grid for a clean, minimalist look
+                        // reverse: true // UNCOMMENT THIS IF GRAPHING RANK (Since #1 is better than #10000)
+                    }
+                },
+                plugins: {
+                    legend: {display: false},
+                    tooltip: {enabled: false}
+                }
             }
-        }
-    });
+        });
+    }
 
     window.__OSTELLA_RENDER_READY__ = true;
 </script>
