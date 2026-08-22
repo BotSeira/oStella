@@ -521,8 +521,8 @@
                      src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
             </div>
             <div class="score-time">
-                <div class="replay-container">
-                    <span class="replay-badge" th:if="${score.getHasReplay()}">▶</span>
+                <div class="replay-container" th:if="${score.getHasReplay()}">
+                    <span class="replay-badge">▶</span>
                 </div>
                 <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>
             </div>
