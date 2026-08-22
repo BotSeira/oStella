@@ -623,7 +623,7 @@
             isolation: isolate;
             min-width: 0;
             overflow: visible;
-            padding: 30px 52px 28px 30px;
+            padding: 32px 52px 28px 30px;
         }
 
         .duel-cover {
@@ -683,6 +683,47 @@
                     100% 100%,
                     calc(50% - var(--duel-cut)) 100%);
             background: linear-gradient(270deg, rgba(21, 24, 41, 0.64), rgba(21, 24, 41, 0.96));
+        }
+
+        .duel-winner-title {
+            position: absolute;
+            top: 0;
+            height: 26px;
+            z-index: 10;
+            font-weight: 900;
+            font-size: 22px;
+            padding: 0 20px;
+            letter-spacing: 4px;
+        }
+
+        .duel-winner-title.left {
+            width: 105.2%;
+            left: 0;
+            clip-path: polygon(
+                    0 0,
+                    calc(99.2%) 0,
+                    calc(98.88%) 100%,
+                    0 100%);
+            text-align: right;
+
+            background-color: var(--red-team);
+        }
+
+        .duel-winner-title.right {
+            width: 97%;
+            right: 0;
+            clip-path: polygon(
+                    calc(1.4%) 0,
+                    100% 0,
+                    100% 100%,
+                    calc(0.5%) 100%
+            );
+            text-align: left;
+            background-color: var(--blue-team);
+        }
+
+        .duelist:not(.winner) .duel-winner-title {
+            visibility: hidden;
         }
 
         .duelist.right {
@@ -966,6 +1007,14 @@
             text-align: right;
         }
 
+        .team-panel.red.winner .team-header {
+            background: var(--red-team);
+        }
+
+        .team-panel.blue.winner .team-header {
+            background: var(--blue-team);
+        }
+
         .team-label {
             font-size: 26px;
             font-weight: 900;
@@ -974,6 +1023,15 @@
         .team-panel.red .team-label,
         .team-panel.red .team-total {
             color: #fecdd3;
+        }
+
+        .team-panel.red.winner .team-label,
+        .team-panel.red.winner .team-total,
+        .team-panel.red.winner .team-count,
+        .team-panel.blue.winner .team-label,
+        .team-panel.blue.winner .team-total,
+        .team-panel.blue.winner .team-count {
+            color: #ffffff;
         }
 
         .team-panel.blue .team-label,
@@ -1478,6 +1536,9 @@
         <div class="duel" th:if="${result.isDuel()}"
              th:with="left=${result.duelPlayers[0]}, right=${result.duelPlayers[1]}">
             <article class="duelist left" th:classappend="${left.position == 1 ? 'winner' : ''}">
+                <div class="duel-winner-title left">
+                    WINNER
+                </div>
                 <img alt="" class="duel-cover"
                      th:if="${left.profileCoverUrl != null}"
                      th:src="${left.profileCoverUrl}">
@@ -1502,7 +1563,9 @@
                          th:text="${left.totalScore == null ? '--' : #numbers.formatInteger(left.totalScore, 1, 'COMMA')}">
                         1,000,000
                     </div>
-                    <div class="duel-delta" th:if="${left.scoreGap != null}" th:text="'-' + ${#numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">-123,456</div>
+                    <div class="duel-delta" th:if="${left.scoreGap != null}"
+                         th:text="'-' + ${#numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">-123,456
+                    </div>
                 </div>
                 <div class="duel-diff">
                     <th:block th:text="${left.difficultyName}">Insane</th:block>
@@ -1525,19 +1588,20 @@
                     </div>
                     <div class="duel-metric"><span>Rank</span><strong
                             th:text="${left.grade == null ? '--' : left.grade}">S</strong></div>
-<!--                    <div class="duel-metric"><span>Score gap</span><strong-->
-<!--                            th:text="${left.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">—</strong>-->
-<!--                    </div>-->
+                    <!--                    <div class="duel-metric"><span>Score gap</span><strong-->
+                    <!--                            th:text="${left.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(left.scoreGap, 1, 'COMMA')}">—</strong>-->
+                    <!--                    </div>-->
                 </div>
             </article>
 
             <div class="duel-center">
-                <span class="duel-winner left-winner" th:if="${left.position == 1}">Winner</span>
                 <strong>VS</strong>
-                <span class="duel-winner right-winner" th:if="${right.position == 1}">Winner</span>
             </div>
 
             <article class="duelist right" th:classappend="${right.position == 1 ? 'winner' : ''}">
+                <div class="duel-winner-title right">
+                    WINNER
+                </div>
                 <img alt="" class="duel-cover"
                      th:if="${right.profileCoverUrl != null}"
                      th:src="${right.profileCoverUrl}">
@@ -1558,7 +1622,9 @@
                     </div>
                 </div>
                 <div style="display: flex; margin-left: auto; justify-content: end;">
-                    <div class="duel-delta" th:if="${right.scoreGap != null}" th:text="'-' + ${#numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">-123,456</div>
+                    <div class="duel-delta" th:if="${right.scoreGap != null}"
+                         th:text="'-' + ${#numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">-123,456
+                    </div>
                     <div class="duel-score"
                          th:text="${right.totalScore == null ? '--' : #numbers.formatInteger(right.totalScore, 1, 'COMMA')}">
                         985,000
@@ -1585,9 +1651,9 @@
                     </div>
                     <div class="duel-metric"><span>Rank</span><strong
                             th:text="${right.grade == null ? '--' : right.grade}">A</strong></div>
-<!--                    <div class="duel-metric"><span>Score gap</span><strong-->
-<!--                            th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong>-->
-<!--                    </div>-->
+                    <!--                    <div class="duel-metric"><span>Score gap</span><strong-->
+                    <!--                            th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong>-->
+                    <!--                    </div>-->
                 </div>
             </article>
         </div>
@@ -1595,7 +1661,8 @@
         <div class="team-battle" th:if="${result.isTeamVs()}"
              th:with="red=${result.teams[0]}, blue=${result.teams[1]}">
             <div class="team-columns">
-                <section class="team-panel red">
+                <section class="team-panel red"
+                         th:classappend="${MiscUtil.strEquals(result.winningTeam(), 'red') ? 'winner' : ''}">
                     <div class="team-header">
                         <div>
                             <div class="team-label" th:text="${red.name}">Red Team</div>
@@ -1606,7 +1673,8 @@
                         </div>
                     </div>
                     <div class="team-members">
-                        <article class="team-member" th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                        <article class="team-member"
+                                 th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
                                  th:each="player : ${red.players}">
                             <div class="team-player-head">
                                 <div class="global-place" th:text="${'#' + player.position}">#1</div>
@@ -1652,7 +1720,8 @@
                     </div>
                 </section>
 
-                <section class="team-panel blue">
+                <section class="team-panel blue"
+                         th:classappend="${MiscUtil.strEquals(result.winningTeam(), 'blue') ? 'winner' : ''}">
                     <div class="team-header">
                         <div>
                             <div class="team-label" th:text="${blue.name}">Blue Team</div>
@@ -1663,7 +1732,8 @@
                         </div>
                     </div>
                     <div class="team-members">
-                        <article class="team-member" th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
+                        <article class="team-member"
+                                 th:classappend="${player.grade == null ? 'grade-none' : 'grade-' + #strings.toLowerCase(player.grade)}"
                                  th:each="player : ${blue.players}">
                             <div class="team-player-head">
                                 <div class="global-place" th:text="${'#' + player.position}">#2</div>
@@ -1727,7 +1797,7 @@
                 </div>
                 <div class="team-meter-result"
                      th:classappend="${'result-' + result.winningTeam}"
-                     th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' By +' + #numbers.formatInteger(red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore, 1, 'COMMA')}">
+                     th:text="${result.winningTeam == 'tie' ? 'Tie' : (result.winningTeam == 'red' ? 'Red Team wins' : 'Blue Team wins') + ' By +' + #numbers.formatInteger((red.totalScore >= blue.totalScore ? red.totalScore - blue.totalScore : blue.totalScore - red.totalScore), 1, 'COMMA')}">
                     Red Team wins By +50,000
                 </div>
             </div>
