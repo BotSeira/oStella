@@ -1535,7 +1535,7 @@
 
         <div class="duel" th:if="${result.isDuel()}"
              th:with="left=${result.duelPlayers[0]}, right=${result.duelPlayers[1]}">
-            <article class="duelist left winner" th:classappend="${left.position == 1 ? 'winner' : ''}">
+            <article class="duelist left" th:classappend="${left.position == 1 ? 'winner' : ''}">
                 <div class="duel-winner-title left">
                     WINNER
                 </div>
