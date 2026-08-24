@@ -7,9 +7,9 @@ import lombok.SneakyThrows;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
+import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.osu.model.Score;
 
@@ -26,12 +26,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Iterator;
-import java.util.Comparator;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -151,11 +146,16 @@ public class CacheService {
 
         if (!Files.exists(IMAGE_CACHE.resolve(fileName))) {
             try {
-                cacheImage(fileName, url);
-                LOG.debug("Image {} cached", fileName);
-            } catch (IOException e) {
+                if (cacheImage(fileName, url)) {
+                    LOG.debug("Image {} cached", fileName);
+                } else {
+                    LOG.error("Image {} failed to cache", fileName);
+                    return "";
+                }
+            } catch (Exception e) {
                 LOG.error("Failed to download image!", e);
-                throw new RuntimeException("Failed to download image!", e);
+                return "";
+//                throw new RuntimeException("Failed to download image!", e);
             }
         }
 
@@ -163,9 +163,16 @@ public class CacheService {
                 + IMAGE_CACHE.resolve(getFileName(url)).toAbsolutePath().toString().replace("\\", "/");
     }
 
-    private static void cacheImage(String fileName, String url) throws IOException {
-        Files.deleteIfExists(IMAGE_CACHE.resolve(fileName));
-        Files.write(IMAGE_CACHE.resolve(fileName), Objects.requireNonNull(OsuAPI.getImageBytes(url)));
+    private static boolean cacheImage(String fileName, String url) throws IOException {
+        final byte[] imageBytes = OsuAPI.getImageBytes(url);
+        if (imageBytes == null) {
+            return false;
+        }
+        if (Files.exists(REPLAY_CACHE.resolve(fileName))) {
+            Files.deleteIfExists(IMAGE_CACHE.resolve(fileName));
+        }
+        Files.write(IMAGE_CACHE.resolve(fileName), imageBytes);
+        return true;
     }
 
     public static Path getImagePathFromFilename(String filename) {
