@@ -19,6 +19,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.MissVisualizeService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
@@ -34,6 +35,7 @@ import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -299,6 +301,31 @@ public class AnalyzeController {
                         throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
                     }
 
+                    boolean isLazerScore =
+                            osuReplay.gameVersion() > 30000001
+                                    && score.getMods().stream()
+                                    .map(Mod::getAcronym)
+                                    .noneMatch(s -> Objects.equals(s, "CL") || Objects.equals(s, "V2"));
+
+                    HashMap<HitEvent.HitResult, Integer> simResult = new HashMap<>();
+                    analyze.events().stream()
+                            .filter(e -> e.eventType().equals(HitEvent.EventType.HIT_CIRCLE)
+                                    || e.eventType().equals(HitEvent.EventType.SLIDER_HEAD))
+                            .forEach(e -> simResult.merge(e.hitResult(), 1, Integer::sum));
+
+                    final Integer simGreat = simResult.getOrDefault(HitEvent.HitResult.PERFECT, 0);
+                    final Integer simOk = simResult.getOrDefault(HitEvent.HitResult.OK, 0);
+                    final Integer simMeh = simResult.getOrDefault(HitEvent.HitResult.MEH, 0);
+                    final Integer simMiss = simResult.getOrDefault(HitEvent.HitResult.MISS, 0);
+
+                    String simHitResult = simGreat + " / " + simOk + " / " + simMeh + " / " + simMiss;
+
+                    boolean doSimMatch =
+                            simGreat == ScoreFormatUtil.getGreatCount(score)
+                            && simOk == ScoreFormatUtil.getOkCount(score)
+                            && simMeh == ScoreFormatUtil.getMehCount(score)
+                            && simMiss == ScoreFormatUtil.getMissCount(score);
+
                     return perfPlusApi.calculate(score)
                             .exceptionally(error -> {
                                 LOG.warn("Could not calculate performance+ for score {}. "
@@ -309,7 +336,7 @@ public class AnalyzeController {
                             .thenApply(performancePlus -> new ScoreAnalyzeData(
                                     score, diffSpec, hitErrors, hitPos, hitPosAbs,
                                     missPos, missPosAbs, aimBias, avgTimingError, analyze,
-                                    performanceGraph, performancePlus));
+                                    performanceGraph, performancePlus, isLazerScore, doSimMatch, simHitResult));
                 })
                 .thenApplyAsync(renderer::renderScoreAnalysis, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
@@ -406,7 +433,10 @@ public class AnalyzeController {
             double avgTimingError,
             ReplayAnalyze replayAnalyze,
             PerformanceGraphData performanceGraph,
-            PerfPlusApi.PerformancePlus performancePlus
+            PerfPlusApi.PerformancePlus performancePlus,
+            boolean isLazerScore,
+            boolean doSimMatch,
+            String simHitResult
     ) {
     }
 
