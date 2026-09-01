@@ -370,7 +370,7 @@ public class ScoreController {
                 return findAvailableScore(userIds, index + 1, minRank);
             }
 
-            List<ScoreEntry> candidates = new ArrayList<>(5);
+            List<ScoreEntry> candidates = new ArrayList<>(SCORE_LIMIT);
 
             for (int i = 0; i < SCORE_LIMIT; i++) {
                 final Score score = scores.get(i);
