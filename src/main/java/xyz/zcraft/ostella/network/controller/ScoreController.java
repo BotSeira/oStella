@@ -1,7 +1,6 @@
 package xyz.zcraft.ostella.network.controller;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -81,6 +80,36 @@ public class ScoreController {
 
     static int scoreLookupFetchLimit(int index, List<ScoreFilter> filters) {
         return filters.isEmpty() ? index : OsuAPI.MAX_USER_SCORES_LIMIT;
+    }
+
+    private static JsonObject getRandomScoreFromUids(TargetScore targetScore) {
+        final OsuBeatmap osuBeatmap;
+        final DiffSpec diffSpec;
+
+        final ScoreEntry entry = targetScore.entry();
+        final Score score = entry.score();
+        final UserExtended user = targetScore.user();
+
+        try {
+            osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmap().getId()));
+            diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+        } catch (Exception e) {
+            throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+        }
+
+        JsonObject result = new JsonObject();
+        result.add("user", GSON.toJsonTree(user));
+        result.add("score", GSON.toJsonTree(score));
+        result.addProperty("diff", "%.2f★ (CS %.2f / AR %.2f / OD %.2f / HP %.2f)".formatted(
+                diffSpec.getStar(),
+                diffSpec.getDifficulty().cs(),
+                diffSpec.getDifficulty().ar(),
+                diffSpec.getDifficulty().od(),
+                diffSpec.getDifficulty().hp()
+        ));
+        result.addProperty("best_index", entry.bestIndex());
+        result.addProperty("pp_weight", entry.score().getWeight().getPercentage());
+        return result;
     }
 
     public void lookupScore(@NotNull Context context) {
@@ -273,35 +302,28 @@ public class ScoreController {
                             return userIds;
                         })
                         .thenCompose(userIds -> findAvailableScore(userIds, 0, minRank))
-                        .thenApply(targetScore -> {
-                                    final OsuBeatmap osuBeatmap;
-                                    final DiffSpec diffSpec;
-
-                                    final ScoreEntry entry = targetScore.entry();
-                                    final Score score = entry.score();
-                                    final UserExtended user = targetScore.user();
-
-                                    try {
-                                        osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmap().getId()));
-                                        diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
-                                    } catch (Exception e) {
-                                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-                                    }
-
-                                    JsonObject result = new JsonObject();
-                                    result.add("user", GSON.toJsonTree(user));
-                                    result.add("score", GSON.toJsonTree(score));
-                                    result.addProperty("diff", "%.2f★ (CS %.2f / AR %.2f / OD %.2f / HP %.2f)".formatted(
-                                            diffSpec.getStar(),
-                                            diffSpec.getDifficulty().cs(),
-                                            diffSpec.getDifficulty().ar(),
-                                            diffSpec.getDifficulty().od(),
-                                            diffSpec.getDifficulty().hp()
-                                    ));
-                                    result.addProperty("best_index", entry.bestIndex());
-                                    return result;
-                                }
+                        .thenApply(ScoreController::getRandomScoreFromUids)
+                        .thenAccept(result ->
+                                context.status(200).result(new Response(true, "Success", result).toString())
                         )
+        );
+    }
+
+    public void randomScoreFromUsers(@NotNull Context context) {
+        final JsonArray usersArray = JsonParser.parseString(context.body()).getAsJsonObject().get("users").getAsJsonArray();
+        if (usersArray == null || usersArray.isJsonNull() || usersArray.isEmpty()) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "No users provided!");
+        }
+
+        final List<Long> userIds = new ArrayList<>();
+
+        for (JsonElement element : usersArray) {
+            userIds.add(element.getAsLong());
+        }
+
+        context.future(() ->
+                findAvailableScore(userIds, 0, Long.MAX_VALUE)
+                        .thenApply(ScoreController::getRandomScoreFromUids)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
                         )
