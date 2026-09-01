@@ -42,12 +42,12 @@ public class ScoreController {
     private static final Logger LOG = LogManager.getLogger(ScoreController.class);
     private static final Gson GSON = new Gson();
     private static final Map<BeatmapPatternAnalysis.PatternType, Integer> PATTERN_WEIGHTS = Map.of(
-            BeatmapPatternAnalysis.PatternType.TECH, 150,
-            BeatmapPatternAnalysis.PatternType.READING, 100,
-            BeatmapPatternAnalysis.PatternType.FLOW, 80,
-            BeatmapPatternAnalysis.PatternType.STREAM, 70,
-            BeatmapPatternAnalysis.PatternType.ALT, 60,
-            BeatmapPatternAnalysis.PatternType.AIM, 5
+            BeatmapPatternAnalysis.PatternType.TECH, 600,
+            BeatmapPatternAnalysis.PatternType.READING, 500,
+            BeatmapPatternAnalysis.PatternType.FLOW, 400,
+            BeatmapPatternAnalysis.PatternType.STREAM, 300,
+            BeatmapPatternAnalysis.PatternType.ALT, 300,
+            BeatmapPatternAnalysis.PatternType.AIM, 1
     );
     public final RenderService renderer;
     public final AsyncService executor;
@@ -82,7 +82,7 @@ public class ScoreController {
         return filters.isEmpty() ? index : OsuAPI.MAX_USER_SCORES_LIMIT;
     }
 
-    private static JsonObject getRandomScoreFromUids(TargetScore targetScore) {
+    private static JsonObject mapScoreToJson(TargetScore targetScore) {
         final OsuBeatmap osuBeatmap;
         final DiffSpec diffSpec;
 
@@ -302,7 +302,7 @@ public class ScoreController {
                             return userIds;
                         })
                         .thenCompose(userIds -> findAvailableScore(userIds, 0, minRank))
-                        .thenApply(ScoreController::getRandomScoreFromUids)
+                        .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
                         )
@@ -321,9 +321,11 @@ public class ScoreController {
             userIds.add(element.getAsLong());
         }
 
+//        Collections.shuffle(userIds);
+
         context.future(() ->
                 findAvailableScore(userIds, 0, Long.MAX_VALUE)
-                        .thenApply(ScoreController::getRandomScoreFromUids)
+                        .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
                         )
@@ -378,19 +380,27 @@ public class ScoreController {
 
                 WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
 
+                HashMap<ScoreEntry, Integer> weightedScores = new HashMap<>();
                 for (ScoreEntry current : candidates) {
                     try {
                         final int weight = getWeight(current);
-                        randomScores.add(current, weight);
+                        weightedScores.put(current, weight);
                     } catch (ParseException e) {
                         LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
                     }
                 }
 
-                if (randomScores.size() == 0) {
+                if (weightedScores.isEmpty()) {
                     return findAvailableScore(userIds, index + 1, minRank);
                 }
 
+                final int maxWeight = weightedScores.values().stream().max(Integer::compareTo).get();
+
+                for (Map.Entry<ScoreEntry, Integer> entry : weightedScores.entrySet()) {
+                    int finalWeight = (int) (Math.pow(((double) entry.getValue() /  maxWeight), 6) * 1000);
+                    randomScores.add(entry.getKey(), finalWeight);
+//                    LOG.debug("{}: {}", entry.getKey().score().getBeatmapset().getTitle(), finalWeight);
+                }
 
                 ScoreEntry selected = randomScores.next();
 
@@ -405,7 +415,7 @@ public class ScoreController {
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, null);
         int patternWeight = 0;
         for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
-            patternWeight = (int) (patternWeight + PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
+            patternWeight += (int) (PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
         }
         return patternWeight * (100 - entry.bestIndex()) / 100;
     }
