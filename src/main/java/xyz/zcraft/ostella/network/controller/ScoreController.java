@@ -45,9 +45,9 @@ public class ScoreController {
     private static final Map<BeatmapPatternAnalysis.PatternType, Integer> PATTERN_WEIGHTS = Map.of(
             BeatmapPatternAnalysis.PatternType.TECH, 150,
             BeatmapPatternAnalysis.PatternType.READING, 100,
-            BeatmapPatternAnalysis.PatternType.FLOW, 60,
-            BeatmapPatternAnalysis.PatternType.STREAM, 50,
-            BeatmapPatternAnalysis.PatternType.ALT, 20,
+            BeatmapPatternAnalysis.PatternType.FLOW, 80,
+            BeatmapPatternAnalysis.PatternType.STREAM, 70,
+            BeatmapPatternAnalysis.PatternType.ALT, 60,
             BeatmapPatternAnalysis.PatternType.AIM, 10
     );
     public final RenderService renderer;
@@ -355,15 +355,11 @@ public class ScoreController {
                 WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
 
                 for (ScoreEntry current : candidates) {
-                    final Long beatmapId = current.score().getBeatmapId();
                     try {
-                        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-                        final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, null);
-                        final Integer patternWeight = PATTERN_WEIGHTS.getOrDefault(patternAnalysis.primaryType().type(), 10);
-                        final int weight = patternWeight * (100 - current.bestIndex()) / 100;
+                        final int weight = getWeight(current);
                         randomScores.add(current, weight);
                     } catch (ParseException e) {
-                        LOG.warn("Failed to parse beatmap with id {}", beatmapId, e);
+                        LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
                     }
                 }
 
@@ -377,6 +373,17 @@ public class ScoreController {
                 return CompletableFuture.completedFuture(new TargetScore(selected, user));
             });
         });
+    }
+
+    private int getWeight(ScoreEntry entry) throws ParseException {
+        final Long beatmapId = entry.score().getBeatmapId();
+        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+        final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, null);
+        int patternWeight = 0;
+        for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
+            patternWeight = (int) (patternWeight + PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * 100 * type.percentage());
+        }
+        return patternWeight * (100 - entry.bestIndex()) / 100;
     }
 
     private record ScoreEntry(int bestIndex, Score score) {
