@@ -399,7 +399,7 @@ public class ScoreController {
                 final int maxWeight = weightedScores.values().stream().max(Integer::compareTo).get();
 
                 for (Map.Entry<ScoreEntry, Integer> entry : weightedScores.entrySet()) {
-                    int finalWeight = (int) (Math.pow(((double) entry.getValue() /  maxWeight), 6) * 1000);
+                    int finalWeight = (int) (Math.pow(((double) entry.getValue() /  maxWeight), 5) * 1000);
                     randomScores.add(entry.getKey(), finalWeight);
 //                    LOG.debug("{}: {}", entry.getKey().score().getBeatmapset().getTitle(), finalWeight);
                 }
