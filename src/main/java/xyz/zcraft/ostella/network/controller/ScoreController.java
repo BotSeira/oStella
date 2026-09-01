@@ -310,7 +310,7 @@ public class ScoreController {
     }
 
     public void randomScoreFromUsers(@NotNull Context context) {
-        final JsonArray usersArray = JsonParser.parseString(context.body()).getAsJsonObject().get("users").getAsJsonArray();
+        final JsonArray usersArray = JsonParser.parseString(context.body()).getAsJsonObject().get("uids").getAsJsonArray();
         if (usersArray == null || usersArray.isJsonNull() || usersArray.isEmpty()) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "No users provided!");
         }
