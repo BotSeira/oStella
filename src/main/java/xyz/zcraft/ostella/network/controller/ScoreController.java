@@ -43,10 +43,10 @@ public class ScoreController {
     private static final Logger LOG = LogManager.getLogger(ScoreController.class);
     private static final Gson GSON = new Gson();
     private static final Map<BeatmapPatternAnalysis.PatternType, Integer> PATTERN_WEIGHTS = Map.of(
-            BeatmapPatternAnalysis.PatternType.TECH, 100,
-            BeatmapPatternAnalysis.PatternType.READING, 60,
-            BeatmapPatternAnalysis.PatternType.FLOW, 55,
-            BeatmapPatternAnalysis.PatternType.STREAM, 40,
+            BeatmapPatternAnalysis.PatternType.TECH, 150,
+            BeatmapPatternAnalysis.PatternType.READING, 100,
+            BeatmapPatternAnalysis.PatternType.FLOW, 60,
+            BeatmapPatternAnalysis.PatternType.STREAM, 50,
             BeatmapPatternAnalysis.PatternType.ALT, 20,
             BeatmapPatternAnalysis.PatternType.AIM, 10
     );
