@@ -33,6 +33,7 @@ import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
@@ -53,7 +54,7 @@ public class ScoreController {
     public final AsyncService executor;
     public final TokenManager tokenManager;
     public final Router router;
-    private final HashMap<Long, Integer> previousSelections = new HashMap<>();
+    private final ConcurrentHashMap<Long, Integer> previousSelections = new ConcurrentHashMap<>();
 
     public ScoreController(Router router) {
         this.router = router;
@@ -311,7 +312,20 @@ public class ScoreController {
     }
 
     public void randomScoreFromUsers(@NotNull Context context) {
-        final JsonArray usersArray = JsonParser.parseString(context.body()).getAsJsonObject().get("uids").getAsJsonArray();
+        JsonElement usersElement = JsonParser.parseString(context.body())
+                .getAsJsonObject()
+                .get("uids");
+
+        if (usersElement == null || usersElement.isJsonNull()
+                || !usersElement.isJsonArray() || usersElement.getAsJsonArray().isEmpty()) {
+            throw new ApiException(
+                    ErrorCode.ILLEGAL_ARGUMENT,
+                    "No users provided!"
+            );
+        }
+
+        JsonArray usersArray = usersElement.getAsJsonArray();
+
         if (usersArray == null || usersArray.isJsonNull() || usersArray.isEmpty()) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "No users provided!");
         }
@@ -358,7 +372,7 @@ public class ScoreController {
 
             List<ScoreEntry> candidates = new ArrayList<>(5);
 
-            for (int i = 0; i < SCORE_LIMIT - 1; i++) {
+            for (int i = 0; i < SCORE_LIMIT; i++) {
                 final Score score = scores.get(i);
 
                 if (!score.getHasReplay() && !CacheService.hasReplayCache(score.getId())) {
@@ -419,11 +433,7 @@ public class ScoreController {
 
                 ScoreEntry selected = randomScores.next();
 
-                previousSelections.merge(
-                        selected.score().getId(),
-                        1,
-                        Integer::sum
-                );
+                previousSelections.merge(selected.score().getId(), 1, Integer::sum);
 
                 return CompletableFuture.completedFuture(new TargetScore(selected, user));
             });
