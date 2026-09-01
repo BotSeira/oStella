@@ -358,11 +358,13 @@ public class ScoreController {
             List<ScoreEntry> candidates = new ArrayList<>(5);
 
             for (int i = 0; i < SCORE_LIMIT - 1; i++) {
-                if (!scores.get(i).getHasReplay()) {
+                final Score score = scores.get(i);
+
+                if (!score.getHasReplay() && !CacheService.hasReplayCache(score.getId())) {
                     continue;
                 }
 
-                candidates.add(new ScoreEntry(i + 1, scores.get(i)));
+                candidates.add(new ScoreEntry(i + 1, score));
             }
 
             if (candidates.isEmpty()) {
