@@ -15,6 +15,9 @@
     "HitCounter": {
       "Show": false
     },
+    "Mods": {
+      "Show": false
+    },
     "ShowResultsScreen": false
   }
 }
