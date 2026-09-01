@@ -48,7 +48,7 @@ public class ScoreController {
             BeatmapPatternAnalysis.PatternType.FLOW, 80,
             BeatmapPatternAnalysis.PatternType.STREAM, 70,
             BeatmapPatternAnalysis.PatternType.ALT, 60,
-            BeatmapPatternAnalysis.PatternType.AIM, 10
+            BeatmapPatternAnalysis.PatternType.AIM, 5
     );
     public final RenderService renderer;
     public final AsyncService executor;
@@ -317,21 +317,23 @@ public class ScoreController {
 
         long userId = userIds.get(index);
 
+        final int SCORE_LIMIT = 20;
+
         return executor.enqueueAsync(() ->
                 OsuAPI.getUserScores(
                         tokenManager.getTokenData(),
                         userId,
                         ScoreType.BEST,
-                        50
+                        SCORE_LIMIT
                 )
         ).thenCompose(scores -> {
-            if (scores.size() < 20) {
+            if (scores.size() < SCORE_LIMIT) {
                 return findAvailableScore(userIds, index + 1, minRank);
             }
 
             List<ScoreEntry> candidates = new ArrayList<>(5);
 
-            for (int i = 0; i < 19; i++) {
+            for (int i = 0; i < SCORE_LIMIT - 1; i++) {
                 if (!scores.get(i).getHasReplay()) {
                     continue;
                 }
@@ -381,7 +383,7 @@ public class ScoreController {
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, null);
         int patternWeight = 0;
         for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
-            patternWeight = (int) (patternWeight + PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * 100 * type.percentage());
+            patternWeight = (int) (patternWeight + PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
         }
         return patternWeight * (100 - entry.bestIndex()) / 100;
     }
