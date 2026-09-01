@@ -6,10 +6,13 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.ScoreFilter;
+import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
@@ -46,6 +49,62 @@ public class UserController {
         this.renderer = router.renderer;
         this.executor = router.executor;
         this.tokenManager = router.tokenManager;
+    }
+
+    private static List<ScoreFilter> requireScoreFilters(Context context) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+    }
+
+    private static int requireScoreListLimit(Context context) {
+        int limit = requirePositiveInt(context, "n");
+        if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
+            throw new ApiException(
+                    ErrorCode.ILLEGAL_ARGUMENT,
+                    "Score limit must not exceed " + OsuAPI.MAX_USER_SCORES_LIMIT
+            );
+        }
+        return limit;
+    }
+
+    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> originalPositions = new ArrayList<>();
+        for (int index = 0; index < scores.size(); index++) {
+            Score score = scores.get(index);
+            if (filters.stream().allMatch(filter -> filter.matches(score))) {
+                result.add(score);
+                originalPositions.add(index + 1);
+            }
+        }
+        if (!filters.isEmpty() && result.isEmpty()) {
+            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
+    }
+
+    static FilteredScores filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> bestPositions = new ArrayList<>();
+        for (int index = 0; index < bestScores.size(); index++) {
+            Score bestScore = bestScores.get(index);
+            try {
+                if (bestScore.getEndedAt() != null && !Instant.parse(bestScore.getEndedAt()).isBefore(cutoff)) {
+                    result.add(bestScore);
+                    bestPositions.add(index + 1);
+                }
+            } catch (DateTimeParseException e) {
+                LOG.warn("Ignoring best score {} with invalid ended_at: {}", bestScore.getId(), bestScore.getEndedAt());
+            }
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(bestPositions));
+    }
+
+    private static List<String> filterLabels(List<ScoreFilter> filters) {
+        return filters.stream().map(ScoreFilter::displayText).toList();
     }
 
     public void getUsers(@NotNull Context context) {
@@ -260,6 +319,23 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 
+    public void getUserRank(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+        final CompletableFuture<UserExtended> userFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUser(tokenManager.getTokenData(), userId));
+
+        context.future(() -> userFuture.thenApply(userExtended -> {
+                    JsonObject result = new JsonObject();
+                    result.addProperty("id", userExtended.getId());
+                    result.addProperty("username", userExtended.getUsername());
+                    result.addProperty("global_rank", userExtended.getStatistics().getGlobalRank());
+                    result.addProperty("country_rank", userExtended.getStatistics().getRank().getCountry());
+                    result.addProperty("country_code", userExtended.getCountryCode());
+                    return result;
+                })
+                .thenAccept(json -> putResult(context, json)));
+    }
+
     public void getTodayBestScores(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
         final String daysParam = context.queryParam("days");
@@ -303,68 +379,6 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).result(bytes)));
     }
 
-    private static List<ScoreFilter> requireScoreFilters(Context context) {
-        try {
-            return ScoreFilter.parseList(context.queryParam("filters"));
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
-        }
-    }
-
-    private static int requireScoreListLimit(Context context) {
-        int limit = requirePositiveInt(context, "n");
-        if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
-            throw new ApiException(
-                    ErrorCode.ILLEGAL_ARGUMENT,
-                    "Score limit must not exceed " + OsuAPI.MAX_USER_SCORES_LIMIT
-            );
-        }
-        return limit;
-    }
-
-    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        List<Score> result = new ArrayList<>();
-        List<Integer> originalPositions = new ArrayList<>();
-        for (int index = 0; index < scores.size(); index++) {
-            Score score = scores.get(index);
-            if (filters.stream().allMatch(filter -> filter.matches(score))) {
-                result.add(score);
-                originalPositions.add(index + 1);
-            }
-        }
-        if (!filters.isEmpty() && result.isEmpty()) {
-            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
-        }
-        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
-    }
-
-    static FilteredScores filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
-        List<Score> result = new ArrayList<>();
-        List<Integer> bestPositions = new ArrayList<>();
-        for (int index = 0; index < bestScores.size(); index++) {
-            Score bestScore = bestScores.get(index);
-            try {
-                if (bestScore.getEndedAt() != null && !Instant.parse(bestScore.getEndedAt()).isBefore(cutoff)) {
-                    result.add(bestScore);
-                    bestPositions.add(index + 1);
-                }
-            } catch (DateTimeParseException e) {
-                LOG.warn("Ignoring best score {} with invalid ended_at: {}", bestScore.getId(), bestScore.getEndedAt());
-            }
-        }
-        return new FilteredScores(List.copyOf(result), List.copyOf(bestPositions));
-    }
-
-    private static List<String> filterLabels(List<ScoreFilter> filters) {
-        return filters.stream().map(ScoreFilter::displayText).toList();
-    }
-
-    record FilteredScores(List<Score> scores, List<Integer> originalPositions) {
-    }
-
-    private record UserInfoData(UserExtended user, List<Score> topScores) {
-    }
-
     public void getFriends(@NotNull Context context) {
         final String auth = context.header("Authorization");
 
@@ -403,11 +417,18 @@ public class UserController {
         context.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), body.userName()))
                 .thenApply(u -> {
-                    if (u == null) throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found for the provided username!");
+                    if (u == null)
+                        throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found for the provided username!");
                     return (User) u;
                 })
                 .thenAccept(u -> context.status(200).result(new Response(true, "Success", GSON.toJsonTree(u)).toString()))
         );
+    }
+
+    record FilteredScores(List<Score> scores, List<Integer> originalPositions) {
+    }
+
+    private record UserInfoData(UserExtended user, List<Score> topScores) {
     }
 
     public record UserLookupBody(
@@ -419,7 +440,8 @@ public class UserController {
             @SerializedName("user_ids") List<Long> userIds,
             @SerializedName("limit") int limit,
             @SerializedName("include_fails") boolean includeFails
-    ) {}
+    ) {
+    }
 
     public record BatchScore(
             @SerializedName("beatmap_id") long beatmapId,
