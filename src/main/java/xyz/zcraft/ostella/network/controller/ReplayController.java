@@ -206,7 +206,11 @@ public class ReplayController {
             List<CompletableFuture<Score>> scoreFutures = new ArrayList<>(ids.stream()
                     .filter(id -> !id.startsWith("s"))
                     .map(id -> {
-                        if (id.startsWith("u")) return id.substring(1);
+                        if (id.startsWith("u")) {
+                            return id.substring(1);
+                        } else if (id.startsWith("@")) {
+                            return String.valueOf(executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), id.substring(1))).join().getId());
+                        }
                         return id;
                     })
                     .map(Long::parseLong)
