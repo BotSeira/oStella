@@ -321,7 +321,7 @@ public class ScoreController {
             userIds.add(element.getAsLong());
         }
 
-//        Collections.shuffle(userIds);
+        Collections.shuffle(userIds);
 
         context.future(() ->
                 findAvailableScore(userIds, 0, Long.MAX_VALUE)
