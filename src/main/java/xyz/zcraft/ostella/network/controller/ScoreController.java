@@ -48,7 +48,7 @@ public class ScoreController {
             BeatmapPatternAnalysis.PatternType.FLOW, 400,
             BeatmapPatternAnalysis.PatternType.STREAM, 300,
             BeatmapPatternAnalysis.PatternType.ALT, 300,
-            BeatmapPatternAnalysis.PatternType.AIM, 1
+            BeatmapPatternAnalysis.PatternType.AIM, 10
     );
     public final RenderService renderer;
     public final AsyncService executor;
@@ -425,7 +425,7 @@ public class ScoreController {
 
                     final int finalWeight = Math.max(
                             1,
-                            (int) (Math.pow(normalizedWeight, 5) * 1000 * redundantFactor)
+                            (int) (Math.pow(normalizedWeight, 4) * 1000 * redundantFactor)
                     );
 
                     randomScores.add(entry.getKey(), finalWeight);
