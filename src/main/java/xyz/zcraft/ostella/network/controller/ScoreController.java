@@ -6,8 +6,8 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreFilter;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
@@ -18,21 +18,21 @@ import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.UserExtended;
 import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
@@ -42,6 +42,14 @@ import static xyz.zcraft.ostella.util.RequestUtil.*;
 public class ScoreController {
     private static final Logger LOG = LogManager.getLogger(ScoreController.class);
     private static final Gson GSON = new Gson();
+    private static final Map<BeatmapPatternAnalysis.PatternType, Integer> PATTERN_WEIGHTS = Map.of(
+            BeatmapPatternAnalysis.PatternType.TECH, 100,
+            BeatmapPatternAnalysis.PatternType.READING, 60,
+            BeatmapPatternAnalysis.PatternType.FLOW, 55,
+            BeatmapPatternAnalysis.PatternType.STREAM, 40,
+            BeatmapPatternAnalysis.PatternType.ALT, 20,
+            BeatmapPatternAnalysis.PatternType.AIM, 10
+    );
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -52,6 +60,27 @@ public class ScoreController {
         this.renderer = router.renderer;
         this.executor = router.executor;
         this.tokenManager = router.tokenManager;
+    }
+
+    private static List<ScoreFilter> requireScoreFilters(Context context) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+    }
+
+    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        if (filters.isEmpty()) {
+            return scores;
+        }
+        return scores.stream()
+                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
+                .toList();
+    }
+
+    static int scoreLookupFetchLimit(int index, List<ScoreFilter> filters) {
+        return filters.isEmpty() ? index : OsuAPI.MAX_USER_SCORES_LIMIT;
     }
 
     public void lookupScore(@NotNull Context context) {
@@ -230,27 +259,6 @@ public class ScoreController {
                 });
     }
 
-    private static List<ScoreFilter> requireScoreFilters(Context context) {
-        try {
-            return ScoreFilter.parseList(context.queryParam("filters"));
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
-        }
-    }
-
-    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        if (filters.isEmpty()) {
-            return scores;
-        }
-        return scores.stream()
-                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
-                .toList();
-    }
-
-    static int scoreLookupFetchLimit(int index, List<ScoreFilter> filters) {
-        return filters.isEmpty() ? index : OsuAPI.MAX_USER_SCORES_LIMIT;
-    }
-
     public void randomScore(@NotNull Context context) {
         final long minRank = optionalLong(context, "min_rank", Long.MAX_VALUE);
         context.future(() ->
@@ -314,16 +322,16 @@ public class ScoreController {
                         tokenManager.getTokenData(),
                         userId,
                         ScoreType.BEST,
-                        10
+                        50
                 )
         ).thenCompose(scores -> {
-            if (scores.size() < 8) {
+            if (scores.size() < 20) {
                 return findAvailableScore(userIds, index + 1, minRank);
             }
 
             List<ScoreEntry> candidates = new ArrayList<>(5);
 
-            for (int i = 0; i < 7; i++) {
+            for (int i = 0; i < 19; i++) {
                 if (!scores.get(i).getHasReplay()) {
                     continue;
                 }
@@ -344,9 +352,27 @@ public class ScoreController {
                     return findAvailableScore(userIds, index + 1, minRank);
                 }
 
-                ScoreEntry selected = candidates.get(
-                        ThreadLocalRandom.current().nextInt(candidates.size())
-                );
+                WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
+
+                for (ScoreEntry current : candidates) {
+                    final Long beatmapId = current.score().getBeatmapId();
+                    try {
+                        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+                        final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, null);
+                        final Integer patternWeight = PATTERN_WEIGHTS.getOrDefault(patternAnalysis.primaryType().type(), 10);
+                        final int weight = patternWeight * (100 - current.bestIndex()) / 100;
+                        randomScores.add(current, weight);
+                    } catch (ParseException e) {
+                        LOG.warn("Failed to parse beatmap with id {}", beatmapId, e);
+                    }
+                }
+
+                if (randomScores.size() == 0) {
+                    return findAvailableScore(userIds, index + 1, minRank);
+                }
+
+
+                ScoreEntry selected = randomScores.next();
 
                 return CompletableFuture.completedFuture(new TargetScore(selected, user));
             });
