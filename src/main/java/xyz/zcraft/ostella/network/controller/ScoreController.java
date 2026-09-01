@@ -53,6 +53,7 @@ public class ScoreController {
     public final AsyncService executor;
     public final TokenManager tokenManager;
     public final Router router;
+    private final HashMap<Long, Integer> previousSelections = new HashMap<>();
 
     public ScoreController(Router router) {
         this.router = router;
@@ -341,7 +342,7 @@ public class ScoreController {
 
         long userId = userIds.get(index);
 
-        final int SCORE_LIMIT = 20;
+        final int SCORE_LIMIT = 40;
 
         return executor.enqueueAsync(() ->
                 OsuAPI.getUserScores(
@@ -382,29 +383,47 @@ public class ScoreController {
 
                 WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
 
-                HashMap<ScoreEntry, Integer> weightedScores = new HashMap<>();
+                HashMap<ScoreEntry, Integer> baseWeights = new HashMap<>();
+
                 for (ScoreEntry current : candidates) {
                     try {
-                        final int weight = getWeight(current);
-                        weightedScores.put(current, weight);
+                        baseWeights.put(current, getWeight(current));
                     } catch (ParseException e) {
                         LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
                     }
                 }
 
-                if (weightedScores.isEmpty()) {
+                if (baseWeights.isEmpty()) {
                     return findAvailableScore(userIds, index + 1, minRank);
                 }
 
-                final int maxWeight = weightedScores.values().stream().max(Integer::compareTo).get();
+                final int maxWeight = baseWeights.values()
+                        .stream()
+                        .max(Integer::compareTo)
+                        .get();
 
-                for (Map.Entry<ScoreEntry, Integer> entry : weightedScores.entrySet()) {
-                    int finalWeight = (int) (Math.pow(((double) entry.getValue() /  maxWeight), 5) * 1000);
+                for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
+                    final int selectedTimes = previousSelections.getOrDefault(entry.getKey().score().getId(), 0);
+
+                    final double redundantFactor = Math.max(0.4, 1 - selectedTimes * 0.2);
+
+                    final double normalizedWeight = (double) entry.getValue() / maxWeight;
+
+                    final int finalWeight = Math.max(
+                            1,
+                            (int) (Math.pow(normalizedWeight, 5) * 1000 * redundantFactor)
+                    );
+
                     randomScores.add(entry.getKey(), finalWeight);
-//                    LOG.debug("{}: {}", entry.getKey().score().getBeatmapset().getTitle(), finalWeight);
                 }
 
                 ScoreEntry selected = randomScores.next();
+
+                previousSelections.merge(
+                        selected.score().getId(),
+                        1,
+                        Integer::sum
+                );
 
                 return CompletableFuture.completedFuture(new TargetScore(selected, user));
             });
