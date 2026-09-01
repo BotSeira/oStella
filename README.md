@@ -105,12 +105,12 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 ### Beatmaps
 
-| Method | Path                                 | Purpose                        | Params / POST Body                                 | Response |
-|--------|--------------------------------------|--------------------------------|----------------------------------------------------|----------|
-| GET    | `/beatmaps/lookup`                   | Resolve beatmap IDs            | See section below                                  | JSON     |
-| GET    | `/beatmaps/{beatmapId}`              | Beatmap card image             | path `beatmapId` (+ optional query param `mod`)    | PNG      |
-| GET    | `/beatmaps/{beatmapId}/analysis`     | PP+ and object-pattern analysis | path `beatmapId` (+ optional query param `mod`)   | PNG      |
-| POST   | `/beatmaps/{beatmapId}/leaderboards` | Compare players on one beatmap | path `beatmapId` + POST Body `{"uids":[user ids]}` | PNG      |
+| Method | Path                                 | Purpose                         | Params / POST Body                                 | Response |
+|--------|--------------------------------------|---------------------------------|----------------------------------------------------|----------|
+| GET    | `/beatmaps/lookup`                   | Resolve beatmap IDs             | See section below                                  | JSON     |
+| GET    | `/beatmaps/{beatmapId}`              | Beatmap card image              | path `beatmapId` (+ optional query param `mod`)    | PNG      |
+| GET    | `/beatmaps/{beatmapId}/analysis`     | PP+ and object-pattern analysis | path `beatmapId` (+ optional query param `mod`)    | PNG      |
+| POST   | `/beatmaps/{beatmapId}/leaderboards` | Compare players on one beatmap  | path `beatmapId` + POST Body `{"uids":[user ids]}` | PNG      |
 
 ### Beatmapsets
 
@@ -123,14 +123,16 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 ### Scores
 
-| Method | Path                                             | Purpose                        | Params / POST Body         | Response |
-|--------|--------------------------------------------------|--------------------------------|----------------------------|----------|
-| GET    | `/scores/lookup`                                 | Resolve score IDs              | See section below          | JSON     |
-| GET    | `/scores/{scoreId}`                              | Score card image               | path `scoreId`             | PNG      |
-| GET    | `/scores/{scoreId}/analysis`                     | Score analysis card image      | path `scoreId`             | PNG      |
-| GET    | `/scores/{scoreId}/highlight`                    | 20s highlight range of a score | path `scoreId`             | JSON     |
-| GET    | `/scores/{scoreId}/misses`                       | List the misses of the score   | path `scoreId`             | JSON     |
-| GET    | `/scores/{scoreId}/misses/{missIndex}/visualize` | Visualize misses               | path `scoreId` `missIndex` | PNG      |
+| Method | Path                                             | Purpose                             | Params / POST Body              | Response |
+|--------|--------------------------------------------------|-------------------------------------|---------------------------------|----------|
+| GET    | `/scores/lookup`                                 | Resolve score IDs                   | See section below               | JSON     |
+| GET    | `/scores/random`                                 | Get a random score                  | `min_rank`                      | JSON     |
+| POST   | `/scores/random/users`                           | Get a random score from given users | POST Body `{"uids":[user ids]}` | JSON     |
+| GET    | `/scores/{scoreId}`                              | Score card image                    | path `scoreId`                  | PNG      |
+| GET    | `/scores/{scoreId}/analysis`                     | Score analysis card image           | path `scoreId`                  | PNG      |
+| GET    | `/scores/{scoreId}/highlight`                    | 20s highlight range of a score      | path `scoreId`                  | JSON     |
+| GET    | `/scores/{scoreId}/misses`                       | List the misses of the score        | path `scoreId`                  | JSON     |
+| GET    | `/scores/{scoreId}/misses/{missIndex}/visualize` | Visualize misses                    | path `scoreId` `missIndex`      | PNG      |
 
 ### Multiplayer Rooms
 
@@ -141,15 +143,15 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 ### Users
 
-| Method | Path                            | Purpose                   | Params / POST Body               | Response |
-|--------|---------------------------------|---------------------------|----------------------------------|----------|
-| POST   | `/users`                        | Get multiple user data    | POST Body `{"ids":[user ids]}`   | JSON     |
-| GET    | `/users/me`                     | User data                 | Requires Authorization Header    | JSON     |
-| GET    | `/users/me/friends`             | Friends list for user     | Requires Authorization Header    | JSON     |
-| POST   | `/users/leaderboards`           | User PP leaderboard image | `{"uids":[user ids]}`            | PNG      |
-| GET    | `/users/{userId}/scores/bestof` | Best-of-N scores image    | path `userId`, query `n` (count) | PNG      |
-| GET    | `/users/{userId}/scores/recent` | Recent scores image       | path `userId`, query `n` (count) | PNG      |
-| GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1) | PNG |
+| Method | Path                                | Purpose                       | Params / POST Body                               | Response |
+|--------|-------------------------------------|-------------------------------|--------------------------------------------------|----------|
+| POST   | `/users`                            | Get multiple user data        | POST Body `{"ids":[user ids]}`                   | JSON     |
+| GET    | `/users/me`                         | User data                     | Requires Authorization Header                    | JSON     |
+| GET    | `/users/me/friends`                 | Friends list for user         | Requires Authorization Header                    | JSON     |
+| POST   | `/users/leaderboards`               | User PP leaderboard image     | `{"uids":[user ids]}`                            | PNG      |
+| GET    | `/users/{userId}/scores/bestof`     | Best-of-N scores image        | path `userId`, query `n` (count)                 | PNG      |
+| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n` (count)                 | PNG      |
+| GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1) | PNG      |
 
 ### Replays (enabled when `replayRender.enabled` is true)
 
