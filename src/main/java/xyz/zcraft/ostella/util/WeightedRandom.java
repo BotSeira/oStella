@@ -10,8 +10,8 @@ public class WeightedRandom<T> {
     private final List<Double> cumulative = new ArrayList<>();
 
     public void add(T item, double weight) {
-        if (weight <= 0) {
-            throw new IllegalArgumentException("Weight must be positive");
+        if (weight <= 0 || Double.isNaN(weight) || Double.isInfinite(weight)) {
+            throw new IllegalArgumentException("Weight must be positive and finite");
         }
 
         items.add(item);

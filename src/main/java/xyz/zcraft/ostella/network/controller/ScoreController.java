@@ -327,6 +327,11 @@ public class ScoreController {
                     .map(WeightFactor::users)
                     .map(m -> m.get(uid))
                     .orElse(1.0);
+
+            if (weight < 0.0) {
+                continue;
+            }
+
             userIds.add(uid, weight);
         }
 
@@ -384,9 +389,9 @@ public class ScoreController {
 
             return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
                     .thenCompose(user -> {
-                        Long globalRank = user.getStatistics().getGlobalRank();
-
-                        if (globalRank == null || globalRank > minRank) {
+                        if (user == null
+                                || user.getStatistics().getGlobalRank() == null
+                                || user.getStatistics().getGlobalRank() > minRank) {
                             return findAvailableScore(userIds, minRank, weights);
                         }
 
@@ -418,7 +423,15 @@ public class ScoreController {
 
                             final double finalWeight = Math.pow(normalizedWeight, 4) * weightFactor;
 
+                            if (finalWeight < 0.0) {
+                                continue;
+                            }
+
                             randomScores.add(entry.getKey(), finalWeight);
+                        }
+
+                        if (randomScores.isEmpty()) {
+                            return findAvailableScore(userIds, minRank, weights);
                         }
 
                         ScoreEntry selected = randomScores.next();
