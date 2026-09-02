@@ -1,6 +1,9 @@
 package xyz.zcraft.ostella.network.controller;
 
-import com.google.gson.*;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.annotations.SerializedName;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,9 +36,6 @@ import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
@@ -54,7 +54,6 @@ public class ScoreController {
     public final AsyncService executor;
     public final TokenManager tokenManager;
     public final Router router;
-    private final ConcurrentHashMap<Long, Integer> previousSelections = new ConcurrentHashMap<>();
 
     public ScoreController(Router router) {
         this.router = router;
@@ -295,15 +294,16 @@ public class ScoreController {
         context.future(() ->
                 executor.enqueueAsync(() -> OsuAPI.getLatestPassedScores(tokenManager.getTokenData()))
                         .thenApply(scores -> {
-                            List<Long> userIds = scores.stream()
+                            WeightedRandom<Long> userIds = new WeightedRandom<>();
+
+                            scores.stream()
                                     .map(Score::getUserId)
                                     .distinct()
-                                    .collect(Collectors.toCollection(ArrayList::new));
+                                    .forEach(l -> userIds.add(l, 1));
 
-                            Collections.shuffle(userIds, ThreadLocalRandom.current());
                             return userIds;
                         })
-                        .thenCompose(userIds -> findAvailableScore(userIds, 0, minRank))
+                        .thenCompose(userIds -> findAvailableScore(userIds, minRank, Map.of()))
                         .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
@@ -312,34 +312,30 @@ public class ScoreController {
     }
 
     public void randomScoreFromUsers(@NotNull Context context) {
-        JsonElement usersElement = JsonParser.parseString(context.body())
-                .getAsJsonObject()
-                .get("uids");
+        final JsonObject body = JsonParser.parseString(context.body()).getAsJsonObject();
 
-        if (usersElement == null || usersElement.isJsonNull()
-                || !usersElement.isJsonArray() || usersElement.getAsJsonArray().isEmpty()) {
-            throw new ApiException(
-                    ErrorCode.ILLEGAL_ARGUMENT,
-                    "No users provided!"
-            );
-        }
+        final RandomScoreRequest randomScoreRequest = GSON.fromJson(body, RandomScoreRequest.class);
 
-        JsonArray usersArray = usersElement.getAsJsonArray();
-
-        if (usersArray == null || usersArray.isJsonNull() || usersArray.isEmpty()) {
+        if (randomScoreRequest.uids() == null || randomScoreRequest.uids().isEmpty()) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "No users provided!");
         }
 
-        final List<Long> userIds = new ArrayList<>();
+        WeightedRandom<Long> userIds = new WeightedRandom<>();
 
-        for (JsonElement element : usersArray) {
-            userIds.add(element.getAsLong());
+        for (Long uid : randomScoreRequest.uids()) {
+            final double weight = Optional.ofNullable(randomScoreRequest.weightFactor())
+                    .map(WeightFactor::users)
+                    .map(m -> m.get(uid))
+                    .orElse(1.0);
+            userIds.add(uid, weight);
         }
 
-        Collections.shuffle(userIds);
+        final Map<Long, Double> scoreWeights = Optional.ofNullable(randomScoreRequest.weightFactor())
+                .map(WeightFactor::scores)
+                .orElse(Map.of());
 
         context.future(() ->
-                findAvailableScore(userIds, 0, Long.MAX_VALUE)
+                findAvailableScore(userIds, Long.MAX_VALUE, scoreWeights)
                         .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
@@ -347,14 +343,14 @@ public class ScoreController {
         );
     }
 
-    private CompletableFuture<TargetScore> findAvailableScore(List<Long> userIds, int index, long minRank) {
-        if (index >= userIds.size()) {
+    private CompletableFuture<TargetScore> findAvailableScore(WeightedRandom<Long> userIds, long minRank, Map<Long, Double> weights) {
+        if (userIds.isEmpty()) {
             return CompletableFuture.failedFuture(
                     new ApiException(ErrorCode.NO_SCORE_FOUND, "No available scores found!")
             );
         }
 
-        long userId = userIds.get(index);
+        long userId = userIds.getAndRemove();
 
         final int SCORE_LIMIT = 40;
 
@@ -367,7 +363,7 @@ public class ScoreController {
                 )
         ).thenCompose(scores -> {
             if (scores.size() < SCORE_LIMIT) {
-                return findAvailableScore(userIds, index + 1, minRank);
+                return findAvailableScore(userIds, minRank, weights);
             }
 
             List<ScoreEntry> candidates = new ArrayList<>(SCORE_LIMIT);
@@ -383,60 +379,52 @@ public class ScoreController {
             }
 
             if (candidates.isEmpty()) {
-                return findAvailableScore(userIds, index + 1, minRank);
+                return findAvailableScore(userIds, minRank, weights);
             }
 
-            return executor.enqueueAsync(() ->
-                    OsuAPI.getUser(tokenManager.getTokenData(), userId)
-            ).thenCompose(user -> {
-                Long globalRank = user.getStatistics().getGlobalRank();
+            return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                    .thenCompose(user -> {
+                        Long globalRank = user.getStatistics().getGlobalRank();
 
-                if (globalRank == null || globalRank > minRank) {
-                    return findAvailableScore(userIds, index + 1, minRank);
-                }
+                        if (globalRank == null || globalRank > minRank) {
+                            return findAvailableScore(userIds, minRank, weights);
+                        }
 
-                WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
+                        WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
 
-                HashMap<ScoreEntry, Integer> baseWeights = new HashMap<>();
+                        HashMap<ScoreEntry, Integer> baseWeights = new HashMap<>();
 
-                for (ScoreEntry current : candidates) {
-                    try {
-                        baseWeights.put(current, getWeight(current));
-                    } catch (ParseException e) {
-                        LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
-                    }
-                }
+                        for (ScoreEntry current : candidates) {
+                            try {
+                                baseWeights.put(current, getWeight(current));
+                            } catch (ParseException e) {
+                                LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
+                            }
+                        }
 
-                if (baseWeights.isEmpty()) {
-                    return findAvailableScore(userIds, index + 1, minRank);
-                }
+                        if (baseWeights.isEmpty()) {
+                            return findAvailableScore(userIds, minRank, weights);
+                        }
 
-                final int maxWeight = baseWeights.values()
-                        .stream()
-                        .max(Integer::compareTo)
-                        .get();
+                        final int maxWeight = baseWeights.values()
+                                .stream()
+                                .max(Integer::compareTo)
+                                .get();
 
-                for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
-                    final int selectedTimes = previousSelections.getOrDefault(entry.getKey().score().getId(), 0);
+                        for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
+                            final double normalizedWeight = (double) entry.getValue() / maxWeight;
 
-                    final double redundantFactor = Math.max(0.4, 1 - selectedTimes * 0.2);
+                            final double weightFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
 
-                    final double normalizedWeight = (double) entry.getValue() / maxWeight;
+                            final double finalWeight = Math.pow(normalizedWeight, 4) * weightFactor;
 
-                    final int finalWeight = Math.max(
-                            1,
-                            (int) (Math.pow(normalizedWeight, 4) * 1000 * redundantFactor)
-                    );
+                            randomScores.add(entry.getKey(), finalWeight);
+                        }
 
-                    randomScores.add(entry.getKey(), finalWeight);
-                }
+                        ScoreEntry selected = randomScores.next();
 
-                ScoreEntry selected = randomScores.next();
-
-                previousSelections.merge(selected.score().getId(), 1, Integer::sum);
-
-                return CompletableFuture.completedFuture(new TargetScore(selected, user));
-            });
+                        return CompletableFuture.completedFuture(new TargetScore(selected, user));
+                    });
         });
     }
 
@@ -455,5 +443,17 @@ public class ScoreController {
     }
 
     private record TargetScore(ScoreEntry entry, UserExtended user) {
+    }
+
+    private record RandomScoreRequest(
+            List<Long> uids,
+            @SerializedName("weight_factor") WeightFactor weightFactor
+    ) {
+    }
+
+    private record WeightFactor(
+            Map<Long, Double> scores,
+            Map<Long, Double> users
+    ) {
     }
 }

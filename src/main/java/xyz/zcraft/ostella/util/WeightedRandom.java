@@ -2,30 +2,66 @@ package xyz.zcraft.ostella.util;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
+import java.util.NoSuchElementException;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class WeightedRandom<T> {
     private final List<T> items = new ArrayList<>();
-    private final List<Integer> cumulative = new ArrayList<>();
-    private final Random random = new Random();
+    private final List<Double> cumulative = new ArrayList<>();
 
-    public void add(T item, int weight) {
+    public void add(T item, double weight) {
+        if (weight <= 0) {
+            throw new IllegalArgumentException("Weight must be positive");
+        }
+
         items.add(item);
-        int last = cumulative.isEmpty() ? 0 : cumulative.getLast();
-        cumulative.add(last + weight);
+
+        double previous = cumulative.isEmpty() ? 0.0 : cumulative.getLast();
+
+        cumulative.add(previous + weight);
     }
 
     public T next() {
-        int total = cumulative.getLast();
-        int r = random.nextInt(total);
+        return items.get(randomIndex());
+    }
+
+    public T getAndRemove() {
+        int index = randomIndex();
+
+        T result = items.remove(index);
+
+        double previous = index == 0 ? 0.0 : cumulative.get(index - 1);
+
+        double removedWeight = cumulative.get(index) - previous;
+
+        cumulative.remove(index);
+
+        for (int i = index; i < cumulative.size(); i++) {
+            cumulative.set(i, cumulative.get(i) - removedWeight);
+        }
+
+        return result;
+    }
+
+    private int randomIndex() {
+        if (items.isEmpty()) {
+            throw new NoSuchElementException("WeightedRandom is empty");
+        }
+
+        double total = cumulative.getLast();
+        double random = ThreadLocalRandom.current().nextDouble(total);
 
         for (int i = 0; i < cumulative.size(); i++) {
-            if (r < cumulative.get(i)) {
-                return items.get(i);
+            if (random < cumulative.get(i)) {
+                return i;
             }
         }
 
         throw new IllegalStateException();
+    }
+
+    public boolean isEmpty() {
+        return items.isEmpty();
     }
 
     public int size() {
