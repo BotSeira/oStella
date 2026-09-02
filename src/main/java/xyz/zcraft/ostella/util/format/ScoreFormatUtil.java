@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.util.format;
 
+import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.ostella.data.ScoreId;
@@ -132,6 +133,11 @@ public class ScoreFormatUtil {
 
     public static long getSliderEndMax(Score score) {
         return score.getMaximumStatistics().getOrDefault("slider_tail_hit", 0L);
+    }
+
+    public static boolean replayPresent(Score score) {
+        if (score == null) return false;
+        return score.getHasReplay() || CacheService.hasReplayCache(score.getId());
     }
 }
 
