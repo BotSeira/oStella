@@ -384,14 +384,13 @@
         }
 
         .replay-icon {
-            margin-left: auto;
+            margin-left: 2px;
             font-size: 0.8em;
-            margin-right: 4px;
             transform: translateY(-1px);
         }
 
         .score-status {
-            /*margin-left: auto;*/
+            margin-left: auto;
         }
 
         .acc-number {
@@ -632,7 +631,6 @@
                 </div>
             </div>
             <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
-            <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
             <div class="score-status" th:text="${Scores.getScoreStatus(score)}">❤</div>
         </div>
         <div style="display: grid;">
@@ -656,6 +654,7 @@
             <div style="display: flex; gap: 8px; align-items: center;">
                 <span th:text="${'#' + scorePositions.get(iterstat.index)}">#1</span>
                 <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
+                <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
             </div>
             <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
         </div>
