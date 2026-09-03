@@ -405,7 +405,7 @@ public class ScoreController {
                                                     .append(String.format("%.5f", e.getValue())).append("   ")
                                     );
 
-                            return sb.toString();
+                            return sb.toString().trim();
                         })
                         .thenAccept(result -> RequestUtil.putResult(context, result))
 
