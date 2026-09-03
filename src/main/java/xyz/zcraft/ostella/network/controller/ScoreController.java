@@ -27,11 +27,13 @@ import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
@@ -508,12 +510,29 @@ public class ScoreController {
     private int getWeight(ScoreEntry entry) throws ParseException {
         final Long beatmapId = entry.score().getBeatmapId();
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-        final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, null);
+        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, getModBits(entry.score().getMods()));
+        final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
         int patternWeight = 0;
         for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
             patternWeight += (int) (PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
         }
         return patternWeight * (100 - entry.bestIndex()) / 100;
+    }
+
+    public static long getModBits(List<Mod> mods) {
+        long bits = 0;
+
+        for (Mod mod : mods) {
+            switch (mod.getAcronym()) {
+                case "EZ" -> bits |= 2L;
+                case "HR" -> bits |= 16L;
+                case "DT" -> bits |= 64L;
+                case "HT" -> bits |= 256L;
+                case "NC" -> bits |= 512L | 64L;
+            }
+        }
+
+        return bits;
     }
 
     private record ScoreEntry(int bestIndex, Score score) {
