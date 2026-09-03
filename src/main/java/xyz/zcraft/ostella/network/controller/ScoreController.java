@@ -19,8 +19,10 @@ import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
+import xyz.zcraft.ostella.util.RequestUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
+import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
@@ -348,6 +350,68 @@ public class ScoreController {
         );
     }
 
+    public void randomScoreFromUsersWeights(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+
+        context.future(() ->
+                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 40))
+                        .thenApply(scores -> {
+                            HashMap<ScoreEntry, Integer> baseWeights = new HashMap<>();
+
+                            for (int i = 0; i < scores.size(); i++) {
+                                final Score score = scores.get(i);
+                                if (!ScoreFormatUtil.replayPresent(score)) {
+                                    continue;
+                                }
+
+                                final ScoreEntry scoreEntry = new ScoreEntry(i + 1, score);
+                                try {
+                                    baseWeights.put(scoreEntry, getWeight(scoreEntry));
+                                } catch (ParseException e) {
+                                    LOG.warn("Failed to parse beatmap with id {}", scoreEntry.score().getBeatmapId(), e);
+                                }
+                            }
+
+                            if (baseWeights.isEmpty()) {
+                                return "No scores available";
+                            }
+
+                            final int maxWeight = baseWeights.values()
+                                    .stream()
+                                    .max(Integer::compareTo)
+                                    .get();
+
+                            HashMap<ScoreEntry, Double> finalWeights = new HashMap<>();
+
+                            for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
+                                final double normalizedWeight = (double) entry.getValue() / maxWeight;
+
+                                final double finalWeight = Math.pow(normalizedWeight, 4);
+
+                                if (finalWeight < 0.0) {
+                                    continue;
+                                }
+
+                                finalWeights.put(entry.getKey(), finalWeight);
+                            }
+
+                            StringBuilder sb = new StringBuilder();
+
+                            finalWeights.entrySet()
+                                    .stream()
+                                    .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
+                                    .forEach(e ->
+                                            sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
+                                                    .append(String.format("%.5f", e.getValue())).append("   ")
+                                    );
+
+                            return sb.toString();
+                        })
+                        .thenAccept(result -> RequestUtil.putResult(context, result))
+
+        );
+    }
+
     private CompletableFuture<TargetScore> findAvailableScore(WeightedRandom<Long> userIds, long minRank, Map<Long, Double> weights) {
         if (userIds.isEmpty()) {
             return CompletableFuture.failedFuture(
@@ -376,7 +440,7 @@ public class ScoreController {
             for (int i = 0; i < SCORE_LIMIT; i++) {
                 final Score score = scores.get(i);
 
-                if (!score.getHasReplay() && !CacheService.hasReplayCache(score.getId())) {
+                if (!ScoreFormatUtil.replayPresent(score)) {
                     continue;
                 }
 
