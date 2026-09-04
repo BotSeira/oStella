@@ -415,14 +415,15 @@ public class ScoreController {
                                     .stream()
                                     .sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).toList();
 
-                            for (int i = 0; i < Math.min(6, list.size()); i++) {
+                            final int LIMIT = 12;
+                            for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
                                 sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
                                         .append(String.format("%.5f", e.getValue())).append("   ");
                             }
 
-                            if (list.size() > 6) {
-                                sb.append("\n").append("... and %d more".formatted(list.size() - 6));
+                            if (list.size() > LIMIT) {
+                                sb.append("\n").append("... and %d more".formatted(list.size() - LIMIT));
                             }
 
                             return sb.toString().trim();
