@@ -523,7 +523,7 @@ public class ScoreController {
         for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
             final double normalizedWeight = entry.getValue() / maxWeight;
 
-            if (normalizedWeight < 0.6 && entry.getKey().bestIndex() > 40) {
+            if (normalizedWeight < 0.5 && entry.getKey().bestIndex() > 40) {
                 continue;
             }
 
