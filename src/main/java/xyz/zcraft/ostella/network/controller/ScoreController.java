@@ -41,6 +41,7 @@ import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
@@ -116,6 +117,22 @@ public class ScoreController {
         result.addProperty("best_index", entry.bestIndex());
         result.addProperty("pp_weight", entry.score().getWeight().getPercentage());
         return result;
+    }
+
+    public static long getModBits(List<Mod> mods) {
+        long bits = 0;
+
+        for (Mod mod : mods) {
+            switch (mod.getAcronym()) {
+                case "EZ" -> bits |= 2L;
+                case "HR" -> bits |= 16L;
+                case "DT" -> bits |= 64L;
+                case "HT" -> bits |= 256L;
+                case "NC" -> bits |= 512L | 64L;
+            }
+        }
+
+        return bits;
     }
 
     public void lookupScore(@NotNull Context context) {
@@ -371,9 +388,9 @@ public class ScoreController {
                     .orElse(Map.of());
         }
         context.future(() ->
-                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 40))
+                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 80))
                         .thenApply(scores -> {
-                            HashMap<ScoreEntry, Integer> baseWeights = new HashMap<>();
+                            List<ScoreEntry> candidates = new ArrayList<>(scores.size());
 
                             for (int i = 0; i < scores.size(); i++) {
                                 final Score score = scores.get(i);
@@ -382,51 +399,19 @@ public class ScoreController {
                                 }
 
                                 final ScoreEntry scoreEntry = new ScoreEntry(i + 1, score);
-                                try {
-                                    baseWeights.put(scoreEntry, getWeight(scoreEntry));
-                                } catch (ParseException e) {
-                                    LOG.warn("Failed to parse beatmap with id {}", scoreEntry.score().getBeatmapId(), e);
-                                }
+                                candidates.add(scoreEntry);
                             }
 
-                            if (baseWeights.isEmpty()) {
-                                return "No scores available";
-                            }
 
-                            final int maxWeight = baseWeights.values()
-                                    .stream()
-                                    .max(Integer::compareTo)
-                                    .get();
+                            final Map<ScoreEntry, Double> weights = getWeights(candidates, scoreWeights);
 
-                            HashMap<ScoreEntry, Double> finalWeights = new HashMap<>();
-
-                            for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
-                                final double normalizedWeight = (double) entry.getValue() / maxWeight;
-
-                                final double weightFactor = scoreWeights.getOrDefault(entry.getKey().score().getId(), 1.0);
-
-                                final double finalWeight = Math.pow(normalizedWeight, 4) * weightFactor;
-
-                                if (finalWeight < 0.0) {
-                                    continue;
-                                }
-
-                                finalWeights.put(entry.getKey(), finalWeight);
-                            }
-
-                            // Extra normalization to make the result more human-friendly, maybe...
-                            final double maxFinalWeight = finalWeights.values()
-                                    .stream()
-                                    .max(Double::compareTo)
-                                    .orElseThrow();
-
-                            for (var entry : finalWeights.entrySet()) {
-                                entry.setValue(entry.getValue() / maxFinalWeight);
+                            if (weights.isEmpty()) {
+                                return "No scores found!";
                             }
 
                             StringBuilder sb = new StringBuilder();
 
-                            final List<Map.Entry<ScoreEntry, Double>> list = finalWeights.entrySet()
+                            final List<Map.Entry<ScoreEntry, Double>> list = weights.entrySet()
                                     .stream()
                                     .sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).toList();
 
@@ -496,41 +481,14 @@ public class ScoreController {
 
                         WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
 
-                        HashMap<ScoreEntry, Integer> baseWeights = new HashMap<>();
+                        final Map<ScoreEntry, Double> finalWeights = getWeights(candidates, weights);
 
-                        for (ScoreEntry current : candidates) {
-                            try {
-                                baseWeights.put(current, getWeight(current));
-                            } catch (ParseException e) {
-                                LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
-                            }
-                        }
-
-                        if (baseWeights.isEmpty()) {
+                        if (finalWeights.isEmpty()) {
                             return findAvailableScore(userIds, minRank, weights);
                         }
 
-                        final int maxWeight = baseWeights.values()
-                                .stream()
-                                .max(Integer::compareTo)
-                                .get();
-
-                        for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
-                            final double normalizedWeight = (double) entry.getValue() / maxWeight;
-
-                            final double weightFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
-
-                            final double finalWeight = Math.pow(normalizedWeight, 4) * weightFactor;
-
-                            if (finalWeight < 0.0) {
-                                continue;
-                            }
-
-                            randomScores.add(entry.getKey(), finalWeight);
-                        }
-
-                        if (randomScores.isEmpty()) {
-                            return findAvailableScore(userIds, minRank, weights);
+                        for (Map.Entry<ScoreEntry, Double> entry : finalWeights.entrySet()) {
+                            randomScores.add(entry.getKey(), entry.getValue());
                         }
 
                         ScoreEntry selected = randomScores.next();
@@ -540,32 +498,138 @@ public class ScoreController {
         });
     }
 
-    private int getWeight(ScoreEntry entry) throws ParseException {
+    private Map<ScoreEntry, Double> getWeights(List<ScoreEntry> candidates, Map<Long, Double> weights) {
+        HashMap<ScoreEntry, Double> baseWeights = new HashMap<>();
+
+        for (ScoreEntry current : candidates) {
+            try {
+                baseWeights.put(current, getWeight(current));
+            } catch (ParseException e) {
+                LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
+            }
+        }
+
+        if (baseWeights.isEmpty()) {
+            return Map.of();
+        }
+
+        final double maxWeight = baseWeights.values()
+                .stream()
+                .max(Double::compareTo)
+                .get();
+
+        HashMap<ScoreEntry, Double> finalWeights = new HashMap<>();
+
+        for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
+            final double normalizedWeight = entry.getValue() / maxWeight;
+
+            if (normalizedWeight < 0.6 && entry.getKey().bestIndex() > 40) {
+                continue;
+            }
+
+            final double powWeight = Math.pow(normalizedWeight, 4);
+
+            final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
+
+            final double finalWeight = powWeight * extraFactor;
+
+            if (finalWeight < 0.0) {
+                continue;
+            }
+
+            finalWeights.put(entry.getKey(), finalWeight);
+        }
+
+        // Extra normalization to make the result more human-friendly, maybe...
+        final double maxFinalWeight = finalWeights.values()
+                .stream()
+                .max(Double::compareTo)
+                .orElseThrow();
+
+        for (var entry : finalWeights.entrySet()) {
+            entry.setValue(entry.getValue() / maxFinalWeight);
+        }
+
+        return finalWeights;
+    }
+
+    private double getWeight(ScoreEntry entry) throws ParseException {
         final Long beatmapId = entry.score().getBeatmapId();
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, getModBits(entry.score().getMods()));
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
-        int patternWeight = 0;
+        double patternWeight = 0;
         for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
-            patternWeight += (int) (PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
+            patternWeight += (PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
         }
-        return patternWeight * (100 - entry.bestIndex()) / 100;
+
+        final double modWeightFactor = getModWeightFactor(entry);
+        final double attributeFactor = getAttributeFactor(difficultyAttribute);
+
+        return (patternWeight * (100.0 - entry.bestIndex()) * modWeightFactor * attributeFactor) / 100.0;
     }
 
-    public static long getModBits(List<Mod> mods) {
-        long bits = 0;
+    private double getModWeightFactor(ScoreEntry entry) {
+        final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
-        for (Mod mod : mods) {
-            switch (mod.getAcronym()) {
-                case "EZ" -> bits |= 2L;
-                case "HR" -> bits |= 16L;
-                case "DT" -> bits |= 64L;
-                case "HT" -> bits |= 256L;
-                case "NC" -> bits |= 512L | 64L;
-            }
+        if (mods.is("EZHD"))
+            return 2.0;
+
+        if (mods.is("EZ"))
+            return 1.5;
+
+        if (mods.is("HRHD"))
+            return 1.5;
+
+        if (mods.is("HR"))
+            return 1.25;
+
+        if (mods.is("HDDT") || mods.is("HDNC"))
+            return 0.8;
+
+        return 1.0;
+    }
+
+    private double getAttributeFactor(DifficultyAttribute difficultyAttribute) {
+        double attributeFactor = 1.0;
+
+        // Precision...
+        if (difficultyAttribute.cs() >= 8) {
+            attributeFactor *= 1.1;
         }
 
-        return bits;
+        // Reading!
+        attributeFactor *= getArFactor(difficultyAttribute.ar());
+
+        return attributeFactor;
+    }
+
+    private static double getArFactor(double ar) {
+        if (ar >= 8.0) {
+            return 1.0;
+        }
+
+        return 1.0 + 2.5 * Math.pow((8.0 - ar) / 4.0, 1.25);
+    }
+
+    private record ModSet(Set<String> acronyms) {
+        public boolean is(Collection<String> acronyms) {
+            return this.acronyms.containsAll(acronyms) && this.acronyms.size() == acronyms.size();
+        }
+
+        public boolean is(String acronyms) {
+            if (acronyms.length() % 2 != 0) {
+                throw new IllegalArgumentException("Invalid mod string: " + acronyms);
+            }
+
+            List<String> result = new ArrayList<>();
+
+            for (int i = 0; i < acronyms.length(); i += 2) {
+                result.add(acronyms.substring(i, i + 2));
+            }
+
+            return this.is(result);
+        }
     }
 
     private record ScoreEntry(int bestIndex, Score score) {
