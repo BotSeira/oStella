@@ -60,6 +60,7 @@ public class WebServer implements Closeable {
                     .get("/scores/random", router.scoreController::randomScore)
                     .post("/scores/random/users", router.scoreController::randomScoreFromUsers)
                     .get("/scores/random/users/{userId}/weights", router.scoreController::randomScoreFromUsersWeights)
+                    .post("/scores/random/users/{userId}/weights", router.scoreController::randomScoreFromUsersWeights)
                     .get("/scores/{scoreId}", router.scoreController::renderScoreById)
                     .get("/scores/{scoreId}/analysis", router.analyzeController::renderScoreAnalysisById)
                     .get("/scores/{scoreId}/highlight", router.analyzeController::getScoreHighlight)

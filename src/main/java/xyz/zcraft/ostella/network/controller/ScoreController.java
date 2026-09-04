@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.network.controller;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
@@ -355,6 +356,20 @@ public class ScoreController {
     public void randomScoreFromUsersWeights(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
 
+        final JsonElement jsonElement = JsonParser.parseString(context.body());
+        final Map<Long, Double> scoreWeights;
+
+        if (jsonElement == null || !jsonElement.isJsonObject()) {
+            scoreWeights = Map.of();
+        } else {
+            final JsonObject body = jsonElement.getAsJsonObject();
+
+            final RandomScoreRequest randomScoreRequest = GSON.fromJson(body, RandomScoreRequest.class);
+
+            scoreWeights = Optional.ofNullable(randomScoreRequest.weightFactor())
+                    .map(WeightFactor::scores)
+                    .orElse(Map.of());
+        }
         context.future(() ->
                 executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 40))
                         .thenApply(scores -> {
@@ -388,7 +403,9 @@ public class ScoreController {
                             for (Map.Entry<ScoreEntry, Integer> entry : baseWeights.entrySet()) {
                                 final double normalizedWeight = (double) entry.getValue() / maxWeight;
 
-                                final double finalWeight = Math.pow(normalizedWeight, 4);
+                                final double weightFactor = scoreWeights.getOrDefault(entry.getKey().score().getId(), 1.0);
+
+                                final double finalWeight = Math.pow(normalizedWeight, 4) * weightFactor;
 
                                 if (finalWeight < 0.0) {
                                     continue;
@@ -397,15 +414,31 @@ public class ScoreController {
                                 finalWeights.put(entry.getKey(), finalWeight);
                             }
 
+                            // Extra normalization to make the result more human-friendly, maybe...
+                            final double maxFinalWeight = finalWeights.values()
+                                    .stream()
+                                    .max(Double::compareTo)
+                                    .orElseThrow();
+
+                            for (var entry : finalWeights.entrySet()) {
+                                entry.setValue(entry.getValue() / maxFinalWeight);
+                            }
+
                             StringBuilder sb = new StringBuilder();
 
-                            finalWeights.entrySet()
+                            final List<Map.Entry<ScoreEntry, Double>> list = finalWeights.entrySet()
                                     .stream()
-                                    .sorted((a, b) -> Double.compare(b.getValue(), a.getValue()))
-                                    .forEach(e ->
-                                            sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
-                                                    .append(String.format("%.5f", e.getValue())).append("   ")
-                                    );
+                                    .sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).toList();
+
+                            for (int i = 0; i < Math.min(6, list.size()); i++) {
+                                final Map.Entry<ScoreEntry, Double> e = list.get(i);
+                                sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
+                                        .append(String.format("%.5f", e.getValue())).append("   ");
+                            }
+
+                            if (list.size() > 6) {
+                                sb.append("\n").append("... and %d more".formatted(list.size() - 6));
+                            }
 
                             return sb.toString().trim();
                         })
