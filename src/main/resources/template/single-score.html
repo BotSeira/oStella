@@ -231,7 +231,7 @@
         }
 
         .replay-badge {
-            transform: translate(2px);
+            transform: translate(2px, 1px);
             font-size: 0.85em;
             font-weight: bold;
         }
@@ -521,7 +521,7 @@
                      src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
             </div>
             <div class="score-time">
-                <div class="replay-container" th:if="${score.getHasReplay()}">
+                <div class="replay-container" th:if="${replayPresent}">
                     <span class="replay-badge">▶</span>
                 </div>
                 <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>

@@ -58,6 +58,9 @@ public class WebServer implements Closeable {
 
                     .get("/scores/lookup", router.scoreController::lookupScore)
                     .get("/scores/random", router.scoreController::randomScore)
+                    .post("/scores/random/users", router.scoreController::randomScoreFromUsers)
+                    .get("/scores/random/users/{userId}/weights", router.scoreController::randomScoreFromUsersWeights)
+                    .post("/scores/random/users/{userId}/weights", router.scoreController::randomScoreFromUsersWeights)
                     .get("/scores/{scoreId}", router.scoreController::renderScoreById)
                     .get("/scores/{scoreId}/analysis", router.analyzeController::renderScoreAnalysisById)
                     .get("/scores/{scoreId}/highlight", router.analyzeController::getScoreHighlight)
@@ -77,6 +80,7 @@ public class WebServer implements Closeable {
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)
                     .post("/users/scores/recent/batch", router.userController::getRecentScoresBatch)
                     .get("/users/{userId}", router.userController::getUserInfo)
+                    .get("/users/{userId}/rank", router.userController::getUserRank)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)

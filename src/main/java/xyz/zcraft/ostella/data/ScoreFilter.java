@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.data;
 
+import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 
@@ -14,7 +15,7 @@ import java.util.regex.Pattern;
 /** A validated filter applied to a score-list response. */
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
-            "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank"
+            "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
                     + "|title|artist|mapper|genre|language|video|storyboard|fullcombo)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
@@ -228,7 +229,7 @@ public final class ScoreFilter {
             case BPM -> formatNumber(value) + " BPM";
             case MISS -> formatNumber(value) + " miss";
             case SCORE -> formatNumber(value);
-            case MODS, RANK, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, VIDEO, STORYBOARD, FULL_COMBO ->
+            case MODS, RANK, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
     }
@@ -274,6 +275,7 @@ public final class ScoreFilter {
                     && compareText(score.getBeatmapset().getLanguage().getName());
             case VIDEO -> score.getBeatmapset() != null && compareBoolean(score.getBeatmapset().getVideo());
             case STORYBOARD -> score.getBeatmapset() != null && compareBoolean(score.getBeatmapset().getStoryboard());
+            case REPLAY -> compareBoolean(score.getHasReplay() || CacheService.hasReplayCache(score.getId()));
             case FULL_COMBO -> compareBoolean(score.getIsPerfectCombo());
         };
     }
@@ -343,7 +345,7 @@ public final class ScoreFilter {
     private boolean compareBoolean(Boolean actual) {
         if (actual == null) return false;
         boolean equal = actual == Boolean.parseBoolean(textValues.iterator().next());
-        return operator == Operator.EQUAL ? equal : !equal;
+        return (operator == Operator.EQUAL) == equal;
     }
 
     public String displayText() {
@@ -368,6 +370,7 @@ public final class ScoreFilter {
         LANGUAGE("Language"),
         VIDEO("Video"),
         STORYBOARD("Storyboard"),
+        REPLAY("Replay"),
         FULL_COMBO("Full combo");
 
         private final String label;
@@ -395,6 +398,7 @@ public final class ScoreFilter {
                 case "language" -> LANGUAGE;
                 case "video" -> VIDEO;
                 case "storyboard" -> STORYBOARD;
+                case "replay" -> REPLAY;
                 case "fullcombo" -> FULL_COMBO;
                 default -> throw new IllegalArgumentException("Unknown filter field: " + value);
             };
@@ -405,7 +409,7 @@ public final class ScoreFilter {
         }
 
         boolean isBoolean() {
-            return this == VIDEO || this == STORYBOARD || this == FULL_COMBO;
+            return this == VIDEO || this == STORYBOARD || this == FULL_COMBO || this == REPLAY;
         }
     }
 

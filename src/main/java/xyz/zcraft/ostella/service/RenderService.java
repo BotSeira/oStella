@@ -335,6 +335,9 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("sliderTickBreakTimes", analyzeData.performanceGraph().sliderTickBreaks());
         ctx.setVariable("sliderEndBreakTimes", analyzeData.performanceGraph().sliderEndBreaks());
         ctx.setVariable("mapEndTime", analyzeData.performanceGraph().mapEndTime());
+        ctx.setVariable("isLazerScore", analyzeData.isLazerScore());
+        ctx.setVariable("doSimMatch", analyzeData.doSimMatch());
+        ctx.setVariable("simHitResult", analyzeData.simHitResult());
 
         String finalHtml = templateEngine.process("score-analysis", ctx);
 

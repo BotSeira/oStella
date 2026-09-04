@@ -1,9 +1,21 @@
 {
   "Gameplay": {
+    "Score": {
+      "Show": false
+    },
+    "ComboCounter": {
+      "Show": false
+    },
     "PPCounter": {
       "Show": false
     },
     "ScoreBoard": {
+      "Show": false
+    },
+    "HitCounter": {
+      "Show": false
+    },
+    "Mods": {
       "Show": false
     },
     "ShowResultsScreen": false
