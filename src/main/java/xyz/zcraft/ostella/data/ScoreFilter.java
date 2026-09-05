@@ -4,19 +4,17 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** A validated filter applied to a score-list response. */
+/**
+ * A validated filter applied to a score-list response.
+ */
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
-                    + "|title|artist|mapper|genre|language|video|storyboard|fullcombo)"
+                    + "|title|artist|mapper|genre|language|video|storyboard|fullcombo|ar|od|cs|hp)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
     private static final Pattern DURATION_PATTERN = Pattern.compile("(?i)^(?:(\\d+)m)?(?:(\\d+(?:\\.\\d+)?)s)?$");
@@ -228,7 +226,7 @@ public final class ScoreFilter {
             case STAR -> formatNumber(value) + "★";
             case BPM -> formatNumber(value) + " BPM";
             case MISS -> formatNumber(value) + " miss";
-            case SCORE -> formatNumber(value);
+            case SCORE, AR, CS, HP, OD -> formatNumber(value);
             case MODS, RANK, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
@@ -258,6 +256,14 @@ public final class ScoreFilter {
                     && compare(score.getBeatmap().getTotalLength());
             case STAR -> score.getBeatmap() != null && score.getBeatmap().getDifficultyRating() != null
                     && compare(score.getBeatmap().getDifficultyRating());
+            case AR -> score.getBeatmap() != null && score.getBeatmap().getAr() != null
+                    && compare(score.getBeatmap().getAr());
+            case CS -> score.getBeatmap() != null && score.getBeatmap().getCs() != null
+                    && compare(score.getBeatmap().getCs());
+            case HP -> score.getBeatmap() != null && score.getBeatmap().getDrain() != null
+                    && compare(score.getBeatmap().getDrain());
+            case OD -> score.getBeatmap() != null && score.getBeatmap().getAccuracy() != null
+                    && compare(score.getBeatmap().getAccuracy());
             case BPM -> score.getBeatmap() != null && score.getBeatmap().getBpm() != null
                     && compare(score.getBeatmap().getBpm());
             case MISS -> score.getStatistics() != null && compare(score.getStatistics().getOrDefault("miss", 0L));
@@ -358,6 +364,10 @@ public final class ScoreFilter {
         PP("PP"),
         LENGTH("Beatmap length"),
         STAR("Star rating"),
+        CS("Circle Size"),
+        AR("Approach Rate"),
+        HP("HP Drain"),
+        OD("Overall Difficulty"),
         BPM("BPM"),
         MISS("Misses"),
         SCORE("Score"),

@@ -517,7 +517,7 @@ public class ScoreController {
         for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
             final double normalizedWeight = entry.getValue() / maxWeight;
 
-            if (normalizedWeight < 0.4 && entry.getKey().bestIndex() > 50) {
+            if (normalizedWeight < 0.6 && entry.getKey().bestIndex() > 40) {
                 continue;
             }
 
@@ -563,17 +563,19 @@ public class ScoreController {
         final double attributeFactor = getAttributeFactor(difficultyAttribute);
         final double bestIndexFactor = (400.0 - entry.bestIndex()) / 200.0;
 
-        return (patternWeight * (1 + bestIndexFactor + modWeightFactor + attributeFactor));
+        final double factor = 1 + bestIndexFactor + modWeightFactor + attributeFactor;
+
+        return (patternWeight * Math.max(0.1, factor));
     }
 
     private double getModWeightFactor(ScoreEntry entry) {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
         if (mods.is("EZHD"))
-            return 2.5;
+            return 3.0;
 
         if (mods.is("EZ"))
-            return 2.0;
+            return 2.5;
 
         if (mods.is("HRHD"))
             return 1.5;
@@ -582,7 +584,7 @@ public class ScoreController {
             return 1.0;
 
         if (mods.is("HDDT") || mods.is("HDNC"))
-            return -0.2;
+            return -0.5;
 
         return 0.0;
     }
