@@ -388,7 +388,7 @@ public class ScoreController {
                     .orElse(Map.of());
         }
         context.future(() ->
-                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 80))
+                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 200))
                         .thenApply(scores -> {
                             List<ScoreEntry> candidates = new ArrayList<>(scores.size());
 
@@ -401,7 +401,6 @@ public class ScoreController {
                                 final ScoreEntry scoreEntry = new ScoreEntry(i + 1, score);
                                 candidates.add(scoreEntry);
                             }
-
 
                             final Map<ScoreEntry, Double> weights = getWeights(candidates, scoreWeights);
 
@@ -442,23 +441,17 @@ public class ScoreController {
 
         long userId = userIds.getAndRemove();
 
-        final int SCORE_LIMIT = 40;
-
         return executor.enqueueAsync(() ->
                 OsuAPI.getUserScores(
                         tokenManager.getTokenData(),
                         userId,
                         ScoreType.BEST,
-                        SCORE_LIMIT
+                        200
                 )
         ).thenCompose(scores -> {
-            if (scores.size() < SCORE_LIMIT) {
-                return findAvailableScore(userIds, minRank, weights);
-            }
+            List<ScoreEntry> candidates = new ArrayList<>(200);
 
-            List<ScoreEntry> candidates = new ArrayList<>(SCORE_LIMIT);
-
-            for (int i = 0; i < SCORE_LIMIT; i++) {
+            for (int i = 0; i < scores.size(); i++) {
                 final Score score = scores.get(i);
 
                 if (!ScoreFormatUtil.replayPresent(score)) {
@@ -524,11 +517,11 @@ public class ScoreController {
         for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
             final double normalizedWeight = entry.getValue() / maxWeight;
 
-            if (normalizedWeight < 0.5 && entry.getKey().bestIndex() > 40) {
+            if (normalizedWeight < 0.4 && entry.getKey().bestIndex() > 50) {
                 continue;
             }
 
-            final double powWeight = Math.pow(normalizedWeight, 4);
+            final double powWeight = Math.pow(normalizedWeight, 3.5);
 
             final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
 
@@ -559,58 +552,67 @@ public class ScoreController {
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, getModBits(entry.score().getMods()));
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
+
         double patternWeight = 0;
+
         for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
             patternWeight += (PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
         }
 
         final double modWeightFactor = getModWeightFactor(entry);
         final double attributeFactor = getAttributeFactor(difficultyAttribute);
+        final double bestIndexFactor = (400.0 - entry.bestIndex()) / 200.0;
 
-        return (patternWeight * (100.0 - entry.bestIndex()) * modWeightFactor * attributeFactor) / 100.0;
+        return (patternWeight * (1 + bestIndexFactor + modWeightFactor + attributeFactor));
     }
 
     private double getModWeightFactor(ScoreEntry entry) {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
         if (mods.is("EZHD"))
-            return 2.0;
+            return 2.5;
 
         if (mods.is("EZ"))
-            return 1.5;
+            return 2.0;
 
         if (mods.is("HRHD"))
             return 1.5;
 
         if (mods.is("HR"))
-            return 1.25;
+            return 1.0;
 
         if (mods.is("HDDT") || mods.is("HDNC"))
-            return 0.8;
+            return -0.2;
 
-        return 1.0;
+        return 0.0;
     }
 
     private double getAttributeFactor(DifficultyAttribute difficultyAttribute) {
-        double attributeFactor = 1.0;
+        double attributeFactor = 0.0;
 
         // Precision...
-        if (difficultyAttribute.cs() >= 8) {
-            attributeFactor *= 1.1;
-        }
+        attributeFactor += getCsFactor(difficultyAttribute.cs());
 
         // Reading!
-        attributeFactor *= getArFactor(difficultyAttribute.ar());
+        attributeFactor += getArFactor(difficultyAttribute.ar());
 
         return attributeFactor;
     }
 
     private static double getArFactor(double ar) {
-        if (ar >= 8.0) {
-            return 1.0;
+        if (ar >= 8.25) {
+            return 0.0;
         }
 
-        return 1.0 + 2.5 * Math.pow((8.0 - ar) / 4.0, 1.25);
+        return 2.5 * (1.0 - Math.exp(-1.3 * (8.25 - ar)));
+    }
+
+    private static double getCsFactor(double cs) {
+        if (cs <= 8.0) {
+            return 0.0;
+        }
+
+        return Math.pow((cs - 8.0) / 4.0, 1.25);
     }
 
     private record ModSet(Set<String> acronyms) {
