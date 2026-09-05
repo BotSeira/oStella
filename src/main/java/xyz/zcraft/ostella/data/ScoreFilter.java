@@ -396,6 +396,10 @@ public final class ScoreFilter {
                 case "pp" -> PP;
                 case "time", "length", "len" -> LENGTH;
                 case "star", "stars", "sr" -> STAR;
+                case "approachrate", "ar" -> AR;
+                case "cs" -> CS;
+                case "hp", "drain" -> HP;
+                case "od" -> OD;
                 case "bpm" -> BPM;
                 case "miss", "misses" -> MISS;
                 case "score" -> SCORE;
