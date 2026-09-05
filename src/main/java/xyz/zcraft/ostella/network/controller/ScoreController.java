@@ -373,6 +373,8 @@ public class ScoreController {
     public void randomScoreFromUsersWeights(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
 
+        final boolean allWeights = optionalBoolean(context, "all", false);
+
         final JsonElement jsonElement = JsonParser.parseString(context.body());
         final Map<Long, Double> scoreWeights;
 
@@ -414,7 +416,8 @@ public class ScoreController {
                                     .stream()
                                     .sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).toList();
 
-                            final int LIMIT = 12;
+                            final int LIMIT = allWeights ? 1000 : 12;
+
                             for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
                                 sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
