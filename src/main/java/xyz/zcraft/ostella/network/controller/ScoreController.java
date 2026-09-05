@@ -561,7 +561,7 @@ public class ScoreController {
 
         final double modWeightFactor = getModWeightFactor(entry);
         final double attributeFactor = getAttributeFactor(difficultyAttribute);
-        final double bestIndexFactor = (400.0 - entry.bestIndex()) / 200.0;
+        final double bestIndexFactor = (250.0 - entry.bestIndex()) / 200.0;
 
         final double factor = 1 + bestIndexFactor + modWeightFactor + attributeFactor;
 
@@ -584,6 +584,9 @@ public class ScoreController {
             return 1.0;
 
         if (mods.is("HDDT") || mods.is("HDNC"))
+            return -1.0;
+
+        if (mods.is("DT"))
             return -0.5;
 
         return 0.0;
