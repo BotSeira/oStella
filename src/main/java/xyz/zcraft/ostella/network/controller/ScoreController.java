@@ -561,11 +561,17 @@ public class ScoreController {
 
         final double modWeightFactor = getModWeightFactor(entry);
         final double attributeFactor = getAttributeFactor(difficultyAttribute);
-        final double bestIndexFactor = (250.0 - entry.bestIndex()) / 200.0;
+        final double bestIndexFactor = getBestIndexFactor(entry);
 
         final double factor = 1 + bestIndexFactor + modWeightFactor + attributeFactor;
 
         return (patternWeight * Math.max(0.1, factor));
+    }
+
+    private double getBestIndexFactor(ScoreEntry entry) {
+        final int x = entry.bestIndex();
+
+        return Math.clamp((200.0 / (x + 40.0)) - 4.0, -3.0, 1.0);
     }
 
     private double getModWeightFactor(ScoreEntry entry) {
