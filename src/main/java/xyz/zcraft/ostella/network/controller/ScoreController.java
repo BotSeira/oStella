@@ -420,7 +420,7 @@ public class ScoreController {
 
                             for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
-                                sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
+                                sb.append("__BP").append("%03d".formatted(e.getKey().bestIndex())).append("__:")
                                         .append(String.format("%.5f", e.getValue())).append("   ");
                             }
 
