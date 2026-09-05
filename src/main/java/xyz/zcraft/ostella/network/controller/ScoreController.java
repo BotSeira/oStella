@@ -410,6 +410,9 @@ public class ScoreController {
                                 return "No scores found!";
                             }
 
+                            final double sum = weights.values().stream().mapToDouble(Double::doubleValue).sum();
+                            double showed = 0;
+
                             StringBuilder sb = new StringBuilder();
 
                             final List<Map.Entry<ScoreEntry, Double>> list = weights.entrySet()
@@ -420,12 +423,14 @@ public class ScoreController {
 
                             for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
+                                final double percentage = (e.getValue() / sum) * 100;
                                 sb.append("__BP").append("%03d".formatted(e.getKey().bestIndex())).append("__:")
-                                        .append(String.format("%.5f", e.getValue())).append("   ");
+                                        .append(String.format("%05.2f%%", percentage)).append("   ");
+                                showed += percentage;
                             }
 
                             if (list.size() > LIMIT) {
-                                sb.append("\n").append("... and %d more".formatted(list.size() - LIMIT));
+                                sb.append("\n").append("... and %d more(%05.2f%%)".formatted(list.size() - LIMIT, 100 - showed));
                             }
 
                             return sb.toString().trim();
