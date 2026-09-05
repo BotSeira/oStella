@@ -585,22 +585,22 @@ public class ScoreController {
     private double getModWeightFactor(ScoreEntry entry) {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
-        if (mods.is("EZHD"))
+        if (mods.has("EZHD"))
             return 3.0;
 
-        if (mods.is("EZ"))
+        if (mods.has("EZ"))
             return 2.5;
 
-        if (mods.is("HRHD"))
+        if (mods.has("HRHD"))
             return 1.5;
 
-        if (mods.is("HR"))
+        if (mods.has("HR"))
             return 1.0;
 
-        if (mods.is("HDDT") || mods.is("HDNC"))
+        if (mods.has("HDDT") || mods.has("HDNC"))
             return -1.0;
 
-        if (mods.is("DT"))
+        if (mods.has("DT") || mods.has("NC"))
             return -0.5;
 
         return 0.0;
@@ -635,6 +635,25 @@ public class ScoreController {
     }
 
     private record ModSet(Set<String> acronyms) {
+        public boolean has(Collection<String> acronyms) {
+            return this.acronyms.containsAll(acronyms);
+        }
+
+        public boolean has(String acronyms) {
+            if (acronyms.length() % 2 != 0) {
+                throw new IllegalArgumentException("Invalid mod string: " + acronyms);
+            }
+
+            List<String> result = new ArrayList<>();
+
+            for (int i = 0; i < acronyms.length(); i += 2) {
+                result.add(acronyms.substring(i, i + 2));
+            }
+
+            return this.has(result);
+        }
+
+
         public boolean is(Collection<String> acronyms) {
             return this.acronyms.containsAll(acronyms) && this.acronyms.size() == acronyms.size();
         }
@@ -650,7 +669,7 @@ public class ScoreController {
                 result.add(acronyms.substring(i, i + 2));
             }
 
-            return this.is(result);
+            return this.has(result);
         }
     }
 
