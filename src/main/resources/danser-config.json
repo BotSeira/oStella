@@ -52,6 +52,9 @@
       }
     }
   },
+  "Logo": {
+    "Enabled": false
+  },
   "Cursor": {
     "CursorSize": 8,
     "TrailScale": 0.7,
