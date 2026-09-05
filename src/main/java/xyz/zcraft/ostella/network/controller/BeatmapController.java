@@ -219,10 +219,8 @@ public class BeatmapController {
                                 .toList();
 
                         return renderer.renderBeatmap(beatmap, diffSpec, diff);
-                    } catch (ParseException e) {
+                    } catch (Exception e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-                    } catch (AnalyzeException e) {
-                        throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
                     }
                 }, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
