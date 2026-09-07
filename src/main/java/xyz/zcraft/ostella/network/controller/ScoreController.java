@@ -283,7 +283,7 @@ public class ScoreController {
     }
 
     public CompletableFuture<Score> getScoreFromRefAsync(@NotNull Context context) {
-        final String of = requireStringFrom(context, "of", "rs", "bo", "rp");
+        final String of = requireStringFrom(context, "of", "rs", "bp", "rp");
         final long u = requireLong(context, "u");
         final int i = requirePositiveInt(context, "i");
         final List<ScoreFilter> filters = requireScoreFilters(context);
@@ -291,7 +291,7 @@ public class ScoreController {
         final ScoreType type = switch (of.toLowerCase()) {
             case "rs" -> ScoreType.RECENT;
             case "rp" -> ScoreType.RECENT_PASS;
-            case "bo" -> ScoreType.BEST;
+            case "bp" -> ScoreType.BEST;
             default -> throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score type: " + of);
         };
         final int fetchLimit = scoreLookupFetchLimit(i, filters);
