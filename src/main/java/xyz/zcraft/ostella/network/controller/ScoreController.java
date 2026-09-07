@@ -525,13 +525,15 @@ public class ScoreController {
         for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
             final double normalizedWeight = entry.getValue() / maxWeight;
 
-            if (normalizedWeight < 0.5 && entry.getKey().bestIndex() > 40) {
-                continue;
+            final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
+
+            if (entry.getKey().bestIndex() > 40 && normalizedWeight < 0.5) {
+                if (extraFactor <= 1.0) {
+                    continue;
+                }
             }
 
-            final double powWeight = Math.pow(normalizedWeight, 3.0);
-
-            final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
+            final double powWeight = Math.pow(normalizedWeight, 2.5);
 
             final double finalWeight = powWeight * extraFactor;
 
