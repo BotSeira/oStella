@@ -529,7 +529,7 @@ public class ScoreController {
                 continue;
             }
 
-            final double powWeight = Math.pow(normalizedWeight, 3.5);
+            final double powWeight = Math.pow(normalizedWeight, 3.0);
 
             final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
 
