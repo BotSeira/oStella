@@ -185,10 +185,15 @@ public class OsuAPI {
     record UserScoresPage(int limit, int offset) {
     }
 
-    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
+    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId, String mods) {
         LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
         try {
-            final String url = "/beatmaps/%s/scores/users/%s";
+            String url = "/beatmaps/%s/scores/users/%s?mode=osu";
+
+            if (mods != null && !mods.isBlank()) {
+                url += "&mods=" + mods;
+            }
+
             final var request = newRequestBuilder(tokenData, String.format(url, beatmapId, uid))
                     .GET()
                     .build();
@@ -203,6 +208,10 @@ public class OsuAPI {
         } catch (JsonSyntaxException | InterruptedException | IOException e) {
             throw new ApiException(ErrorCode.SCORE_FETCH_FAILED, "Failed to fetch scores for " + uid + " on beatmap " + beatmapId, e);
         }
+    }
+
+    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
+        return getUserScore(tokenData, uid, beatmapId, null);
     }
 
     public static MultiplayerRoom getCurrentRoom(String auth) {
