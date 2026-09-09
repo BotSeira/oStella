@@ -327,7 +327,7 @@ public class ScoreController {
 
                             return userIds;
                         })
-                        .thenCompose(userIds -> findAvailableScore(userIds, minRank, Map.of()))
+                        .thenCompose(userIds -> findAvailableScore(userIds, minRank, Map.of(), 40))
                         .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
@@ -364,7 +364,7 @@ public class ScoreController {
                 .orElse(Map.of());
 
         context.future(() ->
-                findAvailableScore(userIds, Long.MAX_VALUE, scoreWeights)
+                findAvailableScore(userIds, Long.MAX_VALUE, scoreWeights, 200)
                         .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
@@ -442,7 +442,9 @@ public class ScoreController {
         );
     }
 
-    private CompletableFuture<TargetScore> findAvailableScore(WeightedRandom<Long> userIds, long minRank, Map<Long, Double> weights) {
+    private CompletableFuture<TargetScore> findAvailableScore(
+            WeightedRandom<Long> userIds, long minRank, Map<Long, Double> weights, int maxLimit
+    ) {
         if (userIds.isEmpty()) {
             return CompletableFuture.failedFuture(
                     new ApiException(ErrorCode.NO_SCORE_FOUND, "No available scores found!")
@@ -456,7 +458,7 @@ public class ScoreController {
                         tokenManager.getTokenData(),
                         userId,
                         ScoreType.BEST,
-                        200
+                        maxLimit
                 )
         ).thenCompose(scores -> {
             List<ScoreEntry> candidates = new ArrayList<>(200);
@@ -472,7 +474,7 @@ public class ScoreController {
             }
 
             if (candidates.isEmpty()) {
-                return findAvailableScore(userIds, minRank, weights);
+                return findAvailableScore(userIds, minRank, weights, maxLimit);
             }
 
             return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
@@ -480,7 +482,7 @@ public class ScoreController {
                         if (user == null
                                 || user.getStatistics().getGlobalRank() == null
                                 || user.getStatistics().getGlobalRank() > minRank) {
-                            return findAvailableScore(userIds, minRank, weights);
+                            return findAvailableScore(userIds, minRank, weights, maxLimit);
                         }
 
                         WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
@@ -488,7 +490,7 @@ public class ScoreController {
                         final Map<ScoreEntry, Double> finalWeights = getWeights(candidates, weights);
 
                         if (finalWeights.isEmpty()) {
-                            return findAvailableScore(userIds, minRank, weights);
+                            return findAvailableScore(userIds, minRank, weights, maxLimit);
                         }
 
                         for (Map.Entry<ScoreEntry, Double> entry : finalWeights.entrySet()) {
@@ -590,22 +592,22 @@ public class ScoreController {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
         if (mods.has("EZHD"))
-            return 3.0;
+            return 2.0;
 
         if (mods.has("EZ"))
-            return 2.5;
+            return 1.5;
 
         if (mods.has("HRHD"))
-            return 1.5;
+            return 1.2;
 
         if (mods.has("HR"))
             return 1.0;
 
         if (mods.has("HDDT") || mods.has("HDNC"))
-            return -1.0;
+            return -0.8;
 
         if (mods.has("DT") || mods.has("NC"))
-            return -0.5;
+            return -0.4;
 
         return 0.0;
     }
