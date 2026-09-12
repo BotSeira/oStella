@@ -591,7 +591,7 @@ public class ScoreController {
     private double getModWeightFactor(ScoreEntry entry) {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
-        double factor = 0.0;
+        double factor = 1.0;
 
         if (mods.has("FL"))
             factor += 0.5;
