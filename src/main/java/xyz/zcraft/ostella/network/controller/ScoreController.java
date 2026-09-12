@@ -591,25 +591,24 @@ public class ScoreController {
     private double getModWeightFactor(ScoreEntry entry) {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
-        if (mods.has("EZHD"))
-            return 2.0;
+        double factor = 0.0;
+
+        if (mods.has("FL"))
+            factor += 0.5;
 
         if (mods.has("EZ"))
-            return 1.5;
-
-        if (mods.has("HRHD"))
-            return 1.2;
+            factor += 0.5;
 
         if (mods.has("HR"))
-            return 1.0;
-
-        if (mods.has("HDDT") || mods.has("HDNC"))
-            return -0.8;
+            factor += 0.4;
 
         if (mods.has("DT") || mods.has("NC"))
-            return -0.4;
+            factor -= 0.25;
 
-        return 0.0;
+        if (mods.has("HD"))
+            factor *= 1.1;
+
+        return factor;
     }
 
     private double getAttributeFactor(DifficultyAttribute difficultyAttribute) {
