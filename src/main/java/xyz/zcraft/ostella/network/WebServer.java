@@ -103,6 +103,7 @@ public class WebServer implements Closeable {
                         .post("/replays/renders/showcase/{beatmapId}", router.replayController::renderShowcaseOfUsers)
 
                         .get("/replays/{jobId}/status", router.replayController::getReplayRenderStatus)
+                        .post("/replays/{jobId}/cancel", router.replayController::cancelReplayRender)
                         .get("/replays/{jobId}/video", router.replayController::getReplayRenderResultStream)
                         .get("/replays/{jobId}/video/replay.mp4", router.replayController::getReplayRenderResultFile)
                         .delete("/replays/{jobId}/video", router.replayController::deleteReplayRenderResult);

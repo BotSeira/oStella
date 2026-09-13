@@ -936,6 +936,59 @@
             letter-spacing: 0.08em;
         }
 
+        .versus-totals {
+            display: grid;
+            min-height: 72px;
+            align-items: center;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--line-strong);
+            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+            background: rgba(255, 255, 255, 0.014);
+        }
+
+        .versus-total {
+            min-width: 0;
+        }
+
+        .versus-total.right {
+            text-align: right;
+        }
+
+        .versus-total span {
+            display: block;
+            overflow: hidden;
+            color: var(--faint);
+            font-size: 12px;
+            font-weight: 850;
+            letter-spacing: 0.08em;
+            text-overflow: ellipsis;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+
+        .versus-total strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 3px;
+        }
+
+        .versus-total.red strong {
+            color: #fecdd3;
+        }
+
+        .versus-total.blue strong {
+            color: #dbeafe;
+        }
+
+        .versus-total-separator {
+            padding: 0 24px;
+            color: var(--faint);
+            font-size: 18px;
+            font-weight: 900;
+        }
+
         .grade-xh {
             --rank-rgb: 213, 229, 255;
         }
@@ -1838,6 +1891,19 @@
                         </div>
                     </div>
                 </article>
+            </div>
+        </div>
+
+        <div class="versus-totals" th:if="${result.isDuel() || result.isTeamVs()}"
+             th:with="leftScore=${result.versusScores[0]}, rightScore=${result.versusScores[1]}">
+            <div class="versus-total left" th:classappend="${leftScore.key}">
+                <span th:text="${leftScore.name}">Left side</span>
+                <strong th:text="${leftScore.wins}">3</strong>
+            </div>
+            <div class="versus-total-separator">WINS · VS</div>
+            <div class="versus-total right" th:classappend="${rightScore.key}">
+                <span th:text="${rightScore.name}">Right side</span>
+                <strong th:text="${rightScore.wins}">2</strong>
             </div>
         </div>
 

@@ -14,16 +14,20 @@ import java.util.regex.Pattern;
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
-                    + "|title|artist|mapper|genre|language|video|storyboard|fullcombo|ar|od|cs|hp)"
+                    + "|any|title|artist|mapper|genre|language|video|storyboard|fullcombo|ar|od|cs|hp)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
     private static final Pattern DURATION_PATTERN = Pattern.compile("(?i)^(?:(\\d+)m)?(?:(\\d+(?:\\.\\d+)?)s)?$");
     private static final Pattern MOD_PATTERN = Pattern.compile("[A-Z]{2}");
+    private static final Pattern REGEX_FILTER_PREFIX_PATTERN = Pattern.compile(
+            "(?i)^(?:any|title|artist|mapper|genre|language)(?:=|!=)$"
+    );
 
     private final Field field;
     private final Operator operator;
     private final double numericValue;
     private final Set<String> textValues;
+    private final Pattern regexValue;
     private final String displayText;
 
     private ScoreFilter(
@@ -31,12 +35,14 @@ public final class ScoreFilter {
             Operator operator,
             double numericValue,
             Set<String> textValues,
+            Pattern regexValue,
             String displayText
     ) {
         this.field = field;
         this.operator = operator;
         this.numericValue = numericValue;
         this.textValues = textValues;
+        this.regexValue = regexValue;
         this.displayText = displayText;
     }
 
@@ -46,7 +52,7 @@ public final class ScoreFilter {
         }
 
         List<ScoreFilter> filters = new ArrayList<>();
-        for (String token : encodedFilters.split(",", -1)) {
+        for (String token : splitFilterTokens(encodedFilters)) {
             if (token.isBlank()) {
                 throw new IllegalArgumentException("Filter cannot be empty");
             }
@@ -88,6 +94,7 @@ public final class ScoreFilter {
                 operator,
                 numericValue,
                 Set.of(),
+                null,
                 field.label + " " + operator.display + " " + formatValue(field, numericValue)
         );
     }
@@ -104,6 +111,7 @@ public final class ScoreFilter {
                 operator,
                 Double.NaN,
                 mods,
+                null,
                 field.label + " " + operator.display + " " + displayValue
         );
     }
@@ -116,21 +124,41 @@ public final class ScoreFilter {
         if (!Set.of("XH", "X", "SH", "S", "A", "B", "C", "D", "F").contains(rank)) {
             throw new IllegalArgumentException("Invalid rank: " + value);
         }
-        return new ScoreFilter(field, operator, Double.NaN, Set.of(rank), field.label + " " + operator.display + " " + rank);
+        return new ScoreFilter(field, operator, Double.NaN, Set.of(rank), null,
+                field.label + " " + operator.display + " " + rank);
     }
 
     private static ScoreFilter parseMetadataText(Field field, Operator operator, String value) {
         if (!operator.isText()) {
             throw new IllegalArgumentException(field.label + " only supports ~, !~, = and !=");
         }
+        if (field == Field.ANY && operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
+            throw new IllegalArgumentException("Any metadata only supports = and !=");
+        }
         if (value.isBlank()) {
             throw new IllegalArgumentException(field.label + " cannot be empty");
+        }
+        Pattern regex = null;
+        if (isRegexValue(value)) {
+            if (operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
+                throw new IllegalArgumentException("Regular expressions only support = and !=");
+            }
+            String expression = value.substring(1, value.length() - 1);
+            if (expression.isEmpty()) {
+                throw new IllegalArgumentException("Regular expression cannot be empty");
+            }
+            try {
+                regex = Pattern.compile(expression, Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+            } catch (java.util.regex.PatternSyntaxException e) {
+                throw new IllegalArgumentException("Invalid regular expression: " + e.getDescription(), e);
+            }
         }
         return new ScoreFilter(
                 field,
                 operator,
                 Double.NaN,
                 Set.of(value.toLowerCase(Locale.ROOT)),
+                regex,
                 field.label + " " + operator.display + " " + value
         );
     }
@@ -148,8 +176,45 @@ public final class ScoreFilter {
                 operator,
                 Double.NaN,
                 Set.of(normalized),
+                null,
                 field.label + " " + operator.display + " " + normalized
         );
+    }
+
+    private static boolean isRegexValue(String value) {
+        return value.length() >= 2 && value.startsWith("[") && value.endsWith("]");
+    }
+
+    private static List<String> splitFilterTokens(String encodedFilters) {
+        List<String> tokens = new ArrayList<>();
+        int start = 0;
+        int bracketDepth = 0;
+        boolean escaped = false;
+        for (int index = 0; index < encodedFilters.length(); index++) {
+            char character = encodedFilters.charAt(index);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (character == '\\' && bracketDepth > 0) {
+                escaped = true;
+            } else if (character == '[') {
+                if (bracketDepth > 0
+                        || REGEX_FILTER_PREFIX_PATTERN.matcher(encodedFilters.substring(start, index)).matches()) {
+                    bracketDepth++;
+                }
+            } else if (character == ']' && bracketDepth > 0) {
+                bracketDepth--;
+            } else if (character == ',' && bracketDepth == 0) {
+                tokens.add(encodedFilters.substring(start, index));
+                start = index + 1;
+            }
+        }
+        if (bracketDepth != 0) {
+            throw new IllegalArgumentException("Unclosed regular expression filter");
+        }
+        tokens.add(encodedFilters.substring(start));
+        return tokens;
     }
 
     private static Set<String> parseMods(String value) {
@@ -227,7 +292,7 @@ public final class ScoreFilter {
             case BPM -> formatNumber(value) + " BPM";
             case MISS -> formatNumber(value) + " miss";
             case SCORE, AR, CS, HP, OD -> formatNumber(value);
-            case MODS, RANK, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
+            case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
     }
@@ -270,6 +335,7 @@ public final class ScoreFilter {
             case SCORE -> score.getTotalScore() != null && compare(score.getTotalScore());
             case MODS -> compareMods(score.getMods());
             case RANK -> compareText(score.getRank());
+            case ANY -> compareText(allMetadataText(score));
             case TITLE -> score.getBeatmapset() != null
                     && compareText(score.getBeatmapset().getTitle(), score.getBeatmapset().getTitleUnicode());
             case ARTIST -> score.getBeatmapset() != null
@@ -323,10 +389,14 @@ public final class ScoreFilter {
     }
 
     private boolean compareText(String actual) {
-        return compareText(new String[]{actual});
+        return compareText(Collections.singletonList(actual));
     }
 
     private boolean compareText(String... actualValues) {
+        return compareText(Arrays.asList(actualValues));
+    }
+
+    private boolean compareText(Collection<String> actualValues) {
         String expected = textValues.iterator().next().toLowerCase(Locale.ROOT);
         boolean matches = false;
         boolean present = false;
@@ -334,7 +404,9 @@ public final class ScoreFilter {
             if (actual == null) continue;
             present = true;
             String normalized = actual.toLowerCase(Locale.ROOT);
-            if (operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS) {
+            if (regexValue != null) {
+                matches |= regexValue.matcher(actual).find();
+            } else if (field == Field.ANY || operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS) {
                 matches |= normalized.contains(expected);
             } else {
                 matches |= normalized.equals(expected);
@@ -346,6 +418,33 @@ public final class ScoreFilter {
             case NOT_EQUAL, NOT_CONTAINS -> !matches;
             default -> throw new IllegalStateException("Numeric operator used for text filter");
         };
+    }
+
+    private static List<String> allMetadataText(Score score) {
+        List<String> values = new ArrayList<>();
+        if (score.getBeatmap() != null) {
+            values.add(score.getBeatmap().getVersion());
+        }
+        if (score.getBeatmapset() != null) {
+            var beatmapset = score.getBeatmapset();
+            values.add(beatmapset.getTitle());
+            values.add(beatmapset.getTitleUnicode());
+            values.add(beatmapset.getArtist());
+            values.add(beatmapset.getArtistUnicode());
+            values.add(beatmapset.getCreator());
+            values.add(beatmapset.getSource());
+            values.add(beatmapset.getTags());
+            if (beatmapset.getGenre() != null) values.add(beatmapset.getGenre().getName());
+            if (beatmapset.getLanguage() != null) values.add(beatmapset.getLanguage().getName());
+            if (beatmapset.getPackTags() != null) values.addAll(beatmapset.getPackTags());
+            if (beatmapset.getRelatedTags() != null) {
+                beatmapset.getRelatedTags().forEach(tag -> {
+                    values.add(tag.getName());
+                    values.add(tag.getDescription());
+                });
+            }
+        }
+        return values;
     }
 
     private boolean compareBoolean(Boolean actual) {
@@ -373,6 +472,7 @@ public final class ScoreFilter {
         SCORE("Score"),
         MODS("Mods"),
         RANK("Rank"),
+        ANY("Any metadata"),
         TITLE("Title"),
         ARTIST("Artist"),
         MAPPER("Mapper"),
@@ -405,6 +505,7 @@ public final class ScoreFilter {
                 case "score" -> SCORE;
                 case "mod", "mods" -> MODS;
                 case "rank" -> RANK;
+                case "any" -> ANY;
                 case "title" -> TITLE;
                 case "artist" -> ARTIST;
                 case "mapper" -> MAPPER;
@@ -419,7 +520,7 @@ public final class ScoreFilter {
         }
 
         boolean isMetadataText() {
-            return this == TITLE || this == ARTIST || this == MAPPER || this == GENRE || this == LANGUAGE;
+            return this == ANY || this == TITLE || this == ARTIST || this == MAPPER || this == GENRE || this == LANGUAGE;
         }
 
         boolean isBoolean() {

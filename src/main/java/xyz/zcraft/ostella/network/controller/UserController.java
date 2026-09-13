@@ -71,19 +71,32 @@ public class UserController {
     }
 
     static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        return applyFilters(scores, filters, 1);
+    }
+
+    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
         List<Score> result = new ArrayList<>();
         List<Integer> originalPositions = new ArrayList<>();
         for (int index = 0; index < scores.size(); index++) {
             Score score = scores.get(index);
             if (filters.stream().allMatch(filter -> filter.matches(score))) {
                 result.add(score);
-                originalPositions.add(index + 1);
+                originalPositions.add(index + firstPosition);
             }
         }
         if (!filters.isEmpty() && result.isEmpty()) {
             throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
         }
         return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
+    }
+
+    private static int requireScoreListStart(Context context, int endPosition) {
+        String startParam = context.queryParam("start");
+        int start = startParam == null ? 1 : requirePositiveInt(context, "start");
+        if (start > endPosition) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Score range start must not exceed its end");
+        }
+        return start;
     }
 
     static FilteredScores filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
@@ -179,12 +192,13 @@ public class UserController {
     public void getRecentScores(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
         final int n = requireScoreListLimit(context);
+        final int start = requireScoreListStart(context, n);
         final boolean fail = requireBoolean(context, "fail", false);
         final List<ScoreFilter> filters = requireScoreFilters(context);
 
         final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, type, n)
+                        tokenManager.getTokenData(), u, type, n - start + 1, start - 1)
                 )
                 .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
                         .thenApplyAsync(user -> {
@@ -195,7 +209,7 @@ public class UserController {
                                 router.ensurePp(score);
                             }
 
-                            FilteredScores filteredScores = applyFilters(scores, filters);
+                            FilteredScores filteredScores = applyFilters(scores, filters, start);
                             context.header("X-User-Id", String.valueOf(user.getId()));
                             context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
 
@@ -255,9 +269,10 @@ public class UserController {
     public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
         final int n = requireScoreListLimit(context);
+        final int start = requireScoreListStart(context, n);
         final List<ScoreFilter> filters = requireScoreFilters(context);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, ScoreType.BEST, n
+                        tokenManager.getTokenData(), u, ScoreType.BEST, n - start + 1, start - 1
                 ))
                 .thenCompose(scores -> {
                     if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -267,7 +282,7 @@ public class UserController {
                                 for (Score score : scores) {
                                     router.ensurePp(score);
                                 }
-                                FilteredScores filteredScores = applyFilters(scores, filters);
+                                FilteredScores filteredScores = applyFilters(scores, filters, start);
                                 context.header("X-User-Id", String.valueOf(user.getId()));
                                 context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
                                 return renderer.renderScores(

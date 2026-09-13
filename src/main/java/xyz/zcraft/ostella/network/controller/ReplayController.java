@@ -82,6 +82,8 @@ public class ReplayController {
                     context, jobId, "failed", "Render failed", jobProgress.error());
             case ReplayService.JobStatus.TIMEOUT -> respondTerminalStatus(
                     context, jobId, "timeout", "Render timed out", jobProgress.error());
+            case ReplayService.JobStatus.CANCELED -> respondTerminalStatus(
+                    context, jobId, "canceled", "Render canceled", jobProgress.error());
             case ReplayService.JobStatus.QUEUED -> context.status(200).result(
                     new Response(true, "Render is waiting in queue",
                             GSON.toJsonTree(Map.of(
@@ -137,6 +139,22 @@ public class ReplayController {
         String jobId = context.pathParam("jobId");
         replayService.deleteJob(jobId);
         context.status(200).result("Job cleaned up successfully");
+    }
+
+    public void cancelReplayRender(@NotNull Context context) {
+        String jobId = context.pathParam("jobId");
+        ReplayService.JobProgress progress = replayService.cancelJob(jobId);
+        if (progress.status() == ReplayService.JobStatus.UNKNOWN) {
+            context.status(404).result(new Response(false, "Job not found", null).toString());
+            return;
+        }
+
+        String status = progress.status().name().toLowerCase(Locale.ROOT);
+        JsonObject data = terminalStatusData(jobId, status, progress.error());
+        String message = progress.status() == ReplayService.JobStatus.CANCELED
+                ? "Render canceled"
+                : "Render can no longer be canceled because it is " + status;
+        context.status(200).result(new Response(true, message, data).toString());
     }
 
     private CompletionStage<Void> finalizeReplay(@NotNull Context context, Score score,

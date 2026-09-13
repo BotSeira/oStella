@@ -2,10 +2,12 @@ package xyz.zcraft.ostella.data;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 public record MultiplayerResultData(long roomId, String roomName, long playlistItemId, String playedAt,
                                     String client, String scoringType, String teamType,
                                     long totalScore, long averageScore, double teamLeadPercent, String winningTeam,
+                                    SeriesScore seriesScore,
                                     BeatmapInfo beatmap, UserInfo queuedBy, List<PlayerResult> players,
                                     List<TeamResult> teams, List<PlayerResult> unassignedPlayers) {
     public MultiplayerResultData(
@@ -20,6 +22,7 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
             long averageScore,
             double teamLeadPercent,
             String winningTeam,
+            SeriesScore seriesScore,
             BeatmapInfo beatmap,
             UserInfo queuedBy,
             List<PlayerResult> players,
@@ -37,6 +40,7 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         this.averageScore = averageScore;
         this.teamLeadPercent = teamLeadPercent;
         this.winningTeam = winningTeam;
+        this.seriesScore = seriesScore == null ? SeriesScore.empty() : seriesScore;
         this.beatmap = beatmap;
         this.queuedBy = queuedBy;
         this.players = List.copyOf(players);
@@ -45,11 +49,11 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
     }
 
     public boolean isTeamVs() {
-        return teams.size() == 2;
+        return teams.size() == 2 && !isTeamDuel();
     }
 
     public boolean isDuel() {
-        return !isTeamVs() && players.size() == 2;
+        return isTeamDuel() || (teams.isEmpty() && players.size() == 2);
     }
 
     public List<PlayerResult> duelPlayers() {
@@ -57,8 +61,47 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
             return players;
         }
         return players.stream()
-                .sorted(Comparator.comparingLong(PlayerResult::userId))
+                .sorted(Comparator
+                        .comparingInt((PlayerResult player) -> teamOrder(player.team()))
+                        .thenComparingLong(PlayerResult::userId))
                 .toList();
+    }
+
+    public List<VersusScore> versusScores() {
+        if (teams.size() == 2) {
+            return teams.stream()
+                    .map(team -> new VersusScore(
+                            team.key(),
+                            team.name(),
+                            "red".equals(team.key()) ? seriesScore.redWins() : seriesScore.blueWins()
+                    ))
+                    .toList();
+        }
+        if (!isDuel()) {
+            return List.of();
+        }
+        return duelPlayers().stream()
+                .map(player -> new VersusScore(
+                        null,
+                        player.username(),
+                        seriesScore.playerWins().getOrDefault(player.userId(), 0)
+                ))
+                .toList();
+    }
+
+    private static int teamOrder(String team) {
+        return switch (team == null ? "" : team) {
+            case "red" -> 0;
+            case "blue" -> 1;
+            default -> 2;
+        };
+    }
+
+    private boolean isTeamDuel() {
+        return players.size() == 2
+                && teams.size() == 2
+                && teams.get(0).players().size() == 1
+                && teams.get(1).players().size() == 1;
     }
 
     public record BeatmapInfo(long id, String title, String titleUnicode, String artist, String creator,
@@ -80,5 +123,18 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         public TeamResult {
             players = List.copyOf(players);
         }
+    }
+
+    public record SeriesScore(Map<Long, Integer> playerWins, int redWins, int blueWins) {
+        public SeriesScore {
+            playerWins = playerWins == null ? Map.of() : Map.copyOf(playerWins);
+        }
+
+        public static SeriesScore empty() {
+            return new SeriesScore(Map.of(), 0, 0);
+        }
+    }
+
+    public record VersusScore(String key, String name, int wins) {
     }
 }

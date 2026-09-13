@@ -169,16 +169,17 @@ persisting it. After osuRenderer uploads the completed MP4, `/status` returns th
 QQ `qqFile` identifier to SeiraCore. Deploy both service hops behind TLS because
 the render request can contain a bearer credential.
 
-| Method | Path                                    | Purpose                                | Params / POST Body                                | Response    |
-|--------|-----------------------------------------|----------------------------------------|---------------------------------------------------|-------------|
-| GET    | `/replays/status`                       | Replay renderer overview               | none                                              | JSON        |
-| POST   | `/cache/control`                        | Control cache across oStella and workers | `{"operation":"QUERY","type":"BEATMAPSET","id":12345}` | JSON |
-| POST   | `/replays/renders/score/{scoreId}`      | Queue single replay render             | path `scoreId`                                    | `202` JSON  |
-| POST   | `/replays/renders/showcase/scores`      | Queue multi-score showcase render      | POST Body `{"ids":[score ids]}`                   | `202` JSON  |
-| POST   | `/replays/renders/showcase/{beatmapId}` | Queue multi-score showcase render      | path `beatmapId` + POST Body `{"ids":[user ids]}` | `202` JSON  |
-| GET    | `/replays/{jobId}/status`               | Get render job state                   | path `{jobId}`                                    | JSON        |
-| GET    | `/replays/{jobId}/video`                | Download rendered video                | path `{jobId}`                                    | `video/mp4` |
-| DELETE | `/replays/{jobId}/video`                | Remove rendered video and job metadata | path `{jobId}`                                    | text        |
+| Method | Path                                    | Purpose                                  | Params / POST Body                                     | Response    |
+|--------|-----------------------------------------|------------------------------------------|--------------------------------------------------------|-------------|
+| GET    | `/replays/status`                       | Replay renderer overview                 | none                                                   | JSON        |
+| POST   | `/cache/control`                        | Control cache across oStella and workers | `{"operation":"QUERY","type":"BEATMAPSET","id":12345}` | JSON        |
+| POST   | `/replays/renders/score/{scoreId}`      | Queue single replay render               | path `scoreId`                                         | `202` JSON  |
+| POST   | `/replays/renders/showcase/scores`      | Queue multi-score showcase render        | POST Body `{"ids":[score ids]}`                        | `202` JSON  |
+| POST   | `/replays/renders/showcase/{beatmapId}` | Queue multi-score showcase render        | path `beatmapId` + POST Body `{"ids":[user ids]}`      | `202` JSON  |
+| GET    | `/replays/{jobId}/status`               | Get render job state                     | path `{jobId}`                                         | JSON        |
+| POST   | `/replays/{jobId}/cancel`               | Cancel a queued or active render job     | path `{jobId}`                                         | JSON        |
+| GET    | `/replays/{jobId}/video`                | Download rendered video                  | path `{jobId}`                                         | `video/mp4` |
+| DELETE | `/replays/{jobId}/video`                | Remove rendered video and job metadata   | path `{jobId}`                                         | text        |
 
 ### Miscellaneous
 
