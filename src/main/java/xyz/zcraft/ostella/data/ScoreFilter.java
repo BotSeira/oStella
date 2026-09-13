@@ -1,8 +1,19 @@
 package xyz.zcraft.ostella.data;
 
+import org.jline.utils.DiffHelper;
 import xyz.zcraft.ostella.service.CacheService;
+import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
+import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.parser.BeatmapAnalyzer;
+import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.exception.AnalyzeException;
+import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -337,24 +348,41 @@ public final class ScoreFilter {
         if (score == null) {
             return false;
         }
+
+        final BeatmapExtended beatmap = score.getBeatmap();
+        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(score);
+        final DiffSpec diffSpec;
+
+        if (field == Field.LENGTH || field == Field.STAR) {
+            if (beatmap == null) {
+                throw new IllegalStateException("Beatmap has not been set");
+            }
+            try {
+                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
+                diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+            } catch (AnalyzeException | ParseException e) {
+                throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
+            }
+        } else {
+            diffSpec = null;
+        }
+
         return switch (field) {
             case ACCURACY -> score.getAccuracy() != null && compare(score.getAccuracy() * 100);
             case COMBO -> score.getMaxCombo() != null && compare(score.getMaxCombo());
             case PP -> score.getPp() != null && compare(score.getPp());
-            case LENGTH -> score.getBeatmap() != null && score.getBeatmap().getTotalLength() != null
-                    && compare(score.getBeatmap().getTotalLength());
-            case STAR -> score.getBeatmap() != null && score.getBeatmap().getDifficultyRating() != null
-                    && compare(score.getBeatmap().getDifficultyRating());
-            case AR -> score.getBeatmap() != null && score.getBeatmap().getAr() != null
-                    && compare(score.getBeatmap().getAr());
-            case CS -> score.getBeatmap() != null && score.getBeatmap().getCs() != null
-                    && compare(score.getBeatmap().getCs());
-            case HP -> score.getBeatmap() != null && score.getBeatmap().getDrain() != null
-                    && compare(score.getBeatmap().getDrain());
-            case OD -> score.getBeatmap() != null && score.getBeatmap().getAccuracy() != null
-                    && compare(score.getBeatmap().getAccuracy());
-            case BPM -> score.getBeatmap() != null && score.getBeatmap().getBpm() != null
-                    && compare(score.getBeatmap().getBpm());
+            case LENGTH -> compare(diffSpec.getLength());
+            case STAR -> compare(diffSpec.getStar());
+            case AR -> beatmap != null && beatmap.getAr() != null
+                    && compare(difficultyAttribute.ar());
+            case CS -> beatmap != null && beatmap.getCs() != null
+                    && compare(difficultyAttribute.cs());
+            case HP -> beatmap != null && beatmap.getDrain() != null
+                    && compare(difficultyAttribute.hp());
+            case OD -> beatmap != null && beatmap.getAccuracy() != null
+                    && compare(difficultyAttribute.od());
+            case BPM -> beatmap != null && beatmap.getBpm() != null
+                    && compare(beatmap.getBpm());
             case MISS -> score.getStatistics() != null && compare(score.getStatistics().getOrDefault("miss", 0L));
             case SCORE -> score.getTotalScore() != null && compare(score.getTotalScore());
             case MODS -> compareMods(score.getMods());
