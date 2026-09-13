@@ -117,20 +117,39 @@ public final class ScoreFilter {
     }
 
     private static ScoreFilter parseRank(Field field, Operator operator, String value) {
-        if (operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
-            throw new IllegalArgumentException("Rank only supports = and !=");
+        if (!operator.isNumeric()) {
+            throw new IllegalArgumentException("Rank only supports >, >=, <, <=, = and !=");
         }
-        String rank = value.toUpperCase(Locale.ROOT);
-        if (!Set.of("SSH", "SS", "XH", "X", "SH", "S", "A", "B", "C", "D", "F").contains(rank)) {
+        String rank = normalizeRank(value);
+        Integer rankValue = rankValue(rank);
+        if (rankValue == null) {
             throw new IllegalArgumentException("Invalid rank: " + value);
         }
-        if ("SSH".equals(rank)) {
-            rank = "XH";
-        } else if ("SS".equals(rank)) {
-            rank = "X";
-        }
-        return new ScoreFilter(field, operator, Double.NaN, Set.of(rank), null,
+        return new ScoreFilter(field, operator, rankValue, Set.of(rank), null,
                 field.label + " " + operator.display + " " + rank);
+    }
+
+    private static String normalizeRank(String rank) {
+        return switch (rank.toUpperCase(Locale.ROOT)) {
+            case "SSH" -> "XH";
+            case "SS" -> "X";
+            default -> rank.toUpperCase(Locale.ROOT);
+        };
+    }
+
+    private static Integer rankValue(String rank) {
+        return switch (normalizeRank(rank)) {
+            case "XH" -> 8;
+            case "X" -> 7;
+            case "SH" -> 6;
+            case "S" -> 5;
+            case "A" -> 4;
+            case "B" -> 3;
+            case "C" -> 2;
+            case "D" -> 1;
+            case "F" -> 0;
+            default -> null;
+        };
     }
 
     private static ScoreFilter parseMetadataText(Field field, Operator operator, String value) {
@@ -339,7 +358,7 @@ public final class ScoreFilter {
             case MISS -> score.getStatistics() != null && compare(score.getStatistics().getOrDefault("miss", 0L));
             case SCORE -> score.getTotalScore() != null && compare(score.getTotalScore());
             case MODS -> compareMods(score.getMods());
-            case RANK -> compareText(score.getRank());
+            case RANK -> compareRank(score.getRank());
             case ANY -> compareText(allMetadataText(score));
             case TITLE -> score.getBeatmapset() != null
                     && compareText(score.getBeatmapset().getTitle(), score.getBeatmapset().getTitleUnicode());
@@ -391,6 +410,12 @@ public final class ScoreFilter {
             case NOT_EQUAL -> !actual.equals(textValues);
             default -> throw new IllegalStateException("Numeric operator used for mods filter");
         };
+    }
+
+    private boolean compareRank(String actual) {
+        if (actual == null) return false;
+        Integer actualValue = rankValue(actual);
+        return actualValue != null && compare(actualValue);
     }
 
     private boolean compareText(String actual) {
