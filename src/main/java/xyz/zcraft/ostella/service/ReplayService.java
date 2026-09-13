@@ -643,6 +643,7 @@ public final class ReplayService implements Closeable {
         QUEUED,
         UNKNOWN,
         RENDERING,
+        UPLOAD_QUEUED,
         UPLOADING,
         CANCELED,
         TIMEOUT,

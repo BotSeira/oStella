@@ -102,6 +102,13 @@ public class ReplayController {
                 context.status(200).result(
                         new Response(true, "Render in progress", obj).toString());
             }
+            case ReplayService.JobStatus.UPLOAD_QUEUED -> {
+                JsonObject obj = new JsonObject();
+                obj.addProperty("status", "upload_queued");
+                obj.addProperty("id", jobId);
+                context.status(200).result(
+                        new Response(true, "Render is waiting in upload queue", obj).toString());
+            }
             case ReplayService.JobStatus.UPLOADING -> {
                 JsonObject obj = new JsonObject();
                 obj.addProperty("status", "uploading");
