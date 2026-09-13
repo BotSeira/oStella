@@ -121,8 +121,13 @@ public final class ScoreFilter {
             throw new IllegalArgumentException("Rank only supports = and !=");
         }
         String rank = value.toUpperCase(Locale.ROOT);
-        if (!Set.of("XH", "X", "SH", "S", "A", "B", "C", "D", "F").contains(rank)) {
+        if (!Set.of("SSH", "SS", "XH", "X", "SH", "S", "A", "B", "C", "D", "F").contains(rank)) {
             throw new IllegalArgumentException("Invalid rank: " + value);
+        }
+        if ("SSH".equals(rank)) {
+            rank = "XH";
+        } else if ("SS".equals(rank)) {
+            rank = "X";
         }
         return new ScoreFilter(field, operator, Double.NaN, Set.of(rank), null,
                 field.label + " " + operator.display + " " + rank);
