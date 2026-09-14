@@ -515,7 +515,7 @@
             <div class="player-identity">
                 <img alt="flag"
                      src="https://osu.ppy.sh/images/flags/AU.png" style="width: 32px; border-radius: 4px;"
-                     th:src="${cache.getImageSrc(Users.getFlagUrl(user))}">
+                     th:src="${cache.getImageSrc(Users.getFlagUrl(score.getUser()))}">
 
                 <span class="player-name" th:text="${score.getUser().getUsername()}">PlayerName</span>
 
