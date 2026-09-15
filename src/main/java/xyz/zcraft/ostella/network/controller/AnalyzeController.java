@@ -24,6 +24,7 @@ import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.*;
+import xyz.zcraft.osu.parser.data.PerformanceState;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.HitEvent;
@@ -113,70 +114,59 @@ public class AnalyzeController {
                 sliderTickBreaks, sliderEndBreaks, lastObjectTime);
     }
 
-    static List<double[]> calculateRealtimePp(OsuBeatmap beatmap,
-                                               ReplayAnalyze analyze,
-                                               String mods,
-                                               Long finalMaxCombo)
-            throws AnalyzeException {
+    public static List<double[]> calculateRealtimePp(
+            OsuBeatmap beatmap, ReplayAnalyze analyze, String mods, Long finalMaxCombo
+    ) throws AnalyzeException {
         final List<HitEvent> events = analyze.events();
         final List<double[]> realtimePp = new ArrayList<>();
+
         final int objectCount = beatmap.getHitObjects().size();
-        final int sampleStep = Math.max(1, (int) Math.ceil(
-                objectCount / (double) PERFORMANCE_GRAPH_MAX_POINTS));
+        final int sampleStep = Math.max(1, (int) Math.ceil(objectCount / (double) PERFORMANCE_GRAPH_MAX_POINTS));
 
         int eventIndex = 0;
-        int n300 = 0;
-        int n100 = 0;
-        int n50 = 0;
-        int misses = 0;
-        int currentCombo = 0;
-        int maxCombo = 0;
+        PerformanceState state = new PerformanceState();
 
         try (var rosuBeatmap = new RosuFFI.Beatmap(beatmap.toBeatmapString().getBytes());
              var rosuMods = RosuFFI.Mods.fromAcronyms(mods, RosuFFI.Mode.Osu);
              var performance = new RosuFFI.Performance()) {
+
             performance.mods(rosuMods);
 
             for (int objectIndex = 0; objectIndex < objectCount; objectIndex++) {
                 while (eventIndex < events.size()
                         && events.get(eventIndex).objectIndex() <= objectIndex) {
-                    final HitEvent event = events.get(eventIndex++);
-                    if (event.objectIndex() < objectIndex) continue;
 
-                    if (event.isObjectStart()) {
-                        switch (event.hitResult()) {
-                            case PERFECT -> n300++;
-                            case OK -> n100++;
-                            case MEH -> n50++;
-                            case MISS -> misses++;
-                        }
+                    HitEvent event = events.get(eventIndex++);
+
+                    if (event.objectIndex() < objectIndex) {
+                        continue;
                     }
 
-                    if (isComboEvent(event)) {
-                        if (event.wasHit()) {
-                            currentCombo++;
-                            maxCombo = Math.max(maxCombo, currentCombo);
-                        } else {
-                            currentCombo = 0;
-                        }
-                    }
+                    state.process(event, false);
                 }
 
-                final boolean lastObject = objectIndex == objectCount - 1;
-                if (objectIndex % sampleStep != 0 && !lastObject) continue;
+                boolean lastObject = objectIndex == objectCount - 1;
 
-                performance.passedObjects(objectIndex + 1L);
-                performance.n300(n300);
-                performance.n100(n100);
-                performance.n50(n50);
-                performance.misses(misses);
-                performance.combo(lastObject && finalMaxCombo != null ? finalMaxCombo : maxCombo);
+                if (objectIndex % sampleStep != 0 && !lastObject) {
+                    continue;
+                }
 
-                final double pp = performance.calculate(rosuBeatmap).asOsu().pp;
+                ReplayAnalyzer.applyPerformanceState(
+                        performance,
+                        state,
+                        objectIndex + 1L,
+                        lastObject && finalMaxCombo != null
+                                ? finalMaxCombo
+                                : state.maxCombo
+                );
+
+                double pp = performance.calculate(rosuBeatmap).asOsu().pp;
+
                 realtimePp.add(new double[]{
                         beatmap.getHitObjects().get(objectIndex).getTime(), pp
                 });
             }
+
         } catch (RuntimeException e) {
             throw new AnalyzeException("Failed to calculate realtime PP", e);
         }
@@ -184,11 +174,47 @@ public class AnalyzeController {
         return realtimePp;
     }
 
-    private static boolean isComboEvent(HitEvent event) {
-        return switch (event.eventType()) {
-            case HIT_CIRCLE, SLIDER_HEAD, SLIDER_TICK, SLIDER_END, SPINNER -> true;
-            case SPINNER_SPIN, SPINNER_BONUS -> false;
-        };
+    public static PerformanceState calculateFinalState(
+            List<HitEvent> events, int objectCount, int replaceMissIndex
+    ) {
+        PerformanceState state = new PerformanceState();
+        int eventIndex = 0;
+
+        for (int objectIndex = 0; objectIndex < objectCount; objectIndex++) {
+            while (eventIndex < events.size()
+                    && events.get(eventIndex).objectIndex() <= objectIndex) {
+
+                HitEvent event = events.get(eventIndex++);
+
+                if (event.objectIndex() < objectIndex) {
+                    continue;
+                }
+
+                state.process(event, objectIndex == replaceMissIndex);
+            }
+        }
+
+        return state;
+    }
+
+    public record PPLoss(
+            double withoutMiss,
+            double actual
+    ){};
+
+    public static PPLoss calculatePpLoss(OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, int missObjectIndex) {
+        final List<HitEvent> events = analyze.events();
+        final int objectCount = beatmap.getHitObjects().size();
+
+        PerformanceState actual = calculateFinalState(events, objectCount, -1);
+
+        PerformanceState withoutMiss = calculateFinalState(events, objectCount, missObjectIndex);
+
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+
+        double withoutMissPp = ReplayAnalyzer.calculatePp(beatmap, modBits, withoutMiss, objectCount);
+
+        return new PPLoss(withoutMissPp, actualPp);
     }
 
     private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end)
@@ -322,9 +348,9 @@ public class AnalyzeController {
 
                     boolean doSimMatch =
                             simGreat == ScoreFormatUtil.getGreatCount(score)
-                            && simOk == ScoreFormatUtil.getOkCount(score)
-                            && simMeh == ScoreFormatUtil.getMehCount(score)
-                            && simMiss == ScoreFormatUtil.getMissCount(score);
+                                    && simOk == ScoreFormatUtil.getOkCount(score)
+                                    && simMeh == ScoreFormatUtil.getMehCount(score)
+                                    && simMiss == ScoreFormatUtil.getMissCount(score);
 
                     return perfPlusApi.calculate(score)
                             .exceptionally(error -> {
