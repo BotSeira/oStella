@@ -61,7 +61,8 @@ public class MissVisualizeService {
         final var keyFrames = replayAnalyze.replay().timedKeyFrames();
 
 
-        final var ppLoss = AnalyzeController.calculatePpLoss(replayAnalyze.beatmap(), replayAnalyze, replayAnalyze.replay().mods(), targetMiss.objectIndex());
+        final var ppLoss = AnalyzeController.calculatePpLoss(
+                replayAnalyze.beatmap(), replayAnalyze, replayAnalyze.replay().mods(), targetMiss);
 
         return ImageHelper.drawMiss(
                 missIndex,
