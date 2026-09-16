@@ -27,6 +27,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
@@ -299,6 +300,13 @@ public class UserController {
 
     public void getUserInfo(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
+
+        final String accept = context.header("Accept");
+        if (accept != null && accept.toLowerCase().contains("application/json")) {
+            handleUserInfoRaw(context);
+            return;
+        }
+
         final CompletableFuture<UserExtended> userFuture = executor.enqueueAsync(() ->
                 OsuAPI.getUser(tokenManager.getTokenData(), userId));
         final CompletableFuture<List<Score>> topScoresFuture = executor.enqueueAsync(() ->
@@ -332,6 +340,13 @@ public class UserController {
                     return renderer.renderUserInfo(data.user(), data.topScores());
                 }, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    private void handleUserInfoRaw(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenAccept(user -> putResult(context, user)));
     }
 
     public void getUserRank(@NotNull Context context) {
