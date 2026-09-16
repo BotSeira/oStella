@@ -105,15 +105,6 @@
             padding: 0 24px 12px 24px;
         }
 
-        .song-title {
-            font-size: 2.2em;
-            font-weight: 900;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            padding: 16px 24px 0 24px;
-        }
-
         .song-artist {
             font-size: 1.2em;
             color: #e2e8f0;
@@ -454,18 +445,25 @@
         </div>
     </div>
 
-    <div class="song-title" th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
+    <div style="display: flex; padding: 16px 24px 0 24px; gap: 8px;">
+        <div class="song-title"
+             style="font-size: 2.2em; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+             th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
+        <span style="font-size: 1.1em; font-family: serif; align-self: end;"
+              th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+              th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+    </div>
 
 
     <div class="meta-row">
         <div  style="display: flex; padding-top: 8px;">
             <div class="song-artist">
-                <span style="font-family: serif;"
-                      th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
-                      th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
-                <span style="color: #a0a0b8; margin: 0 8px;"
-                      th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
                 <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
+                <span style="color: #a0a0b8; margin: 0 8px;"
+                      th:if="${Beatmapsets.hasArtistUnicode(score.getBeatmapset())}">//</span>
+                <span style="font-family: serif;"
+                      th:if="${Beatmapsets.hasArtistUnicode(score.getBeatmapset())}"
+                      th:text="${score.getBeatmapset().getArtistUnicode()}">作曲家</span>
             </div>
             <div style="margin-left: auto;" class="score-time">
                 <div class="replay-container" th:if="${replayPresent}">
