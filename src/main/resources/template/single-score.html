@@ -105,7 +105,7 @@
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
             grid-template-rows: auto auto;
-            padding: 0 24px 20px 24px;
+            padding: 0 24px 12px 24px;
             row-gap: 8px;
             align-items: end;
         }
@@ -207,15 +207,6 @@
             justify-self: end;
         }
 
-        .score-time-long {
-            grid-column: 2 / 3;
-            grid-row: 3 / 4;
-            color: #a0a0b8;
-            font-size: 1.1em;
-            letter-spacing: 1px;
-            justify-self: end;
-        }
-
         .replay-container {
             display: flex;
             background: rgba(102, 255, 204, 0.1);
@@ -295,10 +286,9 @@
 
         /* --- 4. THE DATA GRID --- */
         .data-container {
-            padding: 24px;
+            padding: 24px 24px 0 24px;
             display: grid;
             grid-template-columns: 2fr 1fr;
-            gap: 24px;
         }
 
         .data-block {
@@ -498,9 +488,6 @@
                 <span style="color: #a0a0b8; margin: 0 8px;"
                       th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
                 <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
-                <span style="color: #a0a0b8; margin: 0 8px;">//</span>
-                <span style="color: #a0a0b8;">By </span>
-                <span style="color: #fff; font-weight: bold;" th:text="${Beatmaps.getOwnersString(score.getBeatmap())}">Example Mapper</span>
             </div>
 
             <div class="diff-row">
@@ -527,7 +514,10 @@
                 </div>
                 <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>
             </div>
-            <span class="score-time-long" th:text="${score.getEndedAt()}">2026-04-19T16:19:16Z</span>
+            <div style="grid-column: 2 / 3; grid-row: 3 / 4;">
+                <span style="color: #a0a0b8;">By </span>
+                <span style="color: #fff; font-weight: bold;" th:text="${Beatmaps.getOwnersString(score.getBeatmap())}">Example Mapper</span>
+            </div>
         </div>
     </div>
 
@@ -673,13 +663,13 @@
             </div>
         </div>
     </div>
-
-<!--    <div th:text="${'MS' + score.getBeatmapset().getId() + ' - ' + 'M' + score.getBeatmap().getId()}">-->
-<!--        MS1234567 - M1234567-->
-<!--    </div>-->
-<!--    <div th:text="${'U' + score.getUser().getId() + ' - ' + Scores.getDisplayScoreId(score)}">-->
-<!--        U123456789 - S1234567890-->
-<!--    </div>-->
+    <div style="display: flex; color: #a0a0b8; font-size: 1.0em; letter-spacing: 1px; padding: 8px 24px;">
+        <span style=" " th:text="${'Ended at ' + score.getEndedAt()}">Ended at 2026-04-19T16:19:16Z</span>
+        <div style="margin-left: auto;"
+             th:text="${'MS' + score.getBeatmapset().getId() + ' / M' + score.getBeatmap().getId() + ' / U' + score.getUser().getId() + ' / S' + Scores.getDisplayScoreId(score)}">
+            MS1234567 / M1234567 / U123456789 / S1234567890
+        </div>
+    </div>
 </div>
 
 <div class="bottom-footer">

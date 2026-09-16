@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 import static xyz.zcraft.ostella.util.RequestUtil.requirePathInt;
 import static xyz.zcraft.ostella.util.RequestUtil.requirePathScoreId;
@@ -177,24 +178,8 @@ public class AnalyzeController {
     public static PerformanceState calculateFinalState(
             List<HitEvent> events, int objectCount, int replaceMissIndex
     ) {
-        PerformanceState state = new PerformanceState();
-        int eventIndex = 0;
-
-        for (int objectIndex = 0; objectIndex < objectCount; objectIndex++) {
-            while (eventIndex < events.size()
-                    && events.get(eventIndex).objectIndex() <= objectIndex) {
-
-                HitEvent event = events.get(eventIndex++);
-
-                if (event.objectIndex() < objectIndex) {
-                    continue;
-                }
-
-                state.process(event, objectIndex == replaceMissIndex);
-            }
-        }
-
-        return state;
+        return calculateFinalState(events, objectCount,
+                event -> event.objectIndex() == replaceMissIndex);
     }
 
     public record PPLoss(
@@ -202,33 +187,59 @@ public class AnalyzeController {
             double actual
     ){};
 
-    public static PPLoss calculatePpLoss(OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, int missObjectIndex) {
-        HitEvent targetMiss = analyze.events().stream()
-                .filter(HitEvent::isObjectStart)
-                .filter(event -> event.objectIndex() == missObjectIndex)
-                .filter(event -> event.hitResult() == HitEvent.HitResult.MISS)
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No miss found for object index: " + missObjectIndex));
-
-        return calculatePpLoss(beatmap, analyze, modBits, targetMiss);
-    }
-
-    public static PPLoss calculatePpLoss(OsuBeatmap beatmap, ReplayAnalyze analyze,
-                                         int modBits, HitEvent targetMiss) {
+    /** Calculates the PP lost at the moment the target miss occurs. */
+    public static PPLoss calculateRealtimePpLoss(
+            OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, HitEvent targetMiss
+    ) {
         final List<HitEvent> events = analyze.events();
         final int passedObjects = targetMiss.objectIndex() + 1;
 
-        if (!targetMiss.isObjectStart() || targetMiss.hitResult() != HitEvent.HitResult.MISS
-                || passedObjects <= 0 || passedObjects > beatmap.getHitObjects().size()) {
-            throw new IllegalArgumentException("Target event is not a valid miss");
-        }
+        validateTargetMiss(beatmap, events, targetMiss);
 
         PerformanceState actual = calculateStateAtEvent(events, targetMiss, false);
         PerformanceState withoutMiss = calculateStateAtEvent(events, targetMiss, true);
 
         double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, passedObjects);
         double withoutMissPp = ReplayAnalyzer.calculatePp(beatmap, modBits, withoutMiss, passedObjects);
+
+        return new PPLoss(withoutMissPp, actualPp);
+    }
+
+    /** Calculates how much the target miss changes the PP at the end of the map. */
+    public static PPLoss calculateFinalPpLoss(
+            OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, HitEvent targetMiss
+    ) {
+        final List<HitEvent> events = analyze.events();
+        final int objectCount = beatmap.getHitObjects().size();
+
+        validateTargetMiss(beatmap, events, targetMiss);
+
+        PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
+        PerformanceState withoutTargetMiss = calculateFinalState(
+                events, objectCount, event -> isSameEvent(event, targetMiss));
+
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+        double withoutMissPp = ReplayAnalyzer.calculatePp(
+                beatmap, modBits, withoutTargetMiss, objectCount);
+
+        return new PPLoss(withoutMissPp, actualPp);
+    }
+
+    /** Calculates the final PP lost to all object-start misses while preserving 100s and 50s. */
+    public static PPLoss calculateTotalMissPpLoss(
+            OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits
+    ) {
+        final List<HitEvent> events = analyze.events();
+        final int objectCount = beatmap.getHitObjects().size();
+
+        PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
+        PerformanceState withoutMisses = calculateFinalState(events, objectCount,
+                event -> event.isObjectStart()
+                        && event.hitResult() == HitEvent.HitResult.MISS);
+
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+        double withoutMissPp = ReplayAnalyzer.calculatePp(
+                beatmap, modBits, withoutMisses, objectCount);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
@@ -248,6 +259,40 @@ public class AnalyzeController {
         }
 
         throw new IllegalArgumentException("Target event does not belong to this replay analysis");
+    }
+
+    static PerformanceState calculateFinalState(
+            List<HitEvent> events, int objectCount, Predicate<HitEvent> replaceMiss
+    ) {
+        PerformanceState state = new PerformanceState();
+
+        for (HitEvent event : events) {
+            if (event.objectIndex() < 0 || event.objectIndex() >= objectCount) {
+                continue;
+            }
+
+            state.process(event, replaceMiss.test(event));
+        }
+
+        return state;
+    }
+
+    private static void validateTargetMiss(
+            OsuBeatmap beatmap, List<HitEvent> events, HitEvent targetMiss
+    ) {
+        int passedObjects = targetMiss.objectIndex() + 1;
+        if (!targetMiss.isObjectStart() || targetMiss.hitResult() != HitEvent.HitResult.MISS
+                || passedObjects <= 0 || passedObjects > beatmap.getHitObjects().size()) {
+            throw new IllegalArgumentException("Target event is not a valid miss");
+        }
+
+        if (events.stream().noneMatch(event -> isSameEvent(event, targetMiss))) {
+            throw new IllegalArgumentException("Target event does not belong to this replay analysis");
+        }
+    }
+
+    private static boolean isSameEvent(HitEvent event, HitEvent targetEvent) {
+        return event == targetEvent || event.equals(targetEvent);
     }
 
     private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end)
