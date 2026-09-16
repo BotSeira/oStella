@@ -12,6 +12,11 @@ public class BeatmapsetFormatUtil {
         return !Objects.equals(beatmapset.getTitle(), beatmapset.getTitleUnicode());
     }
 
+    public static boolean hasArtistUnicode(Beatmapset beatmapset) {
+        if (beatmapset == null) return false;
+        return !Objects.equals(beatmapset.getArtist(), beatmapset.getArtistUnicode());
+    }
+
     public static String getTagName(Beatmapset beatmapset, int id) {
         if (beatmapset == null || beatmapset.getRelatedTags() == null) {
             return null;

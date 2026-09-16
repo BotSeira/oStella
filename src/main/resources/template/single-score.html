@@ -96,39 +96,16 @@
             right: 16px;
             bottom: 16px;
             letter-spacing: 1px;
-            color: #a0a0b8;
             font-size: 1.1em;
             text-align: end;
         }
 
         /* --- 2. METADATA ROW --- */
         .meta-row {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            grid-template-rows: auto auto auto;
-            padding: 16px 24px 20px 24px;
-            row-gap: 8px;
-            align-items: end;
-        }
-
-        .map-info {
-            display: contents;
-        }
-
-        .song-title {
-            grid-column: 1 / 2;
-            grid-row: 1 / 2;
-            font-size: 2.2em;
-            font-weight: 900;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            padding-right: 24px;
+            padding: 0 24px 12px 24px;
         }
 
         .song-artist {
-            grid-column: 1 / 3;
-            grid-row: 2 / 3;
             font-size: 1.2em;
             color: #e2e8f0;
             font-weight: 300;
@@ -140,8 +117,6 @@
         }
 
         .diff-row {
-            grid-column: 1 / 3;
-            grid-row: 3 / 4;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -172,13 +147,7 @@
             min-width: 0;
         }
 
-        .player-info {
-            display: contents;
-        }
-
         .player-identity {
-            grid-column: 2 / 3;
-            grid-row: 1 / 2;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -199,8 +168,6 @@
         }
 
         .score-time {
-            grid-column: 2 / 3;
-            grid-row: 2 / 3;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -210,16 +177,7 @@
             justify-self: end;
         }
 
-        .score-time-long {
-            grid-column: 2 / 3;
-            grid-row: 3 / 4;
-            color: #a0a0b8;
-            font-size: 1.1em;
-            letter-spacing: 1px;
-            justify-self: end;
-        }
-
-        .replay-container{
+        .replay-container {
             display: flex;
             background: rgba(102, 255, 204, 0.1);
             color: #66ffcc;
@@ -298,10 +256,9 @@
 
         /* --- 4. THE DATA GRID --- */
         .data-container {
-            padding: 24px;
+            padding: 24px 24px 0 24px;
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
+            grid-template-columns: 2fr 1fr;
         }
 
         .data-block {
@@ -455,40 +412,67 @@
         <div class="hero-overlay">
             <div class="mod-badges" th:if="${diff.isModded()}">
                 <div class="mod-badge" th:each="amod : ${score.getMods()}">
-                    <svg class="mod-back" width="55" height="55" fill="#ff6666"
-                         th:style="'fill: ' + ${Mods.getColorHex(amod)}" viewBox="0 -14 100 100">
+                    <svg class="mod-back" fill="#ff6666" height="55" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="55">
                         <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
                     </svg>
-                    <img class="mod-icon" src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg"
-                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" alt="mod" width="50" height="50">
+                    <img alt="mod" class="mod-icon"
+                         height="50" src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="50">
                 </div>
             </div>
 
-            <div class="grade-letter" th:style="'color: ' + ${Scores.getRankColor(score)}" th:text="${Scores.getRankText(score)}">
+            <div class="grade-letter" th:style="'color: ' + ${Scores.getRankColor(score)}"
+                 th:text="${Scores.getRankText(score)}">
                 SS
             </div>
             <div class="id-info">
-                <div th:text="${'MS' + score.getBeatmapset().getId() + ' - ' + 'M' + score.getBeatmap().getId()}">
-                    MS1234567 - M1234567
-                </div>
-                <div th:text="${'U' + score.getUser().getId() + ' - ' + Scores.getDisplayScoreId(score)}">U123456789 - S1234567890
+                <div class="player-identity">
+                    <img alt="flag"
+                         src="https://osu.ppy.sh/images/flags/AU.png" style="width: 32px; border-radius: 4px;"
+                         th:src="${cache.getImageSrc(Users.getFlagUrl(score.getUser()))}">
+
+                    <span class="player-name" th:text="${score.getUser().getUsername()}">PlayerName</span>
+
+                    <svg class="supporter-icon" th:if="${score.getUser().isSupporter()}" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+
+                    <img alt="Avatar" class="player-avatar"
+                         src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="meta-row">
-        <div class="map-info">
-            <div class="song-title" th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
-            <div class="song-artist">
-                <span th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}" th:text="${score.getBeatmapset().getTitleUnicode()}" style="font-family: serif;">标题</span>
-                <span th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}" style="color: #a0a0b8; margin: 0 8px;">//</span>
-                <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
-                <span style="color: #a0a0b8; margin: 0 8px;">//</span>
-                <span style="color: #a0a0b8;">By </span>
-                <span style="color: #fff; font-weight: bold;" th:text="${Beatmaps.getOwnersString(score.getBeatmap())}">Example Mapper</span>
-            </div>
+    <div style="display: flex; padding: 16px 24px 0 24px; gap: 8px;">
+        <div class="song-title"
+             style="font-size: 2.2em; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+             th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
+        <span style="font-size: 1.1em; font-family: serif; align-self: end;"
+              th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+              th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+    </div>
 
+
+    <div class="meta-row">
+        <div  style="display: flex; padding-top: 8px;">
+            <div class="song-artist">
+                <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
+                <span style="color: #a0a0b8; margin: 0 8px;"
+                      th:if="${Beatmapsets.hasArtistUnicode(score.getBeatmapset())}">//</span>
+                <span style="font-family: serif;"
+                      th:if="${Beatmapsets.hasArtistUnicode(score.getBeatmapset())}"
+                      th:text="${score.getBeatmapset().getArtistUnicode()}">作曲家</span>
+            </div>
+            <div style="margin-left: auto;" class="score-time">
+                <div class="replay-container" th:if="${replayPresent}">
+                    <span class="replay-badge">▶</span>
+                </div>
+                <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>
+            </div>
+        </div>
+        <div style="display: flex; padding-top: 8px;">
             <div class="diff-row">
                 <div class="diff-badge" th:style="'background: ' + ${DiffSpecs.getDiffColor(diff)} + ';'">
                     <span th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)}"
@@ -503,30 +487,10 @@
                      th:text="${score.getBeatmap().getVersion()}">Example Difficulty
                 </div>
             </div>
-        </div>
-
-        <div class="player-info">
-            <div class="player-identity">
-                <img alt="flag"
-                     src="https://osu.ppy.sh/images/flags/AU.png" style="width: 32px; border-radius: 4px;"
-                     th:src="${cache.getImageSrc('https://assets.ppy.sh/old-flags/' + score.getUser().getCountryCode() + '.png')}">
-
-                <span class="player-name" th:text="${score.getUser().getUsername()}">PlayerName</span>
-
-                <svg class="supporter-icon" th:if="${score.getUser().isSupporter()}" viewBox="0 0 24 24">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-
-                <img alt="Avatar" class="player-avatar"
-                     src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
+            <div style="margin-left: auto;">
+                <span style="color: #a0a0b8;">By </span>
+                <span style="color: #fff; font-weight: bold;" th:text="${Beatmaps.getOwnersString(score.getBeatmap())}">Example Mapper</span>
             </div>
-            <div class="score-time">
-                <div class="replay-container" th:if="${replayPresent}">
-                    <span class="replay-badge">▶</span>
-                </div>
-                <span th:text="${Scores.getRelativeTime(score)}">15 mins ago</span>
-            </div>
-            <span class="score-time-long" th:text="${score.getEndedAt()}">2026-04-19T16:19:16Z</span>
         </div>
     </div>
 
@@ -588,11 +552,19 @@
 
     <div class="data-container">
         <div class="data-block">
-            <div class="data-label">Total Score</div>
-            <div class="data-primary"
-                 th:text="${#numbers.formatInteger(score.getTotalScore(), 1, 'COMMA')}">
-                1,234,567
+            <div class="data-label">PP / Score</div>
+            <div style="display: flex; flex-direction: row; align-items: flex-end; gap: 12px;">
+                <div class="data-primary"
+                     th:text="${ppSafe != null ? #numbers.formatDecimal(ppSafe, 1, 1) : '--'} + 'pp'">
+                    412.5pp
+                </div>
+                <span style="font-size: 1.2em;"
+                      th:if="${diff != null}"
+                      th:text="' / ' + ${#numbers.formatDecimal(diff.getPpSS(), 1, 1)} + 'pp'">
+                     / 1234.56pp
+                </span>
             </div>
+
             <div class="data-sub">
                 <span class="if-local" th:if="${Scores.isLocal(score)}">▣</span>
                 <span class="if-ranked"
@@ -600,9 +572,10 @@
                 <span class="if-unranked" th:if="${!Scores.isLocal(score) && !(score.getRanked())}">×</span>
                 <span class="if-loved"
                       th:if="${!Scores.isLocal(score) && score.getBeatmap().getStatus().equalsIgnoreCase('LOVED') && score.getRanked()}">❤</span>
-                <span th:if="${diff != null}"
-                      th:text="${ppSafe != null ? #numbers.formatDecimal(ppSafe, 1, 1) : '--'} + 'pp' + ' / ' + ${#numbers.formatDecimal(diff.getPpSS(), 1, 1)} + 'pp'">
-                    412.5pp / 1234.56pp
+                <span style="letter-spacing: 2px; margin-left: 10px; font-weight: bold;"
+                      th:if="${diff != null}"
+                      th:text="${#numbers.formatInteger(score.getTotalScore(), 1, 'COMMA')}">
+                    1,234,567
                 </span>
             </div>
         </div>
@@ -639,7 +612,7 @@
                     <span class="hit-label">MISS</span>
                 </div>
             </div>
-            <div class="hit-stats-row sub">
+            <div class="hit-stats-row sub" th:if="${Scores.hasExtraHitStats(score)}">
                 <div class="hit-item">
                     <span class="hit-label">Slider Tick</span>
                     <span class="hit-value"
@@ -661,6 +634,13 @@
                           th:text="${Scores.getSpinnerSpin(score)} + '/' + ${Scores.getSpinnerSpinMax(score)}">12/34</span>
                 </div>
             </div>
+        </div>
+    </div>
+    <div style="display: flex; color: #a0a0b8; font-size: 1.0em; letter-spacing: 1px; padding: 8px 24px;">
+        <span style=" " th:text="${'Ended at ' + score.getEndedAt()}">Ended at 2026-04-19T16:19:16Z</span>
+        <div style="margin-left: auto;"
+             th:text="${'MS' + score.getBeatmapset().getId() + ' / M' + score.getBeatmap().getId() + ' / U' + score.getUser().getId() + ' / S' + Scores.getDisplayScoreId(score)}">
+            MS1234567 / M1234567 / U123456789 / S1234567890
         </div>
     </div>
 </div>

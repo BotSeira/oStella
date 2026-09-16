@@ -114,6 +114,10 @@ public class OsuAPI {
     }
 
     public static List<Score> getUserScores(TokenData tokenData, long uid, ScoreType mode, int limit) {
+        return getUserScores(tokenData, uid, mode, limit, 0);
+    }
+
+    public static List<Score> getUserScores(TokenData tokenData, long uid, ScoreType mode, int limit, int offset) {
         LOG.debug("Fetching {} scores for user id {} in mode {}", mode.name().toLowerCase(), uid, mode.name().toLowerCase());
         try {
             String type = switch (mode) {
@@ -125,7 +129,7 @@ public class OsuAPI {
                 case RECENT -> true;
             };
             final List<Score> scores = new ArrayList<>(limit);
-            for (UserScoresPage page : userScoresPages(limit)) {
+            for (UserScoresPage page : userScoresPages(limit, offset)) {
                 final String url = userScoresUrl(uid, type, fail, page);
                 final var request = newRequestBuilder(tokenData, url).GET().build();
                 final HttpResponse<String> send = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
@@ -158,16 +162,21 @@ public class OsuAPI {
     }
 
     static List<UserScoresPage> userScoresPages(int limit) {
-        if (limit <= 0 || limit > MAX_USER_SCORES_LIMIT) {
+        return userScoresPages(limit, 0);
+    }
+
+    static List<UserScoresPage> userScoresPages(int limit, int offset) {
+        if (limit <= 0 || offset < 0 || (long) offset + limit > MAX_USER_SCORES_LIMIT) {
             throw new ApiException(
                     ErrorCode.ILLEGAL_ARGUMENT,
-                    "Score limit must be between 1 and " + MAX_USER_SCORES_LIMIT
+                    "Score range must be within positions 1 to " + MAX_USER_SCORES_LIMIT
             );
         }
 
         List<UserScoresPage> pages = new ArrayList<>(2);
-        for (int offset = 0; offset < limit; offset += USER_SCORES_PAGE_LIMIT) {
-            pages.add(new UserScoresPage(Math.min(USER_SCORES_PAGE_LIMIT, limit - offset), offset));
+        int endOffset = offset + limit;
+        for (int pageOffset = offset; pageOffset < endOffset; pageOffset += USER_SCORES_PAGE_LIMIT) {
+            pages.add(new UserScoresPage(Math.min(USER_SCORES_PAGE_LIMIT, endOffset - pageOffset), pageOffset));
         }
         return List.copyOf(pages);
     }
@@ -185,10 +194,15 @@ public class OsuAPI {
     record UserScoresPage(int limit, int offset) {
     }
 
-    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
+    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId, String mods) {
         LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
         try {
-            final String url = "/beatmaps/%s/scores/users/%s";
+            String url = "/beatmaps/%s/scores/users/%s?mode=osu";
+
+            if (mods != null && !mods.isBlank()) {
+                url += "&mods=" + mods;
+            }
+
             final var request = newRequestBuilder(tokenData, String.format(url, beatmapId, uid))
                     .GET()
                     .build();
@@ -203,6 +217,10 @@ public class OsuAPI {
         } catch (JsonSyntaxException | InterruptedException | IOException e) {
             throw new ApiException(ErrorCode.SCORE_FETCH_FAILED, "Failed to fetch scores for " + uid + " on beatmap " + beatmapId, e);
         }
+    }
+
+    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
+        return getUserScore(tokenData, uid, beatmapId, null);
     }
 
     public static MultiplayerRoom getCurrentRoom(String auth) {
@@ -277,7 +295,7 @@ public class OsuAPI {
     public static UserExtended getUser(TokenData tokenData, String username) {
         LOG.debug("Fetching user with username {}", username);
         try {
-            final var request = newRequestBuilder(tokenData, "/users/@" + URLEncoder.encode(username, StandardCharsets.UTF_8))
+            final var request = newRequestBuilder(tokenData, "/users/@" + URLEncoder.encode(username.replace(" ", "_"), StandardCharsets.UTF_8))
                     .GET()
                     .build();
 
@@ -549,7 +567,17 @@ public class OsuAPI {
             long roomId,
             long playlistItemId
     ) {
-        LOG.debug("Fetching events for multiplayer room {} playlist item {}", roomId, playlistItemId);
+        return getRoomEventPlaylistItems(tokenData, roomId).stream()
+                .filter(item -> item.getId() == playlistItemId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    public static List<MultiplayerRoomDetails.PlaylistItem> getRoomEventPlaylistItems(
+            TokenData tokenData,
+            long roomId
+    ) {
+        LOG.debug("Fetching events for multiplayer room {}", roomId);
         try {
             final var request = newRequestBuilder(tokenData, "/rooms/" + roomId + "/events")
                     .GET()
@@ -557,7 +585,7 @@ public class OsuAPI {
             final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
-                return null;
+                return List.of();
             }
             if (response.statusCode() >= 400) {
                 throw new ApiException(
@@ -566,7 +594,7 @@ public class OsuAPI {
                 );
             }
 
-            return eventPlaylistItem(response.body(), playlistItemId);
+            return eventPlaylistItems(response.body());
         } catch (JsonSyntaxException | IOException | InterruptedException e) {
             throw new ApiException(
                     ErrorCode.ROOM_FETCH_FAILED,
@@ -577,20 +605,25 @@ public class OsuAPI {
     }
 
     static MultiplayerRoomDetails.PlaylistItem eventPlaylistItem(String body, long playlistItemId) {
+        return eventPlaylistItems(body).stream()
+                .filter(item -> item.getId() == playlistItemId)
+                .findFirst()
+                .orElse(null);
+    }
+
+    static List<MultiplayerRoomDetails.PlaylistItem> eventPlaylistItems(String body) {
         JsonObject root = JsonParser.parseString(body).getAsJsonObject();
         JsonArray playlistItems = root.has("playlist_items") && root.get("playlist_items").isJsonArray()
                 ? root.getAsJsonArray("playlist_items")
                 : new JsonArray();
+        List<MultiplayerRoomDetails.PlaylistItem> result = new ArrayList<>(playlistItems.size());
         for (JsonElement element : playlistItems) {
             if (!element.isJsonObject()) {
                 continue;
             }
-            JsonObject object = element.getAsJsonObject();
-            if (object.has("id") && object.get("id").getAsLong() == playlistItemId) {
-                return GSON.fromJson(object, MultiplayerRoomDetails.PlaylistItem.class);
-            }
+            result.add(GSON.fromJson(element, MultiplayerRoomDetails.PlaylistItem.class));
         }
-        return null;
+        return List.copyOf(result);
     }
 
     public static MultiplayerMatchDetails getMatch(TokenData tokenData, long matchId) {

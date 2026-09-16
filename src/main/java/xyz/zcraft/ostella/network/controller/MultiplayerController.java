@@ -26,12 +26,15 @@ import xyz.zcraft.osu.model.User;
 import xyz.zcraft.osu.model.UserExtended;
 
 import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class MultiplayerController {
     private static final Logger LOG = LogManager.getLogger(MultiplayerController.class);
@@ -137,7 +140,12 @@ public class MultiplayerController {
         List<MultiplayerRoomScore> roomScores = OsuAPI.getRoomPlaylistScores(
                 tokenManager.getTokenData(), roomId, playlistItemId
         );
-        enrichLazerTeamSnapshot(room, item, roomScores);
+        List<MultiplayerRoomDetails.PlaylistItem> eventItems = isTeamMode(room.getType())
+                ? OsuAPI.getRoomEventPlaylistItems(tokenManager.getTokenData(), roomId)
+                : List.of();
+        enrichLazerTeamSnapshot(room, item, roomScores, eventItems);
+        MultiplayerResultData.SeriesScore seriesScore = lazerSeriesScore(
+                room, item, roomScores, eventItems);
         enrichScores(roomScores, item);
         enrichDuelProfiles(roomScores);
         User owner = resolveOwner(room, item.getOwnerId());
@@ -148,14 +156,16 @@ public class MultiplayerController {
                 owner,
                 "lazer",
                 "scorev2",
-                room.getType()
+                room.getType(),
+                seriesScore
         );
     }
 
     private void enrichLazerTeamSnapshot(
             MultiplayerRoomDetails room,
             MultiplayerRoomDetails.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores
+            List<MultiplayerRoomScore> roomScores,
+            List<MultiplayerRoomDetails.PlaylistItem> eventItems
     ) {
         String roomType = room.getType();
         boolean teamVs = roomType != null
@@ -166,9 +176,10 @@ public class MultiplayerController {
             return;
         }
 
-        MultiplayerRoomDetails.PlaylistItem eventItem = OsuAPI.getRoomEventPlaylistItem(
-                tokenManager.getTokenData(), room.getId(), item.getId()
-        );
+        MultiplayerRoomDetails.PlaylistItem eventItem = eventItems.stream()
+                .filter(value -> value.getId() == item.getId())
+                .findFirst()
+                .orElse(null);
         if (eventItem == null || eventItem.getDetails() == null) {
             LOG.warn("Room events contain no details for playlist item {} in room {}", item.getId(), room.getId());
             return;
@@ -195,6 +206,7 @@ public class MultiplayerController {
         enrichPlaylistItem(item);
 
         List<MultiplayerRoomScore> scores = stableScores(match, game, item);
+        MultiplayerResultData.SeriesScore seriesScore = stableSeriesScore(match, game);
         enrichDuelProfiles(scores);
         User stableLobby = new User();
         stableLobby.setUsername("Stable lobby");
@@ -205,7 +217,8 @@ public class MultiplayerController {
                 stableLobby,
                 "stable",
                 game.getScoringType(),
-                game.getTeamType()
+                game.getTeamType(),
+                seriesScore
         );
     }
 
@@ -339,6 +352,290 @@ public class MultiplayerController {
                     Score::getTotalScore, Comparator.nullsLast(Comparator.reverseOrder())
             );
         };
+    }
+
+    private MultiplayerResultData.SeriesScore lazerSeriesScore(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem currentItem,
+            List<MultiplayerRoomScore> currentScores,
+            List<MultiplayerRoomDetails.PlaylistItem> eventItems
+    ) {
+        boolean teamMode = isTeamMode(room.getType());
+        Set<Long> duelUsers = teamMode ? Set.of() : scoreUserIds(currentScores);
+        if (!teamMode && duelUsers.size() != 2) {
+            return MultiplayerResultData.SeriesScore.empty();
+        }
+
+        Map<Long, MultiplayerRoomDetails.PlaylistItem> eventsById = new HashMap<>();
+        eventItems.forEach(item -> eventsById.put(item.getId(), item));
+        Map<Long, Integer> playerWins = new HashMap<>();
+        int redWins = 0;
+        int blueWins = 0;
+
+        for (MultiplayerRoomDetails.PlaylistItem item : completedItemsThrough(room, currentItem)) {
+            List<MultiplayerRoomScore> scores;
+            if (item.getId() == currentItem.getId()) {
+                scores = currentScores;
+            } else {
+                try {
+                    scores = OsuAPI.getRoomPlaylistScores(
+                            tokenManager.getTokenData(), room.getId(), item.getId());
+                } catch (ApiException e) {
+                    LOG.warn("Failed to include playlist item {} in room {} series score",
+                            item.getId(), room.getId(), e);
+                    continue;
+                }
+            }
+
+            if (teamMode) {
+                String winner = lazerTeamWinner(scores, item, eventsById.get(item.getId()));
+                if ("red".equals(winner)) redWins++;
+                if ("blue".equals(winner)) blueWins++;
+            } else {
+                Long winner = lazerDuelWinner(scores, duelUsers);
+                if (winner != null) playerWins.merge(winner, 1, Integer::sum);
+            }
+        }
+        return new MultiplayerResultData.SeriesScore(playerWins, redWins, blueWins);
+    }
+
+    private static List<MultiplayerRoomDetails.PlaylistItem> completedItemsThrough(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem currentItem
+    ) {
+        Map<Long, MultiplayerRoomDetails.PlaylistItem> items = new LinkedHashMap<>();
+        if (room.getPlaylist() != null) {
+            room.getPlaylist().stream().filter(Objects::nonNull)
+                    .forEach(item -> items.putIfAbsent(item.getId(), item));
+        }
+        items.putIfAbsent(currentItem.getId(), currentItem);
+
+        List<MultiplayerRoomDetails.PlaylistItem> completed = new ArrayList<>();
+        for (MultiplayerRoomDetails.PlaylistItem item : items.values()) {
+            if (item.getId() == currentItem.getId()
+                    || item.getPlayedAt() != null && !item.getPlayedAt().isBlank()) {
+                completed.add(item);
+            }
+            if (item.getId() == currentItem.getId()) break;
+        }
+        return List.copyOf(completed);
+    }
+
+    private static String lazerTeamWinner(
+            List<MultiplayerRoomScore> scores,
+            MultiplayerRoomDetails.PlaylistItem item,
+            MultiplayerRoomDetails.PlaylistItem eventItem
+    ) {
+        long red = 0;
+        long blue = 0;
+        boolean hasRed = false;
+        boolean hasBlue = false;
+        for (MultiplayerRoomScore roomScore : scores) {
+            Score score = roomScore.score();
+            if (score == null || score.getTotalScore() == null) continue;
+            Long userId = scoreUserId(score);
+            String team = normalizedTeam(firstNonBlank(
+                    roomScore.team(),
+                    item.teamFor(userId),
+                    eventItem == null ? null : eventItem.teamFor(userId)
+            ));
+            if ("red".equals(team)) {
+                red += score.getTotalScore();
+                hasRed = true;
+            } else if ("blue".equals(team)) {
+                blue += score.getTotalScore();
+                hasBlue = true;
+            }
+        }
+        if (!hasRed || !hasBlue || red == blue) return null;
+        return red > blue ? "red" : "blue";
+    }
+
+    private static Long lazerDuelWinner(List<MultiplayerRoomScore> scores, Set<Long> duelUsers) {
+        Map<Long, Long> values = new HashMap<>();
+        for (MultiplayerRoomScore roomScore : scores) {
+            Score score = roomScore.score();
+            Long userId = scoreUserId(score);
+            if (userId != null && score.getTotalScore() != null) {
+                values.put(userId, score.getTotalScore());
+            }
+        }
+        if (!values.keySet().equals(duelUsers)) return null;
+        List<Map.Entry<Long, Long>> ordered = values.entrySet().stream()
+                .sorted(Map.Entry.<Long, Long>comparingByValue().reversed())
+                .toList();
+        return ordered.get(0).getValue().equals(ordered.get(1).getValue())
+                ? null : ordered.get(0).getKey();
+    }
+
+    private static MultiplayerResultData.SeriesScore stableSeriesScore(
+            MultiplayerMatchDetails match,
+            MultiplayerMatchDetails.MatchGame currentGame
+    ) {
+        boolean teamMode = isTeamMode(currentGame.getTeamType());
+        Set<Long> duelUsers = teamMode ? Set.of() : stableUserIds(currentGame.getScores());
+        if (!teamMode && duelUsers.size() != 2) {
+            return MultiplayerResultData.SeriesScore.empty();
+        }
+
+        Map<Long, Integer> playerWins = new HashMap<>();
+        int redWins = 0;
+        int blueWins = 0;
+        for (MultiplayerMatchDetails.MatchGame game : completedGamesThrough(match, currentGame)) {
+            if (teamMode) {
+                if (!isTeamMode(game.getTeamType())) continue;
+                String winner = stableTeamWinner(game);
+                if ("red".equals(winner)) redWins++;
+                if ("blue".equals(winner)) blueWins++;
+            } else {
+                if (isTeamMode(game.getTeamType())) continue;
+                Long winner = stableDuelWinner(game, duelUsers);
+                if (winner != null) playerWins.merge(winner, 1, Integer::sum);
+            }
+        }
+        return new MultiplayerResultData.SeriesScore(playerWins, redWins, blueWins);
+    }
+
+    private static List<MultiplayerMatchDetails.MatchGame> completedGamesThrough(
+            MultiplayerMatchDetails match,
+            MultiplayerMatchDetails.MatchGame currentGame
+    ) {
+        Map<Long, MultiplayerMatchDetails.MatchGame> games = new LinkedHashMap<>();
+        if (match.getEvents() != null) {
+            match.getEvents().stream()
+                    .filter(Objects::nonNull)
+                    .map(MultiplayerMatchDetails.MatchEvent::getGame)
+                    .filter(Objects::nonNull)
+                    .forEach(game -> games.putIfAbsent(game.getId(), game));
+        }
+        games.putIfAbsent(currentGame.getId(), currentGame);
+
+        List<MultiplayerMatchDetails.MatchGame> completed = new ArrayList<>();
+        for (MultiplayerMatchDetails.MatchGame game : games.values()) {
+            if (game.getId() == currentGame.getId()
+                    || game.getEndTime() != null && !game.getEndTime().isBlank()) {
+                completed.add(game);
+            }
+            if (game.getId() == currentGame.getId()) break;
+        }
+        return List.copyOf(completed);
+    }
+
+    private static String stableTeamWinner(MultiplayerMatchDetails.MatchGame game) {
+        double red = 0;
+        double blue = 0;
+        boolean hasRed = false;
+        boolean hasBlue = false;
+        for (JsonObject score : nullSafeScores(game.getScores())) {
+            Double value = stableScoringValue(score, game.getScoringType());
+            String team = normalizedTeam(scoreTeam(score));
+            if (value == null) continue;
+            if ("red".equals(team)) {
+                red += value;
+                hasRed = true;
+            } else if ("blue".equals(team)) {
+                blue += value;
+                hasBlue = true;
+            }
+        }
+        if (!hasRed || !hasBlue || Double.compare(red, blue) == 0) return null;
+        return red > blue ? "red" : "blue";
+    }
+
+    private static Long stableDuelWinner(
+            MultiplayerMatchDetails.MatchGame game,
+            Set<Long> duelUsers
+    ) {
+        Map<Long, Double> values = new HashMap<>();
+        for (JsonObject score : nullSafeScores(game.getScores())) {
+            Long userId = stableUserId(score);
+            Double value = stableScoringValue(score, game.getScoringType());
+            if (userId != null && value != null) values.put(userId, value);
+        }
+        if (!values.keySet().equals(duelUsers)) return null;
+        List<Map.Entry<Long, Double>> ordered = values.entrySet().stream()
+                .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
+                .toList();
+        return Double.compare(ordered.get(0).getValue(), ordered.get(1).getValue()) == 0
+                ? null : ordered.get(0).getKey();
+    }
+
+    private static Double stableScoringValue(JsonObject score, String scoringType) {
+        String normalized = scoringType == null ? "score" : scoringType.toLowerCase(Locale.ROOT);
+        if ("accuracy".equals(normalized)) return jsonNumber(score, "accuracy");
+        if ("combo".equals(normalized)) return jsonNumber(score, "max_combo");
+        return jsonNumber(score, "total_score", "legacy_total_score", "classic_total_score", "score");
+    }
+
+    private static Double jsonNumber(JsonObject object, String... names) {
+        for (String name : names) {
+            if (object.has(name) && !object.get(name).isJsonNull()) {
+                return object.get(name).getAsDouble();
+            }
+        }
+        return null;
+    }
+
+    private static Set<Long> scoreUserIds(List<MultiplayerRoomScore> scores) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (MultiplayerRoomScore roomScore : scores) {
+            Score score = roomScore.score();
+            Long userId = scoreUserId(score);
+            if (userId != null) ids.add(userId);
+        }
+        return Set.copyOf(ids);
+    }
+
+    private static Long scoreUserId(Score score) {
+        if (score == null) return null;
+        if (score.getUserId() != null && score.getUserId() > 0) return score.getUserId();
+        return score.getUser() == null || score.getUser().getId() <= 0 ? null : score.getUser().getId();
+    }
+
+    private static Set<Long> stableUserIds(List<JsonObject> scores) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (JsonObject score : nullSafeScores(scores)) {
+            Long userId = stableUserId(score);
+            if (userId != null) ids.add(userId);
+        }
+        return Set.copyOf(ids);
+    }
+
+    private static Long stableUserId(JsonObject score) {
+        if (score.has("user_id") && !score.get("user_id").isJsonNull()) {
+            return score.get("user_id").getAsLong();
+        }
+        if (score.has("user") && score.get("user").isJsonObject()) {
+            JsonObject user = score.getAsJsonObject("user");
+            if (user.has("id") && !user.get("id").isJsonNull()) return user.get("id").getAsLong();
+        }
+        return null;
+    }
+
+    private static List<JsonObject> nullSafeScores(List<JsonObject> scores) {
+        return scores == null ? List.of() : scores.stream().filter(Objects::nonNull).toList();
+    }
+
+    private static boolean isTeamMode(String teamType) {
+        if (teamType == null) return false;
+        String normalized = teamType.toLowerCase(Locale.ROOT).replace('_', '-');
+        return normalized.contains("team") && !normalized.contains("head");
+    }
+
+    private static String normalizedTeam(String team) {
+        if (team == null) return null;
+        return switch (team.toLowerCase(Locale.ROOT)) {
+            case "red", "1" -> "red";
+            case "blue", "2" -> "blue";
+            default -> null;
+        };
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) return value;
+        }
+        return null;
     }
 
     private void enrichPlaylistItem(MultiplayerRoomDetails.PlaylistItem item) {

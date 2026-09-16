@@ -192,8 +192,9 @@ public class ScoreController {
     private void lookupScoreOfBeatmapAsync(@NotNull Context context) {
         final long m = requireLong(context, "m");
         final long u = requireLong(context, "u");
+        final String mod = optionalString(context, "mod");
 
-        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), u, m))
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), u, m, mod))
                 .thenCompose(score -> {
                             if (score == null) {
                                 throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -249,6 +250,7 @@ public class ScoreController {
         final long ms = requireLong(context, "ms");
         final int i = requireInt(context, "i");
         final long u = requireLong(context, "u");
+        final String mod = optionalString(context, "mod");
 
         return executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
                 .thenCompose(beatmapset -> {
@@ -264,7 +266,7 @@ public class ScoreController {
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
                     return executor
                             .enqueueAsync(() ->
-                                    OsuAPI.getUserScore(tokenManager.getTokenData(), u, beatmap.getId())
+                                    OsuAPI.getUserScore(tokenManager.getTokenData(), u, beatmap.getId(), mod)
                             )
                             .thenApply(score -> {
                                 score.setBeatmap(beatmap);
@@ -283,7 +285,7 @@ public class ScoreController {
     }
 
     public CompletableFuture<Score> getScoreFromRefAsync(@NotNull Context context) {
-        final String of = requireStringFrom(context, "of", "rs", "bo", "rp");
+        final String of = requireStringFrom(context, "of", "rs", "bp", "rp");
         final long u = requireLong(context, "u");
         final int i = requirePositiveInt(context, "i");
         final List<ScoreFilter> filters = requireScoreFilters(context);
@@ -291,7 +293,7 @@ public class ScoreController {
         final ScoreType type = switch (of.toLowerCase()) {
             case "rs" -> ScoreType.RECENT;
             case "rp" -> ScoreType.RECENT_PASS;
-            case "bo" -> ScoreType.BEST;
+            case "bp" -> ScoreType.BEST;
             default -> throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score type: " + of);
         };
         final int fetchLimit = scoreLookupFetchLimit(i, filters);
@@ -325,7 +327,7 @@ public class ScoreController {
 
                             return userIds;
                         })
-                        .thenCompose(userIds -> findAvailableScore(userIds, minRank, Map.of()))
+                        .thenCompose(userIds -> findAvailableScore(userIds, minRank, Map.of(), 40))
                         .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
@@ -362,7 +364,7 @@ public class ScoreController {
                 .orElse(Map.of());
 
         context.future(() ->
-                findAvailableScore(userIds, Long.MAX_VALUE, scoreWeights)
+                findAvailableScore(userIds, Long.MAX_VALUE, scoreWeights, 200)
                         .thenApply(ScoreController::mapScoreToJson)
                         .thenAccept(result ->
                                 context.status(200).result(new Response(true, "Success", result).toString())
@@ -372,6 +374,8 @@ public class ScoreController {
 
     public void randomScoreFromUsersWeights(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
+
+        final boolean allWeights = optionalBoolean(context, "all", false);
 
         final JsonElement jsonElement = JsonParser.parseString(context.body());
         final Map<Long, Double> scoreWeights;
@@ -388,7 +392,7 @@ public class ScoreController {
                     .orElse(Map.of());
         }
         context.future(() ->
-                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 80))
+                executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 200))
                         .thenApply(scores -> {
                             List<ScoreEntry> candidates = new ArrayList<>(scores.size());
 
@@ -402,12 +406,14 @@ public class ScoreController {
                                 candidates.add(scoreEntry);
                             }
 
-
                             final Map<ScoreEntry, Double> weights = getWeights(candidates, scoreWeights);
 
                             if (weights.isEmpty()) {
                                 return "No scores found!";
                             }
+
+                            final double sum = weights.values().stream().mapToDouble(Double::doubleValue).sum();
+                            double showed = 0;
 
                             StringBuilder sb = new StringBuilder();
 
@@ -415,15 +421,18 @@ public class ScoreController {
                                     .stream()
                                     .sorted((a, b) -> Double.compare(b.getValue(), a.getValue())).toList();
 
-                            final int LIMIT = 12;
+                            final int LIMIT = allWeights ? 1000 : 12;
+
                             for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
-                                sb.append("__BP").append("%02d".formatted(e.getKey().bestIndex())).append("__:")
-                                        .append(String.format("%.5f", e.getValue())).append("   ");
+                                final double percentage = (e.getValue() / sum) * 100;
+                                sb.append("__BP").append("%03d".formatted(e.getKey().bestIndex())).append("__:")
+                                        .append(String.format("%05.2f%%", percentage)).append("   ");
+                                showed += percentage;
                             }
 
                             if (list.size() > LIMIT) {
-                                sb.append("\n").append("... and %d more".formatted(list.size() - LIMIT));
+                                sb.append("\n").append("... and %d more(%05.2f%%)".formatted(list.size() - LIMIT, 100 - showed));
                             }
 
                             return sb.toString().trim();
@@ -433,7 +442,9 @@ public class ScoreController {
         );
     }
 
-    private CompletableFuture<TargetScore> findAvailableScore(WeightedRandom<Long> userIds, long minRank, Map<Long, Double> weights) {
+    private CompletableFuture<TargetScore> findAvailableScore(
+            WeightedRandom<Long> userIds, long minRank, Map<Long, Double> weights, int maxLimit
+    ) {
         if (userIds.isEmpty()) {
             return CompletableFuture.failedFuture(
                     new ApiException(ErrorCode.NO_SCORE_FOUND, "No available scores found!")
@@ -442,23 +453,17 @@ public class ScoreController {
 
         long userId = userIds.getAndRemove();
 
-        final int SCORE_LIMIT = 40;
-
         return executor.enqueueAsync(() ->
                 OsuAPI.getUserScores(
                         tokenManager.getTokenData(),
                         userId,
                         ScoreType.BEST,
-                        SCORE_LIMIT
+                        maxLimit
                 )
         ).thenCompose(scores -> {
-            if (scores.size() < SCORE_LIMIT) {
-                return findAvailableScore(userIds, minRank, weights);
-            }
+            List<ScoreEntry> candidates = new ArrayList<>(200);
 
-            List<ScoreEntry> candidates = new ArrayList<>(SCORE_LIMIT);
-
-            for (int i = 0; i < SCORE_LIMIT; i++) {
+            for (int i = 0; i < scores.size(); i++) {
                 final Score score = scores.get(i);
 
                 if (!ScoreFormatUtil.replayPresent(score)) {
@@ -469,7 +474,7 @@ public class ScoreController {
             }
 
             if (candidates.isEmpty()) {
-                return findAvailableScore(userIds, minRank, weights);
+                return findAvailableScore(userIds, minRank, weights, maxLimit);
             }
 
             return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
@@ -477,7 +482,7 @@ public class ScoreController {
                         if (user == null
                                 || user.getStatistics().getGlobalRank() == null
                                 || user.getStatistics().getGlobalRank() > minRank) {
-                            return findAvailableScore(userIds, minRank, weights);
+                            return findAvailableScore(userIds, minRank, weights, maxLimit);
                         }
 
                         WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
@@ -485,7 +490,7 @@ public class ScoreController {
                         final Map<ScoreEntry, Double> finalWeights = getWeights(candidates, weights);
 
                         if (finalWeights.isEmpty()) {
-                            return findAvailableScore(userIds, minRank, weights);
+                            return findAvailableScore(userIds, minRank, weights, maxLimit);
                         }
 
                         for (Map.Entry<ScoreEntry, Double> entry : finalWeights.entrySet()) {
@@ -524,13 +529,15 @@ public class ScoreController {
         for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
             final double normalizedWeight = entry.getValue() / maxWeight;
 
-            if (normalizedWeight < 0.5 && entry.getKey().bestIndex() > 40) {
-                continue;
+            final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
+
+            if (entry.getKey().bestIndex() > 40 && normalizedWeight < 0.5) {
+                if (extraFactor <= 1.0) {
+                    continue;
+                }
             }
 
-            final double powWeight = Math.pow(normalizedWeight, 4);
-
-            final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
+            final double powWeight = Math.pow(normalizedWeight, 2.5);
 
             final double finalWeight = powWeight * extraFactor;
 
@@ -559,61 +566,99 @@ public class ScoreController {
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, getModBits(entry.score().getMods()));
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
+
         double patternWeight = 0;
+
         for (BeatmapPatternAnalysis.PatternScore type : patternAnalysis.types()) {
             patternWeight += (PATTERN_WEIGHTS.getOrDefault(type.type(), 10) * type.percentage());
         }
 
         final double modWeightFactor = getModWeightFactor(entry);
         final double attributeFactor = getAttributeFactor(difficultyAttribute);
+        final double bestIndexFactor = getBestIndexFactor(entry);
 
-        return (patternWeight * (100.0 - entry.bestIndex()) * modWeightFactor * attributeFactor) / 100.0;
+        final double factor = 1 + bestIndexFactor + modWeightFactor + attributeFactor;
+
+        return (patternWeight * Math.max(0.1, factor));
+    }
+
+    private double getBestIndexFactor(ScoreEntry entry) {
+        final int x = entry.bestIndex();
+
+        return Math.clamp((200.0 / (x + 40.0)) - 4.0, -2.5, 0.5);
     }
 
     private double getModWeightFactor(ScoreEntry entry) {
         final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
-        if (mods.is("EZHD"))
-            return 2.0;
+        double factor = 1.0;
 
-        if (mods.is("EZ"))
-            return 1.5;
+        if (mods.has("FL"))
+            factor += 0.5;
 
-        if (mods.is("HRHD"))
-            return 1.5;
+        if (mods.has("EZ"))
+            factor += 0.5;
 
-        if (mods.is("HR"))
-            return 1.25;
+        if (mods.has("HR"))
+            factor += 0.4;
 
-        if (mods.is("HDDT") || mods.is("HDNC"))
-            return 0.8;
+        if (mods.has("DT") || mods.has("NC"))
+            factor -= 0.25;
 
-        return 1.0;
+        if (mods.has("HD"))
+            factor *= 1.1;
+
+        return factor;
     }
 
     private double getAttributeFactor(DifficultyAttribute difficultyAttribute) {
-        double attributeFactor = 1.0;
+        double attributeFactor = 0.0;
 
         // Precision...
-        if (difficultyAttribute.cs() >= 8) {
-            attributeFactor *= 1.1;
-        }
+        attributeFactor += getCsFactor(difficultyAttribute.cs());
 
         // Reading!
-        attributeFactor *= getArFactor(difficultyAttribute.ar());
+        attributeFactor += getArFactor(difficultyAttribute.ar());
 
         return attributeFactor;
     }
 
     private static double getArFactor(double ar) {
-        if (ar >= 8.0) {
-            return 1.0;
+        if (ar >= 8.25) {
+            return 0.0;
         }
 
-        return 1.0 + 2.5 * Math.pow((8.0 - ar) / 4.0, 1.25);
+        return 2.5 * (1.0 - Math.exp(-1.3 * (8.25 - ar)));
+    }
+
+    private static double getCsFactor(double cs) {
+        if (cs <= 8.0) {
+            return 0.0;
+        }
+
+        return Math.pow((cs - 8.0) / 4.0, 1.25);
     }
 
     private record ModSet(Set<String> acronyms) {
+        public boolean has(Collection<String> acronyms) {
+            return this.acronyms.containsAll(acronyms);
+        }
+
+        public boolean has(String acronyms) {
+            if (acronyms.length() % 2 != 0) {
+                throw new IllegalArgumentException("Invalid mod string: " + acronyms);
+            }
+
+            List<String> result = new ArrayList<>();
+
+            for (int i = 0; i < acronyms.length(); i += 2) {
+                result.add(acronyms.substring(i, i + 2));
+            }
+
+            return this.has(result);
+        }
+
+
         public boolean is(Collection<String> acronyms) {
             return this.acronyms.containsAll(acronyms) && this.acronyms.size() == acronyms.size();
         }
@@ -629,7 +674,7 @@ public class ScoreController {
                 result.add(acronyms.substring(i, i + 2));
             }
 
-            return this.is(result);
+            return this.has(result);
         }
     }
 

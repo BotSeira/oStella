@@ -135,6 +135,59 @@ public final class ReplayService implements Closeable {
                         ? json.getAsJsonObject("qqFile") : null));
     }
 
+    public JobProgress cancelJob(String jobId) {
+        RendererWorker assigned = jobWorkers.get(jobId);
+        if (assigned != null) {
+            JobLookup lookup = cancelJob(assigned, jobId);
+            if (lookup.found()) {
+                return lookup.progress();
+            }
+            jobWorkers.remove(jobId, assigned);
+        }
+
+        boolean unavailableWorker = false;
+        for (RendererWorker worker : rotatedWorkers()) {
+            try {
+                JobLookup lookup = cancelJob(worker, jobId);
+                if (lookup.found()) {
+                    jobWorkers.put(jobId, worker);
+                    return lookup.progress();
+                }
+            } catch (ApiException e) {
+                unavailableWorker = true;
+            }
+        }
+        if (unavailableWorker) {
+            throw new ApiException(ErrorCode.RENDERER_UNAVAILABLE,
+                    "Could not cancel replay job because one or more osuRenderer workers are unavailable");
+        }
+        return new JobProgress(JobStatus.UNKNOWN);
+    }
+
+    private JobLookup cancelJob(RendererWorker worker, String jobId) {
+        HttpResponse<String> response = sendString(worker,
+                request(worker, "renders/" + jobId + "/cancel")
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .build());
+        if (response.statusCode() == 404) {
+            return new JobLookup(false, new JobProgress(JobStatus.UNKNOWN));
+        }
+        requireSuccess(response.statusCode(), response.body());
+        JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+        try {
+            return new JobLookup(true, new JobProgress(
+                    JobStatus.valueOf(json.get("status").getAsString().toUpperCase(Locale.ROOT)),
+                    stringOrNull(json, "progress"),
+                    stringOrNull(json, "speed"),
+                    stringOrNull(json, "eta"),
+                    stringOrNull(json, "error"),
+                    json.has("qqFile") && json.get("qqFile").isJsonObject()
+                            ? json.getAsJsonObject("qqFile") : null));
+        } catch (RuntimeException e) {
+            throw unavailable("osuRenderer returned an invalid cancellation response", e);
+        }
+    }
+
     public int getQueueSize() {
         List<WorkerStatus> statuses = probeWorkers();
         if (statuses.isEmpty()) {
@@ -590,7 +643,9 @@ public final class ReplayService implements Closeable {
         QUEUED,
         UNKNOWN,
         RENDERING,
+        UPLOAD_QUEUED,
         UPLOADING,
+        CANCELED,
         TIMEOUT,
         FAILED,
         DONE

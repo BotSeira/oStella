@@ -84,7 +84,7 @@ public class BeatmapController {
     }
 
     private void lookupBeatmapOfRefAsync(@NotNull Context context) {
-        final String of = requireStringFrom(context, "of", "rs", "bo", "mp", "rp");
+        final String of = requireStringFrom(context, "of", "rs", "bp", "mp", "rp");
 
         if ("mp".equals(of)) {
             lookupBeatmapFromSomeRoom(context);
@@ -124,7 +124,7 @@ public class BeatmapController {
         final ScoreType type = switch (of.toLowerCase()) {
             case "rs" -> ScoreType.RECENT;
             case "rp" -> ScoreType.RECENT_PASS;
-            case "bo" -> ScoreType.BEST;
+            case "bp" -> ScoreType.BEST;
             default -> throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score type: " + of);
         };
 
@@ -219,10 +219,8 @@ public class BeatmapController {
                                 .toList();
 
                         return renderer.renderBeatmap(beatmap, diffSpec, diff);
-                    } catch (ParseException e) {
+                    } catch (Exception e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-                    } catch (AnalyzeException e) {
-                        throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
                     }
                 }, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).result(bytes)));

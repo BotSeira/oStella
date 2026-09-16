@@ -8,6 +8,17 @@ import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 
 public class ScoreFormatUtil {
+    public static boolean hasExtraHitStats(Score score) {
+        if (score == null) {
+            return false;
+        }
+
+        return getSliderTick(score) != 0 || getSliderTickMax(score) != 0
+                || getSliderEnd(score) != 0 || getSliderEndMax(score) != 0
+                || getSpinnerBonus(score) != 0 || getSpinnerBonusMax(score) != 0
+                || getSpinnerSpin(score) != 0 || getSpinnerSpinMax(score) != 0;
+    }
+
     public static String getRelativeTime(Score score) {
         if (score == null || score.getEndedAt() == null) {
             return "";

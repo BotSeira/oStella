@@ -93,7 +93,7 @@ mvn -U clean compile exec:java
 ### 4) Call an Endpoint
 
 ```shell
-curl "http://localhost:8721/bo?u=12345678&n=20" --output best_of_20.png
+curl "http://localhost:8721/bp?u=12345678&n=20" --output best_of_20.png
 ```
 
 ## Endpoints
@@ -169,16 +169,17 @@ persisting it. After osuRenderer uploads the completed MP4, `/status` returns th
 QQ `qqFile` identifier to SeiraCore. Deploy both service hops behind TLS because
 the render request can contain a bearer credential.
 
-| Method | Path                                    | Purpose                                | Params / POST Body                                | Response    |
-|--------|-----------------------------------------|----------------------------------------|---------------------------------------------------|-------------|
-| GET    | `/replays/status`                       | Replay renderer overview               | none                                              | JSON        |
-| POST   | `/cache/control`                        | Control cache across oStella and workers | `{"operation":"QUERY","type":"BEATMAPSET","id":12345}` | JSON |
-| POST   | `/replays/renders/score/{scoreId}`      | Queue single replay render             | path `scoreId`                                    | `202` JSON  |
-| POST   | `/replays/renders/showcase/scores`      | Queue multi-score showcase render      | POST Body `{"ids":[score ids]}`                   | `202` JSON  |
-| POST   | `/replays/renders/showcase/{beatmapId}` | Queue multi-score showcase render      | path `beatmapId` + POST Body `{"ids":[user ids]}` | `202` JSON  |
-| GET    | `/replays/{jobId}/status`               | Get render job state                   | path `{jobId}`                                    | JSON        |
-| GET    | `/replays/{jobId}/video`                | Download rendered video                | path `{jobId}`                                    | `video/mp4` |
-| DELETE | `/replays/{jobId}/video`                | Remove rendered video and job metadata | path `{jobId}`                                    | text        |
+| Method | Path                                    | Purpose                                  | Params / POST Body                                     | Response    |
+|--------|-----------------------------------------|------------------------------------------|--------------------------------------------------------|-------------|
+| GET    | `/replays/status`                       | Replay renderer overview                 | none                                                   | JSON        |
+| POST   | `/cache/control`                        | Control cache across oStella and workers | `{"operation":"QUERY","type":"BEATMAPSET","id":12345}` | JSON        |
+| POST   | `/replays/renders/score/{scoreId}`      | Queue single replay render               | path `scoreId`                                         | `202` JSON  |
+| POST   | `/replays/renders/showcase/scores`      | Queue multi-score showcase render        | POST Body `{"ids":[score ids]}`                        | `202` JSON  |
+| POST   | `/replays/renders/showcase/{beatmapId}` | Queue multi-score showcase render        | path `beatmapId` + POST Body `{"ids":[user ids]}`      | `202` JSON  |
+| GET    | `/replays/{jobId}/status`               | Get render job state                     | path `{jobId}`                                         | JSON        |
+| POST   | `/replays/{jobId}/cancel`               | Cancel a queued or active render job     | path `{jobId}`                                         | JSON        |
+| GET    | `/replays/{jobId}/video`                | Download rendered video                  | path `{jobId}`                                         | `video/mp4` |
+| DELETE | `/replays/{jobId}/video`                | Remove rendered video and job metadata   | path `{jobId}`                                         | text        |
 
 ### Miscellaneous
 
@@ -252,12 +253,12 @@ You can also look up the score of a beatmap, or the beatmap index of a beatmapse
 #### Looking up beatmaps, beatmapset, or scores by a user and index (e.g., best-of-N):
 
 - `of` = score type
-- `i` = index (for `bo` `rs` `rp`, which score index to return)
+- `i` = index (for `bp` `rs` `rp`, which score index to return)
 - `u` = user ID
 
 ##### Score Types for `of` parameter:
 
-- `bo` - best scores
+- `bp` - best scores
 - `rs` - recent scores
 - `rp` - recent **passed** scores
 - `mp` - current multiplayer playlist item
@@ -267,7 +268,7 @@ You can also look up the score of a beatmap, or the beatmap index of a beatmapse
 - `/beatmaps/lookup?m=12345678` - Look up beatmap by map ID
 - `/beatmaps/lookup?ms=12345678&i=0` - Look up the first beatmap of a beatmapset
 - `/beatmaps/lookup?s=12345678` - Look up the beatmap of a score
-- `/beatmaps/lookup?of=bo&i=0&u=12345678` - Look up the beatmap of a user's best score #1
+- `/beatmaps/lookup?of=bp&i=0&u=12345678` - Look up the beatmap of a user's best score #1
 - `/beatmapsets/lookup?ms=12345678` - Look up beatmapset by mapset ID
 - `/beatmapsets/lookup?m=12345678` - Look up the beatmapset of a beatmap
 - `/beatmapsets/lookup?of=mp` - Look up the beatmapset of the current multiplayer playlist item

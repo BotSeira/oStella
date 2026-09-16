@@ -16,6 +16,8 @@ import xyz.zcraft.ostella.data.BeatmapAnalysisData;
 import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.UserPerformanceSummary;
+import xyz.zcraft.ostella.exception.ApiException;
+import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
@@ -128,6 +130,8 @@ public class RenderService implements AutoCloseable {
             page.waitForLoadState(LoadState.NETWORKIDLE);
             page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
             return page.locator("body").screenshot();
+        } catch (TimeoutError timeoutError) {
+            throw new ApiException(ErrorCode.IMAGE_RENDER_TIMEOUT, timeoutError.getMessage());
         }
             
         // page.waitForFunction("""

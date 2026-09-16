@@ -23,7 +23,8 @@ public final class MultiplayerResultFactory {
             List<MultiplayerRoomScore> roomScores,
             User owner
     ) {
-        return create(room, item, roomScores, owner, "lazer", "scorev2", room.getType());
+        return create(room, item, roomScores, owner, "lazer", "scorev2", room.getType(),
+                MultiplayerResultData.SeriesScore.empty());
     }
 
     public static MultiplayerResultData create(
@@ -34,6 +35,20 @@ public final class MultiplayerResultFactory {
             String client,
             String scoringType,
             String teamType
+    ) {
+        return create(room, item, roomScores, owner, client, scoringType, teamType,
+                MultiplayerResultData.SeriesScore.empty());
+    }
+
+    public static MultiplayerResultData create(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem item,
+            List<MultiplayerRoomScore> roomScores,
+            User owner,
+            String client,
+            String scoringType,
+            String teamType,
+            MultiplayerResultData.SeriesScore seriesScore
     ) {
         BeatmapExtended map = item.getBeatmap();
         MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map);
@@ -146,6 +161,7 @@ public final class MultiplayerResultFactory {
                 roundAverage,
                 teamLeadPercent,
                 winningTeam,
+                seriesScore,
                 mapInfo,
                 queuedBy,
                 players,

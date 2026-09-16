@@ -2,6 +2,7 @@ package xyz.zcraft.ostella.service;
 
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.osu.parser.ReplayAnalyzer;
 import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.HitObject;
@@ -31,7 +32,7 @@ public class MissVisualizeService {
 
     private static final int CANVAS_WIDTH = 512;
     private static final int CANVAS_HEIGHT = 384;
-    private static final double ZOOM_FACTOR = 1.3;
+    private static final double ZOOM_FACTOR = 1.25;
     private static final int WINDOW_MILLIS = 250;
 
     private static final List<Color> PATH_COLORS;
@@ -59,13 +60,23 @@ public class MissVisualizeService {
 
         final var keyFrames = replayAnalyze.replay().timedKeyFrames();
 
+
+        final int mods = replayAnalyze.replay().mods();
+        final var realtimePpLoss = AnalyzeController.calculateRealtimePpLoss(
+                replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
+        final var finalPpLoss = AnalyzeController.calculateFinalPpLoss(
+                replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
+        final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(
+                replayAnalyze.beatmap(), replayAnalyze, mods);
+
         return ImageHelper.drawMiss(
                 missIndex,
                 targetMiss,
                 extractNearbyKeyFrames(keyFrames, targetMiss.hitObject()),
                 replayAnalyze.beatmap(),
                 replayAnalyze.calculatedDifficulty(),
-                ReplayAnalyzer.hasHardRock(replayAnalyze.replay())
+                ReplayAnalyzer.hasHardRock(replayAnalyze.replay()),
+                realtimePpLoss, finalPpLoss, totalMissPpLoss
         );
     }
 
@@ -168,12 +179,12 @@ public class MissVisualizeService {
             return isEarly ? 0 : 8;
         }
 
-        private static byte[] drawMiss(int missIndex,
-                                       HitEvent targetMiss,
-                                       List<OsuReplay.TimedKeyFrame> keyFrames,
-                                       OsuBeatmap beatmap,
-                                       DifficultyAttribute diff,
-                                       boolean hardRock) {
+        private static byte[] drawMiss(
+                int missIndex, HitEvent targetMiss, List<OsuReplay.TimedKeyFrame> keyFrames,
+                OsuBeatmap beatmap, DifficultyAttribute diff, boolean hr,
+                AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
+                AnalyzeController.PPLoss totalMissPpLoss
+        ) {
             final HitObject hitObject = targetMiss.hitObject();
             final double circleRadius = diff.getCircleRadiusInPixel();
 
@@ -188,15 +199,16 @@ public class MissVisualizeService {
             g2d.setColor(Color.WHITE);
             g2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-            drawNearbyObjects(hitObject, beatmap, circleRadius, hardRock, g2d);
+            drawNearbyObjects(hitObject, beatmap, circleRadius, hr, g2d);
 
-            drawTargetObject(hitObject, circleRadius, hardRock, g2d);
+            drawTargetObject(hitObject, circleRadius, hr, g2d);
 
-            drawCursorPath(hitObject, keyFrames, diff, hardRock, g2d);
+            drawCursorPath(hitObject, keyFrames, diff, hr, g2d);
 
-            drawFramePoints(hitObject, keyFrames, hardRock, g2d, hitTimes);
+            drawFramePoints(hitObject, keyFrames, hr, g2d, hitTimes);
 
-            drawText(missIndex, targetMiss, beatmap, g2d);
+            drawText(missIndex, targetMiss, beatmap,
+                    realtimePpLoss, finalPpLoss, totalMissPpLoss, g2d);
 
             drawTimingIndicator(diff, g2d, hitTimes);
 
@@ -280,7 +292,11 @@ public class MissVisualizeService {
             ));
         }
 
-        private static void drawText(int missIndex, HitEvent targetMiss, OsuBeatmap beatmap, Graphics2D g2d) {
+        private static void drawText(
+                int missIndex, HitEvent targetMiss, OsuBeatmap beatmap,
+                AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
+                AnalyzeController.PPLoss totalMissPpLoss, Graphics2D g2d
+        ) {
             g2d.setColor(Color.BLACK);
 
             final Duration duration = Duration.of(targetMiss.hitObject().getTime(), ChronoUnit.MILLIS);
@@ -289,6 +305,16 @@ public class MissVisualizeService {
 
             g2d.setFont(new Font("Dejavu Sans", Font.PLAIN, 20));
             g2d.drawString(missInfo, 5, CANVAS_HEIGHT - 8);
+            g2d.setFont(new Font("Consolas", Font.PLAIN, 17));
+            g2d.drawString(String.format("rlt. %.2fpp→%.2fpp (-%.2f)",
+                            realtimePpLoss.withoutMiss(), realtimePpLoss.actual(),
+                            realtimePpLoss.withoutMiss() - realtimePpLoss.actual()),
+                    5, CANVAS_HEIGHT - 46);
+            g2d.drawString(String.format("fin. %.2fpp→%.2fpp (-%.2f of -%.2f)",
+                            finalPpLoss.withoutMiss(), finalPpLoss.actual(),
+                            finalPpLoss.withoutMiss() - finalPpLoss.actual(),
+                            totalMissPpLoss.withoutMiss() - totalMissPpLoss.actual()),
+                    5, CANVAS_HEIGHT - 28);
 
             g2d.setFont(new Font("Dejavu Sans", Font.BOLD, 20));
             g2d.drawString(beatmap.getBeatmapId() + " - " + beatmap.getTitle(), 5, 20);
@@ -494,11 +520,11 @@ public class MissVisualizeService {
             g2d.draw(path);
         }
 
-        private record Point(double x, double y) {
-        }
-
         private static double playfieldY(double y, boolean hardRock) {
             return hardRock ? CANVAS_HEIGHT - y : y;
+        }
+
+        private record Point(double x, double y) {
         }
 
         /**
