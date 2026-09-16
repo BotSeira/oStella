@@ -96,7 +96,6 @@
             right: 16px;
             bottom: 16px;
             letter-spacing: 1px;
-            color: #a0a0b8;
             font-size: 1.1em;
             text-align: end;
         }
@@ -105,8 +104,8 @@
         .meta-row {
             display: grid;
             grid-template-columns: minmax(0, 1fr) auto;
-            grid-template-rows: auto auto auto;
-            padding: 16px 24px 20px 24px;
+            grid-template-rows: auto auto;
+            padding: 0 24px 20px 24px;
             row-gap: 8px;
             align-items: end;
         }
@@ -116,14 +115,12 @@
         }
 
         .song-title {
-            grid-column: 1 / 2;
-            grid-row: 1 / 2;
             font-size: 2.2em;
             font-weight: 900;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            padding-right: 24px;
+            padding: 16px 24px 0 24px;
         }
 
         .song-artist {
@@ -470,19 +467,30 @@
                 SS
             </div>
             <div class="id-info">
-                <div th:text="${'MS' + score.getBeatmapset().getId() + ' - ' + 'M' + score.getBeatmap().getId()}">
-                    MS1234567 - M1234567
-                </div>
-                <div th:text="${'U' + score.getUser().getId() + ' - ' + Scores.getDisplayScoreId(score)}">U123456789 -
-                    S1234567890
+                <div class="player-identity">
+                    <img alt="flag"
+                         src="https://osu.ppy.sh/images/flags/AU.png" style="width: 32px; border-radius: 4px;"
+                         th:src="${cache.getImageSrc(Users.getFlagUrl(score.getUser()))}">
+
+                    <span class="player-name" th:text="${score.getUser().getUsername()}">PlayerName</span>
+
+                    <svg class="supporter-icon" th:if="${score.getUser().isSupporter()}" viewBox="0 0 24 24">
+                        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+
+                    <img alt="Avatar" class="player-avatar"
+                         src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
                 </div>
             </div>
         </div>
     </div>
 
+    <div class="song-title" th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
+
+
     <div class="meta-row">
+
         <div class="map-info">
-            <div class="song-title" th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
             <div class="song-artist">
                 <span style="font-family: serif;"
                       th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
@@ -512,20 +520,7 @@
         </div>
 
         <div class="player-info">
-            <div class="player-identity">
-                <img alt="flag"
-                     src="https://osu.ppy.sh/images/flags/AU.png" style="width: 32px; border-radius: 4px;"
-                     th:src="${cache.getImageSrc(Users.getFlagUrl(score.getUser()))}">
 
-                <span class="player-name" th:text="${score.getUser().getUsername()}">PlayerName</span>
-
-                <svg class="supporter-icon" th:if="${score.getUser().isSupporter()}" viewBox="0 0 24 24">
-                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                </svg>
-
-                <img alt="Avatar" class="player-avatar"
-                     src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
-            </div>
             <div class="score-time">
                 <div class="replay-container" th:if="${replayPresent}">
                     <span class="replay-badge">▶</span>
@@ -678,6 +673,13 @@
             </div>
         </div>
     </div>
+
+<!--    <div th:text="${'MS' + score.getBeatmapset().getId() + ' - ' + 'M' + score.getBeatmap().getId()}">-->
+<!--        MS1234567 - M1234567-->
+<!--    </div>-->
+<!--    <div th:text="${'U' + score.getUser().getId() + ' - ' + Scores.getDisplayScoreId(score)}">-->
+<!--        U123456789 - S1234567890-->
+<!--    </div>-->
 </div>
 
 <div class="bottom-footer">

@@ -5,11 +5,7 @@ import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Beatmapset;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.User;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.data.replay.ReplayInfo;
 
@@ -186,7 +182,11 @@ public final class LocalScoreService {
         user.setId(userId);
         user.setUsername(replay.playerName());
         user.setCountryCode("XX");
-        user.setAvatarUrl("https://a.ppy.sh/" + userId);
+        if (userId != 0L) {
+            user.setAvatarUrl("https://a.ppy.sh/" + userId);
+        } else {
+            user.setAvatarUrl("https://osu.ppy.sh/images/layout/avatar-guest.png");
+        }
         return user;
     }
 
