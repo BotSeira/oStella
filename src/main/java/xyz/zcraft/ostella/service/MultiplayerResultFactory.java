@@ -3,13 +3,7 @@ package xyz.zcraft.ostella.service;
 import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
-import xyz.zcraft.osu.model.Beatmap;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Beatmapset;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.User;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 
 import java.util.*;
 
@@ -139,9 +133,9 @@ public final class MultiplayerResultFactory {
         long blueTotal = teamTotal(bluePlayers);
         List<MultiplayerResultData.TeamResult> teams = teamVs
                 ? List.of(
-                        new MultiplayerResultData.TeamResult("red", "Red Team", redTotal, redPlayers),
-                        new MultiplayerResultData.TeamResult("blue", "Blue Team", blueTotal, bluePlayers)
-                )
+                new MultiplayerResultData.TeamResult("red", "Red Team", redTotal, redPlayers),
+                new MultiplayerResultData.TeamResult("blue", "Blue Team", blueTotal, bluePlayers)
+        )
                 : List.of();
         String winningTeam = !teamVs || redTotal == blueTotal ? "tie" : redTotal > blueTotal ? "red" : "blue";
         long higherTeamScore = Math.max(redTotal, blueTotal);

@@ -182,12 +182,9 @@ public class AnalyzeController {
                 event -> event.objectIndex() == replaceMissIndex);
     }
 
-    public record PPLoss(
-            double withoutMiss,
-            double actual
-    ){};
-
-    /** Calculates the PP lost at the moment the target miss occurs. */
+    /**
+     * Calculates the PP lost at the moment the target miss occurs.
+     */
     public static PPLoss calculateRealtimePpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, HitEvent targetMiss
     ) {
@@ -205,7 +202,9 @@ public class AnalyzeController {
         return new PPLoss(withoutMissPp, actualPp);
     }
 
-    /** Calculates how much the target miss changes the PP at the end of the map. */
+    /**
+     * Calculates how much the target miss changes the PP at the end of the map.
+     */
     public static PPLoss calculateFinalPpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, HitEvent targetMiss
     ) {
@@ -225,7 +224,9 @@ public class AnalyzeController {
         return new PPLoss(withoutMissPp, actualPp);
     }
 
-    /** Calculates the final PP lost to all object-start misses while preserving 100s and 50s. */
+    /**
+     * Calculates the final PP lost to all object-start misses while preserving 100s and 50s.
+     */
     public static PPLoss calculateTotalMissPpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits
     ) {
@@ -523,6 +524,12 @@ public class AnalyzeController {
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> MissVisualizeService.visualizeMiss(analyze, missIndex))
                 .thenAccept(bytes -> context.status(200).result(bytes)));
+    }
+
+    public record PPLoss(
+            double withoutMiss,
+            double actual
+    ) {
     }
 
     public record ScoreAnalyzeData(

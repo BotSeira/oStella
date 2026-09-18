@@ -4,7 +4,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class ConsoleInputParser {
-    private ConsoleInputParser() { }
+    private ConsoleInputParser() {
+    }
 
     static ParsedInput parse(String input) {
         String raw = input == null ? "" : input;
@@ -18,13 +19,27 @@ final class ConsoleInputParser {
             while (index < raw.length()) {
                 char current = raw.charAt(index);
                 if (quote != 0) {
-                    if (current == quote) { quote = 0; index++; }
-                    else if (current == '\\' && index + 1 < raw.length()) { value.append(raw.charAt(index + 1)); index += 2; }
-                    else { value.append(current); index++; }
-                } else if (current == '\'' || current == '"') { quote = current; index++; }
-                else if (Character.isWhitespace(current)) break;
-                else if (current == '\\' && index + 1 < raw.length()) { value.append(raw.charAt(index + 1)); index += 2; }
-                else { value.append(current); index++; }
+                    if (current == quote) {
+                        quote = 0;
+                        index++;
+                    } else if (current == '\\' && index + 1 < raw.length()) {
+                        value.append(raw.charAt(index + 1));
+                        index += 2;
+                    } else {
+                        value.append(current);
+                        index++;
+                    }
+                } else if (current == '\'' || current == '"') {
+                    quote = current;
+                    index++;
+                } else if (Character.isWhitespace(current)) break;
+                else if (current == '\\' && index + 1 < raw.length()) {
+                    value.append(raw.charAt(index + 1));
+                    index += 2;
+                } else {
+                    value.append(current);
+                    index++;
+                }
             }
             if (quote != 0) throw new IllegalArgumentException("Unclosed quote in console command");
             values.add(value.toString());
@@ -33,7 +48,12 @@ final class ConsoleInputParser {
     }
 
     record ParsedInput(List<String> values) {
-        int size() { return values.size(); }
-        String value(int index) { return values.get(index); }
+        int size() {
+            return values.size();
+        }
+
+        String value(int index) {
+            return values.get(index);
+        }
     }
 }

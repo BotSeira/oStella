@@ -8,7 +8,10 @@ import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.data.SearchResultItem;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
@@ -26,6 +29,7 @@ import java.util.stream.Collectors;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class BeatmapsetController {
+    private static final Gson GSON = new Gson();
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -187,8 +191,6 @@ public class BeatmapsetController {
                     }
                 }));
     }
-
-    private static final Gson GSON = new Gson();
 
     public void searchBeatmapset(@NotNull Context context) {
         final String query = requireString(context, "q");

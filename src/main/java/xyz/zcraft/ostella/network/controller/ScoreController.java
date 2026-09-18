@@ -135,6 +135,22 @@ public class ScoreController {
         return bits;
     }
 
+    private static double getArFactor(double ar) {
+        if (ar >= 8.25) {
+            return 0.0;
+        }
+
+        return 2.5 * (1.0 - Math.exp(-1.3 * (8.25 - ar)));
+    }
+
+    private static double getCsFactor(double cs) {
+        if (cs <= 8.0) {
+            return 0.0;
+        }
+
+        return Math.pow((cs - 8.0) / 4.0, 1.25);
+    }
+
     public void lookupScore(@NotNull Context context) {
         if (context.queryParam("of") != null) {
             lookupScoreOfRefAsync(context);
@@ -621,22 +637,6 @@ public class ScoreController {
         attributeFactor += getArFactor(difficultyAttribute.ar());
 
         return attributeFactor;
-    }
-
-    private static double getArFactor(double ar) {
-        if (ar >= 8.25) {
-            return 0.0;
-        }
-
-        return 2.5 * (1.0 - Math.exp(-1.3 * (8.25 - ar)));
-    }
-
-    private static double getCsFactor(double cs) {
-        if (cs <= 8.0) {
-            return 0.0;
-        }
-
-        return Math.pow((cs - 8.0) / 4.0, 1.25);
     }
 
     private record ModSet(Set<String> acronyms) {

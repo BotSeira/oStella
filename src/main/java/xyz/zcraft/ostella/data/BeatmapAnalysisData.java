@@ -15,46 +15,6 @@ public record BeatmapAnalysisData(
         PerfPlusApi.PerformancePlus performance,
         BeatmapPatternAnalysis patterns
 ) {
-    public PatternView primaryType() {
-        return patternView(patterns.primaryType());
-    }
-
-    public AimPatternView primaryAimType() {
-        return aimPatternView(patterns.primaryAimType());
-    }
-
-    public List<PatternView> types() {
-        return patterns.types().stream().map(BeatmapAnalysisData::patternView).toList();
-    }
-
-    public List<AimPatternView> aimTypes() {
-        return patterns.aimTypes().stream()
-                .filter(type -> type.evidence() > 0)
-                .map(BeatmapAnalysisData::aimPatternView)
-                .sorted(Comparator.comparingDouble(AimPatternView::percentage).reversed())
-                .toList();
-    }
-
-    public List<PerfPlusApi.SkillPerformance> skillsByPercentage() {
-        return performance.skills().stream()
-                .sorted(Comparator.comparingDouble(PerfPlusApi.SkillPerformance::percentage).reversed())
-                .toList();
-    }
-
-    public PerfPlusApi.SkillPerformance primarySkill() {
-        return performance.skills().stream()
-                .max(java.util.Comparator.comparingDouble(PerfPlusApi.SkillPerformance::pp))
-                .orElseThrow();
-    }
-
-    public boolean hasMods() {
-        return mods != null && !mods.isEmpty();
-    }
-
-    public boolean hasAimEvidence() {
-        return patterns.primaryAimType().evidence() > 0;
-    }
-
     private static PatternView patternView(BeatmapPatternAnalysis.PatternScore score) {
         return switch (score.type()) {
             case STREAM -> new PatternView("Stream", score.percentage(), "#4a90e2",
@@ -93,6 +53,46 @@ public record BeatmapAnalysisData(
             case BACK_AND_FORTH_AIM -> new AimPatternView("Back-and-forth Aim", score.percentage(),
                     "Repeated reversals between opposing directions");
         };
+    }
+
+    public PatternView primaryType() {
+        return patternView(patterns.primaryType());
+    }
+
+    public AimPatternView primaryAimType() {
+        return aimPatternView(patterns.primaryAimType());
+    }
+
+    public List<PatternView> types() {
+        return patterns.types().stream().map(BeatmapAnalysisData::patternView).toList();
+    }
+
+    public List<AimPatternView> aimTypes() {
+        return patterns.aimTypes().stream()
+                .filter(type -> type.evidence() > 0)
+                .map(BeatmapAnalysisData::aimPatternView)
+                .sorted(Comparator.comparingDouble(AimPatternView::percentage).reversed())
+                .toList();
+    }
+
+    public List<PerfPlusApi.SkillPerformance> skillsByPercentage() {
+        return performance.skills().stream()
+                .sorted(Comparator.comparingDouble(PerfPlusApi.SkillPerformance::percentage).reversed())
+                .toList();
+    }
+
+    public PerfPlusApi.SkillPerformance primarySkill() {
+        return performance.skills().stream()
+                .max(java.util.Comparator.comparingDouble(PerfPlusApi.SkillPerformance::pp))
+                .orElseThrow();
+    }
+
+    public boolean hasMods() {
+        return mods != null && !mods.isEmpty();
+    }
+
+    public boolean hasAimEvidence() {
+        return patterns.primaryAimType().evidence() > 0;
     }
 
     public record PatternView(

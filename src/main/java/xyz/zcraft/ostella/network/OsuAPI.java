@@ -4,11 +4,7 @@ import com.google.gson.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
-import xyz.zcraft.ostella.data.ScoreType;
-import xyz.zcraft.ostella.data.TokenData;
-import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
-import xyz.zcraft.ostella.data.MultiplayerRoomScore;
-import xyz.zcraft.ostella.data.MultiplayerMatchDetails;
+import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
@@ -27,12 +23,12 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class OsuAPI {
+    public static final int MAX_USER_SCORES_LIMIT = 200;
     private static final Logger LOG = LogManager.getLogger(OsuAPI.class);
     private static final HttpClient CLIENT = HttpClient.newBuilder().build();
     private static final String BASE_URL = "https://osu.ppy.sh/api/v2";
     private static final Gson GSON = new Gson();
     private static final int USER_SCORES_PAGE_LIMIT = 100;
-    public static final int MAX_USER_SCORES_LIMIT = 200;
 
     public static TokenData getToken(AppConfig conf) {
         try {
@@ -189,9 +185,6 @@ public class OsuAPI {
                 page.offset() == 0 ? "" : "&offset=" + page.offset(),
                 includeFails ? 1 : 0
         );
-    }
-
-    record UserScoresPage(int limit, int offset) {
     }
 
     public static Score getUserScore(TokenData tokenData, long uid, long beatmapId, String mods) {
@@ -715,7 +708,6 @@ public class OsuAPI {
         return null;
     }
 
-
     public static BeatmapExtended getBeatmapByChecksum(TokenData tokenData, String checksum) {
         LOG.debug("Fetching beatmap with checksum {}", checksum);
         try {
@@ -949,6 +941,9 @@ public class OsuAPI {
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get self data", e);
         }
+    }
+
+    record UserScoresPage(int limit, int offset) {
     }
 }
 

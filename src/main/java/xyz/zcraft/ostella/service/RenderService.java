@@ -11,11 +11,7 @@ import org.thymeleaf.context.Context;
 import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 import org.thymeleaf.templateresolver.FileTemplateResolver;
-import xyz.zcraft.ostella.data.Placement;
-import xyz.zcraft.ostella.data.BeatmapAnalysisData;
-import xyz.zcraft.ostella.data.MultiplayerResultData;
-import xyz.zcraft.ostella.data.ScoreType;
-import xyz.zcraft.ostella.data.UserPerformanceSummary;
+import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
@@ -42,14 +38,13 @@ import java.util.stream.IntStream;
 
 public class RenderService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(RenderService.class);
-    @Getter
-    private final ExecutorService renderExecutor;
-    private final ThreadLocal<RenderWorkerState> workerStateLocal =  new ThreadLocal<>();
-    private final TemplateEngine templateEngine;
-    private final TemplateEngine templateEngineLocal;
-
     private static final Path LOCAL_TEMPLATES_PATH = Path.of("templates");
     private static final Path LOCAL_ASSETS_PATH = LOCAL_TEMPLATES_PATH.resolve("assets");
+    @Getter
+    private final ExecutorService renderExecutor;
+    private final ThreadLocal<RenderWorkerState> workerStateLocal = new ThreadLocal<>();
+    private final TemplateEngine templateEngine;
+    private final TemplateEngine templateEngineLocal;
 
     public RenderService(int maxWorkers) {
         if (maxWorkers <= 0) {
@@ -89,6 +84,20 @@ public class RenderService implements AutoCloseable {
         }
     }
 
+    private static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
+        return filters.isEmpty()
+                ? switch (type) {
+            case BEST -> "Best of " + scoreCount + " Scores";
+            case RECENT -> "Most recent " + scoreCount + " Scores";
+            case RECENT_PASS -> "Most recent " + scoreCount + " Passed Scores";
+        }
+                : switch (type) {
+            case BEST -> "Filtered Scores From Best Scores";
+            case RECENT -> "Filtered Scores From Recent Scores";
+            case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
+        };
+    }
+
     private @NonNull ThreadFactory getThreadFactory() {
         AtomicInteger workerId = new AtomicInteger();
 
@@ -124,7 +133,7 @@ public class RenderService implements AutoCloseable {
         }
 
         var context = workerState.context();
-        
+
         try (Page page = context.newPage()) {
             page.setContent(html);
             page.waitForLoadState(LoadState.NETWORKIDLE);
@@ -133,7 +142,7 @@ public class RenderService implements AutoCloseable {
         } catch (TimeoutError timeoutError) {
             throw new ApiException(ErrorCode.IMAGE_RENDER_TIMEOUT, timeoutError.getMessage());
         }
-            
+
         // page.waitForFunction("""
         // () => document.fonts.status === 'loaded'
         //    && Array.from(document.images).every(img => img.complete)
@@ -230,20 +239,6 @@ public class RenderService implements AutoCloseable {
         String finalHtml = templateEngine.process("score-list", ctx);
 
         return takeScreenshot(finalHtml);
-    }
-
-    private static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
-        return filters.isEmpty()
-                ? switch (type) {
-                    case BEST -> "Best of " + scoreCount + " Scores";
-                    case RECENT -> "Most recent " + scoreCount + " Scores";
-                    case RECENT_PASS -> "Most recent " + scoreCount + " Passed Scores";
-                }
-                : switch (type) {
-                    case BEST -> "Filtered Scores From Best Scores";
-                    case RECENT -> "Filtered Scores From Recent Scores";
-                    case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
-                };
     }
 
     public byte[] renderMapLeaderboard(BeatmapExtended map, List<Placement> placements, double ppMax) {

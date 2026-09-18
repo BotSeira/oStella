@@ -8,38 +8,23 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.data.MultiplayerResultData;
-import xyz.zcraft.ostella.data.MultiplayerMatchDetails;
-import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
-import xyz.zcraft.ostella.data.MultiplayerRoomScore;
-import xyz.zcraft.ostella.data.MultiplayerRoomWatchState;
-import xyz.zcraft.ostella.network.*;
+import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Response;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.MultiplayerResultFactory;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.MultiplayerRoom;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.User;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 
-import java.util.Comparator;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 public class MultiplayerController {
-    private static final Logger LOG = LogManager.getLogger(MultiplayerController.class);
     public static final Gson GSON = new Gson();
-
+    private static final Logger LOG = LogManager.getLogger(MultiplayerController.class);
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -50,206 +35,6 @@ public class MultiplayerController {
         this.renderer = router.renderer;
         this.executor = router.executor;
         this.tokenManager = router.tokenManager;
-    }
-
-    public void getCurrentRoom(@NotNull Context context) {
-        final String auth = context.header("Authorization");
-
-        if (auth == null) {
-            throw new ApiException(ErrorCode.UNAUTHORIZED);
-        }
-
-        context.future(() -> executor
-                .enqueueAsync(() -> OsuAPI.getCurrentRoom(auth))
-                .thenApply(room -> {
-                    if (room == null) {
-                        throw new ApiException(ErrorCode.NO_ROOM_FOUND, "User is not in a room!");
-                    }
-                    return room;
-                })
-                .thenAccept(room -> context.status(200).result(new Response(true, "Success", GSON.toJsonTree(room)).toString()))
-        );
-    }
-
-    public void getCurrentRoomItem(@NotNull Context context) {
-        final String auth = context.header("Authorization");
-
-        if (auth == null) {
-            throw new ApiException(ErrorCode.UNAUTHORIZED);
-        }
-
-        context.future(() -> executor
-                .enqueueAsync(() -> OsuAPI.getCurrentRoom(auth))
-                .thenApply(room -> {
-                    if (room == null) {
-                        throw new ApiException(ErrorCode.NO_ROOM_FOUND, "User is not in a room!");
-                    }
-                    final var currentPlaylistItem = room.getCurrentPlaylistItem();
-                    if (currentPlaylistItem == null) {
-                        throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "Room has no current playlist item!");
-                    }
-                    return currentPlaylistItem;
-                })
-                .thenApply((MultiplayerRoom.CurrentPlaylistItem c) -> {
-                    final BeatmapExtended beatmap = c.getBeatmap();
-                    if (beatmap == null) {
-                        throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "Beatmap is null!");
-                    }
-                    JsonObject res = new JsonObject();
-                    res.addProperty("beatmap_id", beatmap.getId());
-                    res.addProperty("beatmapset_id", beatmap.getBeatmapsetId());
-                    return res;
-                })
-                .thenAccept(obj -> context.status(200).result(new Response(true, "Success", obj).toString()))
-        );
-    }
-
-    public void getRoomWatchState(@NotNull Context context) {
-        long roomId = positivePathId(context, "roomId");
-        RoomVersion version = roomVersion(context);
-        context.future(() -> executor
-                .enqueueAsync(() -> switch (version) {
-                    case LAZER -> toWatchState(OsuAPI.getRoom(tokenManager.getTokenData(), roomId));
-                    case STABLE -> toWatchState(OsuAPI.getMatch(tokenManager.getTokenData(), roomId));
-                })
-                .thenAccept(state -> context.status(200)
-                        .contentType("application/json")
-                        .result(new Response(true, "Success", GSON.toJsonTree(state)).toString()))
-        );
-    }
-
-    public void renderRoomResult(@NotNull Context context) {
-        long roomId = positivePathId(context, "roomId");
-        long playlistItemId = positivePathId(context, "playlistItemId");
-        RoomVersion version = roomVersion(context);
-        context.future(() -> executor
-                .enqueueAsync(() -> switch (version) {
-                    case LAZER -> getLazerResultData(roomId, playlistItemId);
-                    case STABLE -> getStableResultData(roomId, playlistItemId);
-                })
-                .thenApplyAsync(renderer::renderMultiplayerResult, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes))
-        );
-    }
-
-    private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId) {
-        MultiplayerRoomDetails room = OsuAPI.getRoom(tokenManager.getTokenData(), roomId);
-        MultiplayerRoomDetails.PlaylistItem item = findPlaylistItem(room, playlistItemId);
-        enrichPlaylistItem(item);
-
-        List<MultiplayerRoomScore> roomScores = OsuAPI.getRoomPlaylistScores(
-                tokenManager.getTokenData(), roomId, playlistItemId
-        );
-        List<MultiplayerRoomDetails.PlaylistItem> eventItems = isTeamMode(room.getType())
-                ? OsuAPI.getRoomEventPlaylistItems(tokenManager.getTokenData(), roomId)
-                : List.of();
-        enrichLazerTeamSnapshot(room, item, roomScores, eventItems);
-        MultiplayerResultData.SeriesScore seriesScore = lazerSeriesScore(
-                room, item, roomScores, eventItems);
-        enrichScores(roomScores, item);
-        enrichDuelProfiles(roomScores);
-        User owner = resolveOwner(room, item.getOwnerId());
-        return MultiplayerResultFactory.create(
-                room,
-                item,
-                roomScores,
-                owner,
-                "lazer",
-                "scorev2",
-                room.getType(),
-                seriesScore
-        );
-    }
-
-    private void enrichLazerTeamSnapshot(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores,
-            List<MultiplayerRoomDetails.PlaylistItem> eventItems
-    ) {
-        String roomType = room.getType();
-        boolean teamVs = roomType != null
-                && roomType.toLowerCase(Locale.ROOT).replace('-', '_').contains("team");
-        boolean missingTeam = roomScores.stream().anyMatch(roomScore ->
-                roomScore.team() == null || roomScore.team().isBlank());
-        if (!teamVs || !missingTeam) {
-            return;
-        }
-
-        MultiplayerRoomDetails.PlaylistItem eventItem = eventItems.stream()
-                .filter(value -> value.getId() == item.getId())
-                .findFirst()
-                .orElse(null);
-        if (eventItem == null || eventItem.getDetails() == null) {
-            LOG.warn("Room events contain no details for playlist item {} in room {}", item.getId(), room.getId());
-            return;
-        }
-        item.setDetails(eventItem.getDetails());
-    }
-
-    private MultiplayerResultData getStableResultData(long matchId, long gameId) {
-        MultiplayerMatchDetails match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
-        MultiplayerMatchDetails.MatchGame game = findMatchGame(match, gameId);
-
-        MultiplayerRoomDetails room = new MultiplayerRoomDetails();
-        room.setId(match.getMatch().getId());
-        room.setName(match.getMatch().getName());
-        room.setActive(match.getMatch().getEndTime() == null || match.getMatch().getEndTime().isBlank());
-        room.setRecentParticipants(match.getUsers());
-
-        MultiplayerRoomDetails.PlaylistItem item = new MultiplayerRoomDetails.PlaylistItem();
-        item.setId(game.getId());
-        item.setRoomId(matchId);
-        item.setBeatmapId(game.getBeatmapId());
-        item.setPlayedAt(game.getEndTime());
-        item.setBeatmap(game.getBeatmap());
-        enrichPlaylistItem(item);
-
-        List<MultiplayerRoomScore> scores = stableScores(match, game, item);
-        MultiplayerResultData.SeriesScore seriesScore = stableSeriesScore(match, game);
-        enrichDuelProfiles(scores);
-        User stableLobby = new User();
-        stableLobby.setUsername("Stable lobby");
-        return MultiplayerResultFactory.create(
-                room,
-                item,
-                scores,
-                stableLobby,
-                "stable",
-                game.getScoringType(),
-                game.getTeamType(),
-                seriesScore
-        );
-    }
-
-    private List<MultiplayerRoomScore> stableScores(
-            MultiplayerMatchDetails match,
-            MultiplayerMatchDetails.MatchGame game,
-            MultiplayerRoomDetails.PlaylistItem item
-    ) {
-        Map<Long, User> users = new HashMap<>();
-        if (match.getUsers() != null) {
-            match.getUsers().stream().filter(Objects::nonNull).forEach(user -> users.put(user.getId(), user));
-        }
-
-        Comparator<Score> scoreComparator = stableScoreComparator(game.getScoringType());
-        List<MultiplayerRoomScore> scores = (game.getScores() == null
-                ? List.<JsonObject>of()
-                : game.getScores()).stream()
-                .map(value -> new MultiplayerRoomScore(
-                        stableScore(value, game, item, users),
-                        null,
-                        scoreTeam(value)
-                ))
-                .sorted((left, right) -> scoreComparator.compare(left.score(), right.score()))
-                .toList();
-
-        List<MultiplayerRoomScore> result = new java.util.ArrayList<>(scores.size());
-        for (int index = 0; index < scores.size(); index++) {
-            MultiplayerRoomScore roomScore = scores.get(index);
-            result.add(new MultiplayerRoomScore(roomScore.score(), index + 1, roomScore.team()));
-        }
-        return List.copyOf(result);
     }
 
     private static String scoreTeam(JsonObject score) {
@@ -263,64 +48,6 @@ public class MultiplayerController {
             }
         }
         return null;
-    }
-
-    private Score stableScore(
-            JsonObject value,
-            MultiplayerMatchDetails.MatchGame game,
-            MultiplayerRoomDetails.PlaylistItem item,
-            Map<Long, User> users
-    ) {
-        JsonObject normalized = value.deepCopy();
-        normalizeStableMods(normalized);
-        if (!normalized.has("total_score")) {
-            if (normalized.has("legacy_total_score")) {
-                normalized.add("total_score", normalized.get("legacy_total_score"));
-            } else if (normalized.has("classic_total_score")) {
-                normalized.add("total_score", normalized.get("classic_total_score"));
-            } else if (normalized.has("score")) {
-                normalized.add("total_score", normalized.get("score"));
-            }
-        }
-        if (!normalized.has("beatmap_id")) {
-            normalized.addProperty("beatmap_id", game.getBeatmapId());
-        }
-        if (!normalized.has("ended_at") && game.getEndTime() != null) {
-            normalized.addProperty("ended_at", game.getEndTime());
-        }
-        if (!normalized.has("passed") && normalized.has("match") && normalized.get("match").isJsonObject()) {
-            JsonObject scoreMatch = normalized.getAsJsonObject("match");
-            if (scoreMatch.has("pass")) {
-                normalized.add("passed", scoreMatch.get("pass"));
-            }
-        }
-
-        Score score = GSON.fromJson(normalized, Score.class);
-        score.setBeatmap(item.getBeatmap());
-        if (item.getBeatmap() != null) {
-            score.setBeatmapset(item.getBeatmap().getBeatmapset());
-        }
-        if (score.getUserId() != null && score.getUserId() > 0) {
-            User user = users.computeIfAbsent(
-                    score.getUserId(),
-                    id -> OsuAPI.getUser(tokenManager.getTokenData(), id)
-            );
-            score.setUser(user);
-        }
-        if (score.getPassed() == null) {
-            score.setPassed(true);
-        }
-        if (score.getRank() == null || score.getRank().isBlank()) {
-            score.setRank(Boolean.TRUE.equals(score.getPassed()) ? "-" : "F");
-        }
-        if (score.getBeatmap() != null) {
-            try {
-                router.ensurePp(score);
-            } catch (RuntimeException e) {
-                LOG.warn("Failed to estimate pp for stable multiplayer score {}", score.getId(), e);
-            }
-        }
-        return score;
     }
 
     private static void normalizeStableMods(JsonObject score) {
@@ -352,51 +79,6 @@ public class MultiplayerController {
                     Score::getTotalScore, Comparator.nullsLast(Comparator.reverseOrder())
             );
         };
-    }
-
-    private MultiplayerResultData.SeriesScore lazerSeriesScore(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem currentItem,
-            List<MultiplayerRoomScore> currentScores,
-            List<MultiplayerRoomDetails.PlaylistItem> eventItems
-    ) {
-        boolean teamMode = isTeamMode(room.getType());
-        Set<Long> duelUsers = teamMode ? Set.of() : scoreUserIds(currentScores);
-        if (!teamMode && duelUsers.size() != 2) {
-            return MultiplayerResultData.SeriesScore.empty();
-        }
-
-        Map<Long, MultiplayerRoomDetails.PlaylistItem> eventsById = new HashMap<>();
-        eventItems.forEach(item -> eventsById.put(item.getId(), item));
-        Map<Long, Integer> playerWins = new HashMap<>();
-        int redWins = 0;
-        int blueWins = 0;
-
-        for (MultiplayerRoomDetails.PlaylistItem item : completedItemsThrough(room, currentItem)) {
-            List<MultiplayerRoomScore> scores;
-            if (item.getId() == currentItem.getId()) {
-                scores = currentScores;
-            } else {
-                try {
-                    scores = OsuAPI.getRoomPlaylistScores(
-                            tokenManager.getTokenData(), room.getId(), item.getId());
-                } catch (ApiException e) {
-                    LOG.warn("Failed to include playlist item {} in room {} series score",
-                            item.getId(), room.getId(), e);
-                    continue;
-                }
-            }
-
-            if (teamMode) {
-                String winner = lazerTeamWinner(scores, item, eventsById.get(item.getId()));
-                if ("red".equals(winner)) redWins++;
-                if ("blue".equals(winner)) blueWins++;
-            } else {
-                Long winner = lazerDuelWinner(scores, duelUsers);
-                if (winner != null) playerWins.merge(winner, 1, Integer::sum);
-            }
-        }
-        return new MultiplayerResultData.SeriesScore(playerWins, redWins, blueWins);
     }
 
     private static List<MultiplayerRoomDetails.PlaylistItem> completedItemsThrough(
@@ -638,103 +320,6 @@ public class MultiplayerController {
         return null;
     }
 
-    private void enrichPlaylistItem(MultiplayerRoomDetails.PlaylistItem item) {
-        if (item.getBeatmap() == null || item.getBeatmap().getBeatmapset() == null) {
-            BeatmapExtended beatmap = OsuAPI.getBeatmap(tokenManager.getTokenData(), item.getBeatmapId());
-            if (beatmap != null) {
-                item.setBeatmap(beatmap);
-            }
-        }
-    }
-
-    private void enrichScores(
-            List<MultiplayerRoomScore> roomScores,
-            MultiplayerRoomDetails.PlaylistItem item
-    ) {
-        Map<Long, BeatmapExtended> beatmaps = new HashMap<>();
-        if (item.getBeatmap() != null) {
-            beatmaps.put(item.getBeatmapId(), item.getBeatmap());
-        }
-        Map<Long, User> users = new HashMap<>();
-
-        for (MultiplayerRoomScore roomScore : roomScores) {
-            Score score = roomScore.score();
-            if (score == null) {
-                continue;
-            }
-            long beatmapId = score.getBeatmapId() == null
-                    ? item.getBeatmapId()
-                    : score.getBeatmapId();
-            BeatmapExtended scoreBeatmap = score.getBeatmap();
-            if (scoreBeatmap == null || scoreBeatmap.getBeatmapset() == null) {
-                scoreBeatmap = beatmaps.computeIfAbsent(
-                        beatmapId,
-                        id -> OsuAPI.getBeatmap(tokenManager.getTokenData(), id)
-                );
-                if (scoreBeatmap != null) {
-                    score.setBeatmap(scoreBeatmap);
-                    score.setBeatmapset(scoreBeatmap.getBeatmapset());
-                }
-            }
-
-            if (score.getUser() == null && score.getUserId() != null && score.getUserId() > 0) {
-                User user = users.computeIfAbsent(
-                        score.getUserId(),
-                        id -> OsuAPI.getUser(tokenManager.getTokenData(), id)
-                );
-                score.setUser(user);
-            } else if (score.getUser() != null) {
-                users.put(score.getUser().getId(), score.getUser());
-            }
-            if (score.getBeatmap() != null) {
-                try {
-                    router.ensurePp(score);
-                } catch (RuntimeException e) {
-                    LOG.warn("Failed to estimate pp for multiplayer score {}", score.getId(), e);
-                }
-            }
-        }
-    }
-
-    private User resolveOwner(MultiplayerRoomDetails room, long ownerId) {
-        if (room.getRecentParticipants() != null) {
-            User participant = room.getRecentParticipants().stream()
-                    .filter(Objects::nonNull)
-                    .filter(user -> user.getId() == ownerId)
-                    .findFirst()
-                    .orElse(null);
-            if (participant != null) {
-                return participant;
-            }
-        }
-        if (room.getHost() != null && room.getHost().getId() == ownerId) {
-            return room.getHost();
-        }
-        return ownerId > 0 ? OsuAPI.getUser(tokenManager.getTokenData(), ownerId) : room.getHost();
-    }
-
-    private void enrichDuelProfiles(List<MultiplayerRoomScore> roomScores) {
-        if (roomScores.size() != 2) {
-            return;
-        }
-        for (MultiplayerRoomScore roomScore : roomScores) {
-            Score score = roomScore.score();
-            if (score == null || score.getUser() instanceof UserExtended) {
-                continue;
-            }
-            long userId = score.getUserId() == null
-                    ? score.getUser() == null ? 0 : score.getUser().getId()
-                    : score.getUserId();
-            if (userId <= 0) {
-                continue;
-            }
-            UserExtended user = OsuAPI.getUser(tokenManager.getTokenData(), userId);
-            if (user != null) {
-                score.setUser(user);
-            }
-        }
-    }
-
     static MultiplayerRoomWatchState toWatchState(MultiplayerRoomDetails room) {
         Map<Long, MultiplayerRoomDetails.PlaylistItem> items = new LinkedHashMap<>();
         if (room.getPlaylist() != null) {
@@ -840,6 +425,406 @@ public class MultiplayerController {
             return RoomVersion.STABLE;
         }
         throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "version must be stable or lazer");
+    }
+
+    public void getCurrentRoom(@NotNull Context context) {
+        final String auth = context.header("Authorization");
+
+        if (auth == null) {
+            throw new ApiException(ErrorCode.UNAUTHORIZED);
+        }
+
+        context.future(() -> executor
+                .enqueueAsync(() -> OsuAPI.getCurrentRoom(auth))
+                .thenApply(room -> {
+                    if (room == null) {
+                        throw new ApiException(ErrorCode.NO_ROOM_FOUND, "User is not in a room!");
+                    }
+                    return room;
+                })
+                .thenAccept(room -> context.status(200).result(new Response(true, "Success", GSON.toJsonTree(room)).toString()))
+        );
+    }
+
+    public void getCurrentRoomItem(@NotNull Context context) {
+        final String auth = context.header("Authorization");
+
+        if (auth == null) {
+            throw new ApiException(ErrorCode.UNAUTHORIZED);
+        }
+
+        context.future(() -> executor
+                .enqueueAsync(() -> OsuAPI.getCurrentRoom(auth))
+                .thenApply(room -> {
+                    if (room == null) {
+                        throw new ApiException(ErrorCode.NO_ROOM_FOUND, "User is not in a room!");
+                    }
+                    final var currentPlaylistItem = room.getCurrentPlaylistItem();
+                    if (currentPlaylistItem == null) {
+                        throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "Room has no current playlist item!");
+                    }
+                    return currentPlaylistItem;
+                })
+                .thenApply((MultiplayerRoom.CurrentPlaylistItem c) -> {
+                    final BeatmapExtended beatmap = c.getBeatmap();
+                    if (beatmap == null) {
+                        throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "Beatmap is null!");
+                    }
+                    JsonObject res = new JsonObject();
+                    res.addProperty("beatmap_id", beatmap.getId());
+                    res.addProperty("beatmapset_id", beatmap.getBeatmapsetId());
+                    return res;
+                })
+                .thenAccept(obj -> context.status(200).result(new Response(true, "Success", obj).toString()))
+        );
+    }
+
+    public void getRoomWatchState(@NotNull Context context) {
+        long roomId = positivePathId(context, "roomId");
+        RoomVersion version = roomVersion(context);
+        context.future(() -> executor
+                .enqueueAsync(() -> switch (version) {
+                    case LAZER -> toWatchState(OsuAPI.getRoom(tokenManager.getTokenData(), roomId));
+                    case STABLE -> toWatchState(OsuAPI.getMatch(tokenManager.getTokenData(), roomId));
+                })
+                .thenAccept(state -> context.status(200)
+                        .contentType("application/json")
+                        .result(new Response(true, "Success", GSON.toJsonTree(state)).toString()))
+        );
+    }
+
+    public void renderRoomResult(@NotNull Context context) {
+        long roomId = positivePathId(context, "roomId");
+        long playlistItemId = positivePathId(context, "playlistItemId");
+        RoomVersion version = roomVersion(context);
+        context.future(() -> executor
+                .enqueueAsync(() -> switch (version) {
+                    case LAZER -> getLazerResultData(roomId, playlistItemId);
+                    case STABLE -> getStableResultData(roomId, playlistItemId);
+                })
+                .thenApplyAsync(renderer::renderMultiplayerResult, renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes))
+        );
+    }
+
+    private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId) {
+        MultiplayerRoomDetails room = OsuAPI.getRoom(tokenManager.getTokenData(), roomId);
+        MultiplayerRoomDetails.PlaylistItem item = findPlaylistItem(room, playlistItemId);
+        enrichPlaylistItem(item);
+
+        List<MultiplayerRoomScore> roomScores = OsuAPI.getRoomPlaylistScores(
+                tokenManager.getTokenData(), roomId, playlistItemId
+        );
+        List<MultiplayerRoomDetails.PlaylistItem> eventItems = isTeamMode(room.getType())
+                ? OsuAPI.getRoomEventPlaylistItems(tokenManager.getTokenData(), roomId)
+                : List.of();
+        enrichLazerTeamSnapshot(room, item, roomScores, eventItems);
+        MultiplayerResultData.SeriesScore seriesScore = lazerSeriesScore(
+                room, item, roomScores, eventItems);
+        enrichScores(roomScores, item);
+        enrichDuelProfiles(roomScores);
+        User owner = resolveOwner(room, item.getOwnerId());
+        return MultiplayerResultFactory.create(
+                room,
+                item,
+                roomScores,
+                owner,
+                "lazer",
+                "scorev2",
+                room.getType(),
+                seriesScore
+        );
+    }
+
+    private void enrichLazerTeamSnapshot(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem item,
+            List<MultiplayerRoomScore> roomScores,
+            List<MultiplayerRoomDetails.PlaylistItem> eventItems
+    ) {
+        String roomType = room.getType();
+        boolean teamVs = roomType != null
+                && roomType.toLowerCase(Locale.ROOT).replace('-', '_').contains("team");
+        boolean missingTeam = roomScores.stream().anyMatch(roomScore ->
+                roomScore.team() == null || roomScore.team().isBlank());
+        if (!teamVs || !missingTeam) {
+            return;
+        }
+
+        MultiplayerRoomDetails.PlaylistItem eventItem = eventItems.stream()
+                .filter(value -> value.getId() == item.getId())
+                .findFirst()
+                .orElse(null);
+        if (eventItem == null || eventItem.getDetails() == null) {
+            LOG.warn("Room events contain no details for playlist item {} in room {}", item.getId(), room.getId());
+            return;
+        }
+        item.setDetails(eventItem.getDetails());
+    }
+
+    private MultiplayerResultData getStableResultData(long matchId, long gameId) {
+        MultiplayerMatchDetails match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
+        MultiplayerMatchDetails.MatchGame game = findMatchGame(match, gameId);
+
+        MultiplayerRoomDetails room = new MultiplayerRoomDetails();
+        room.setId(match.getMatch().getId());
+        room.setName(match.getMatch().getName());
+        room.setActive(match.getMatch().getEndTime() == null || match.getMatch().getEndTime().isBlank());
+        room.setRecentParticipants(match.getUsers());
+
+        MultiplayerRoomDetails.PlaylistItem item = new MultiplayerRoomDetails.PlaylistItem();
+        item.setId(game.getId());
+        item.setRoomId(matchId);
+        item.setBeatmapId(game.getBeatmapId());
+        item.setPlayedAt(game.getEndTime());
+        item.setBeatmap(game.getBeatmap());
+        enrichPlaylistItem(item);
+
+        List<MultiplayerRoomScore> scores = stableScores(match, game, item);
+        MultiplayerResultData.SeriesScore seriesScore = stableSeriesScore(match, game);
+        enrichDuelProfiles(scores);
+        User stableLobby = new User();
+        stableLobby.setUsername("Stable lobby");
+        return MultiplayerResultFactory.create(
+                room,
+                item,
+                scores,
+                stableLobby,
+                "stable",
+                game.getScoringType(),
+                game.getTeamType(),
+                seriesScore
+        );
+    }
+
+    private List<MultiplayerRoomScore> stableScores(
+            MultiplayerMatchDetails match,
+            MultiplayerMatchDetails.MatchGame game,
+            MultiplayerRoomDetails.PlaylistItem item
+    ) {
+        Map<Long, User> users = new HashMap<>();
+        if (match.getUsers() != null) {
+            match.getUsers().stream().filter(Objects::nonNull).forEach(user -> users.put(user.getId(), user));
+        }
+
+        Comparator<Score> scoreComparator = stableScoreComparator(game.getScoringType());
+        List<MultiplayerRoomScore> scores = (game.getScores() == null
+                ? List.<JsonObject>of()
+                : game.getScores()).stream()
+                .map(value -> new MultiplayerRoomScore(
+                        stableScore(value, game, item, users),
+                        null,
+                        scoreTeam(value)
+                ))
+                .sorted((left, right) -> scoreComparator.compare(left.score(), right.score()))
+                .toList();
+
+        List<MultiplayerRoomScore> result = new java.util.ArrayList<>(scores.size());
+        for (int index = 0; index < scores.size(); index++) {
+            MultiplayerRoomScore roomScore = scores.get(index);
+            result.add(new MultiplayerRoomScore(roomScore.score(), index + 1, roomScore.team()));
+        }
+        return List.copyOf(result);
+    }
+
+    private Score stableScore(
+            JsonObject value,
+            MultiplayerMatchDetails.MatchGame game,
+            MultiplayerRoomDetails.PlaylistItem item,
+            Map<Long, User> users
+    ) {
+        JsonObject normalized = value.deepCopy();
+        normalizeStableMods(normalized);
+        if (!normalized.has("total_score")) {
+            if (normalized.has("legacy_total_score")) {
+                normalized.add("total_score", normalized.get("legacy_total_score"));
+            } else if (normalized.has("classic_total_score")) {
+                normalized.add("total_score", normalized.get("classic_total_score"));
+            } else if (normalized.has("score")) {
+                normalized.add("total_score", normalized.get("score"));
+            }
+        }
+        if (!normalized.has("beatmap_id")) {
+            normalized.addProperty("beatmap_id", game.getBeatmapId());
+        }
+        if (!normalized.has("ended_at") && game.getEndTime() != null) {
+            normalized.addProperty("ended_at", game.getEndTime());
+        }
+        if (!normalized.has("passed") && normalized.has("match") && normalized.get("match").isJsonObject()) {
+            JsonObject scoreMatch = normalized.getAsJsonObject("match");
+            if (scoreMatch.has("pass")) {
+                normalized.add("passed", scoreMatch.get("pass"));
+            }
+        }
+
+        Score score = GSON.fromJson(normalized, Score.class);
+        score.setBeatmap(item.getBeatmap());
+        if (item.getBeatmap() != null) {
+            score.setBeatmapset(item.getBeatmap().getBeatmapset());
+        }
+        if (score.getUserId() != null && score.getUserId() > 0) {
+            User user = users.computeIfAbsent(
+                    score.getUserId(),
+                    id -> OsuAPI.getUser(tokenManager.getTokenData(), id)
+            );
+            score.setUser(user);
+        }
+        if (score.getPassed() == null) {
+            score.setPassed(true);
+        }
+        if (score.getRank() == null || score.getRank().isBlank()) {
+            score.setRank(Boolean.TRUE.equals(score.getPassed()) ? "-" : "F");
+        }
+        if (score.getBeatmap() != null) {
+            try {
+                router.ensurePp(score);
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to estimate pp for stable multiplayer score {}", score.getId(), e);
+            }
+        }
+        return score;
+    }
+
+    private MultiplayerResultData.SeriesScore lazerSeriesScore(
+            MultiplayerRoomDetails room,
+            MultiplayerRoomDetails.PlaylistItem currentItem,
+            List<MultiplayerRoomScore> currentScores,
+            List<MultiplayerRoomDetails.PlaylistItem> eventItems
+    ) {
+        boolean teamMode = isTeamMode(room.getType());
+        Set<Long> duelUsers = teamMode ? Set.of() : scoreUserIds(currentScores);
+        if (!teamMode && duelUsers.size() != 2) {
+            return MultiplayerResultData.SeriesScore.empty();
+        }
+
+        Map<Long, MultiplayerRoomDetails.PlaylistItem> eventsById = new HashMap<>();
+        eventItems.forEach(item -> eventsById.put(item.getId(), item));
+        Map<Long, Integer> playerWins = new HashMap<>();
+        int redWins = 0;
+        int blueWins = 0;
+
+        for (MultiplayerRoomDetails.PlaylistItem item : completedItemsThrough(room, currentItem)) {
+            List<MultiplayerRoomScore> scores;
+            if (item.getId() == currentItem.getId()) {
+                scores = currentScores;
+            } else {
+                try {
+                    scores = OsuAPI.getRoomPlaylistScores(
+                            tokenManager.getTokenData(), room.getId(), item.getId());
+                } catch (ApiException e) {
+                    LOG.warn("Failed to include playlist item {} in room {} series score",
+                            item.getId(), room.getId(), e);
+                    continue;
+                }
+            }
+
+            if (teamMode) {
+                String winner = lazerTeamWinner(scores, item, eventsById.get(item.getId()));
+                if ("red".equals(winner)) redWins++;
+                if ("blue".equals(winner)) blueWins++;
+            } else {
+                Long winner = lazerDuelWinner(scores, duelUsers);
+                if (winner != null) playerWins.merge(winner, 1, Integer::sum);
+            }
+        }
+        return new MultiplayerResultData.SeriesScore(playerWins, redWins, blueWins);
+    }
+
+    private void enrichPlaylistItem(MultiplayerRoomDetails.PlaylistItem item) {
+        if (item.getBeatmap() == null || item.getBeatmap().getBeatmapset() == null) {
+            BeatmapExtended beatmap = OsuAPI.getBeatmap(tokenManager.getTokenData(), item.getBeatmapId());
+            if (beatmap != null) {
+                item.setBeatmap(beatmap);
+            }
+        }
+    }
+
+    private void enrichScores(
+            List<MultiplayerRoomScore> roomScores,
+            MultiplayerRoomDetails.PlaylistItem item
+    ) {
+        Map<Long, BeatmapExtended> beatmaps = new HashMap<>();
+        if (item.getBeatmap() != null) {
+            beatmaps.put(item.getBeatmapId(), item.getBeatmap());
+        }
+        Map<Long, User> users = new HashMap<>();
+
+        for (MultiplayerRoomScore roomScore : roomScores) {
+            Score score = roomScore.score();
+            if (score == null) {
+                continue;
+            }
+            long beatmapId = score.getBeatmapId() == null
+                    ? item.getBeatmapId()
+                    : score.getBeatmapId();
+            BeatmapExtended scoreBeatmap = score.getBeatmap();
+            if (scoreBeatmap == null || scoreBeatmap.getBeatmapset() == null) {
+                scoreBeatmap = beatmaps.computeIfAbsent(
+                        beatmapId,
+                        id -> OsuAPI.getBeatmap(tokenManager.getTokenData(), id)
+                );
+                if (scoreBeatmap != null) {
+                    score.setBeatmap(scoreBeatmap);
+                    score.setBeatmapset(scoreBeatmap.getBeatmapset());
+                }
+            }
+
+            if (score.getUser() == null && score.getUserId() != null && score.getUserId() > 0) {
+                User user = users.computeIfAbsent(
+                        score.getUserId(),
+                        id -> OsuAPI.getUser(tokenManager.getTokenData(), id)
+                );
+                score.setUser(user);
+            } else if (score.getUser() != null) {
+                users.put(score.getUser().getId(), score.getUser());
+            }
+            if (score.getBeatmap() != null) {
+                try {
+                    router.ensurePp(score);
+                } catch (RuntimeException e) {
+                    LOG.warn("Failed to estimate pp for multiplayer score {}", score.getId(), e);
+                }
+            }
+        }
+    }
+
+    private User resolveOwner(MultiplayerRoomDetails room, long ownerId) {
+        if (room.getRecentParticipants() != null) {
+            User participant = room.getRecentParticipants().stream()
+                    .filter(Objects::nonNull)
+                    .filter(user -> user.getId() == ownerId)
+                    .findFirst()
+                    .orElse(null);
+            if (participant != null) {
+                return participant;
+            }
+        }
+        if (room.getHost() != null && room.getHost().getId() == ownerId) {
+            return room.getHost();
+        }
+        return ownerId > 0 ? OsuAPI.getUser(tokenManager.getTokenData(), ownerId) : room.getHost();
+    }
+
+    private void enrichDuelProfiles(List<MultiplayerRoomScore> roomScores) {
+        if (roomScores.size() != 2) {
+            return;
+        }
+        for (MultiplayerRoomScore roomScore : roomScores) {
+            Score score = roomScore.score();
+            if (score == null || score.getUser() instanceof UserExtended) {
+                continue;
+            }
+            long userId = score.getUserId() == null
+                    ? score.getUser() == null ? 0 : score.getUser().getId()
+                    : score.getUserId();
+            if (userId <= 0) {
+                continue;
+            }
+            UserExtended user = OsuAPI.getUser(tokenManager.getTokenData(), userId);
+            if (user != null) {
+                score.setUser(user);
+            }
+        }
     }
 
     private enum RoomVersion {

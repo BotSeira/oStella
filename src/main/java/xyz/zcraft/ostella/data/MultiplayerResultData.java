@@ -48,6 +48,14 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         this.unassignedPlayers = List.copyOf(unassignedPlayers);
     }
 
+    private static int teamOrder(String team) {
+        return switch (team == null ? "" : team) {
+            case "red" -> 0;
+            case "blue" -> 1;
+            default -> 2;
+        };
+    }
+
     public boolean isTeamVs() {
         return teams.size() == 2 && !isTeamDuel();
     }
@@ -87,14 +95,6 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
                         seriesScore.playerWins().getOrDefault(player.userId(), 0)
                 ))
                 .toList();
-    }
-
-    private static int teamOrder(String team) {
-        return switch (team == null ? "" : team) {
-            case "red" -> 0;
-            case "blue" -> 1;
-            default -> 2;
-        };
     }
 
     private boolean isTeamDuel() {

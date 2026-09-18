@@ -1,8 +1,6 @@
 package xyz.zcraft.ostella.data;
 
-import org.jline.utils.DiffHelper;
 import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
@@ -344,6 +342,33 @@ public final class ScoreFilter {
         return "%d:%02d".formatted(seconds / 60, seconds % 60);
     }
 
+    private static List<String> allMetadataText(Score score) {
+        List<String> values = new ArrayList<>();
+        if (score.getBeatmap() != null) {
+            values.add(score.getBeatmap().getVersion());
+        }
+        if (score.getBeatmapset() != null) {
+            var beatmapset = score.getBeatmapset();
+            values.add(beatmapset.getTitle());
+            values.add(beatmapset.getTitleUnicode());
+            values.add(beatmapset.getArtist());
+            values.add(beatmapset.getArtistUnicode());
+            values.add(beatmapset.getCreator());
+            values.add(beatmapset.getSource());
+            values.add(beatmapset.getTags());
+            if (beatmapset.getGenre() != null) values.add(beatmapset.getGenre().getName());
+            if (beatmapset.getLanguage() != null) values.add(beatmapset.getLanguage().getName());
+            if (beatmapset.getPackTags() != null) values.addAll(beatmapset.getPackTags());
+            if (beatmapset.getRelatedTags() != null) {
+                beatmapset.getRelatedTags().forEach(tag -> {
+                    values.add(tag.getName());
+                    values.add(tag.getDescription());
+                });
+            }
+        }
+        return values;
+    }
+
     public boolean matches(Score score) {
         if (score == null) {
             return false;
@@ -476,33 +501,6 @@ public final class ScoreFilter {
             case NOT_EQUAL, NOT_CONTAINS -> !matches;
             default -> throw new IllegalStateException("Numeric operator used for text filter");
         };
-    }
-
-    private static List<String> allMetadataText(Score score) {
-        List<String> values = new ArrayList<>();
-        if (score.getBeatmap() != null) {
-            values.add(score.getBeatmap().getVersion());
-        }
-        if (score.getBeatmapset() != null) {
-            var beatmapset = score.getBeatmapset();
-            values.add(beatmapset.getTitle());
-            values.add(beatmapset.getTitleUnicode());
-            values.add(beatmapset.getArtist());
-            values.add(beatmapset.getArtistUnicode());
-            values.add(beatmapset.getCreator());
-            values.add(beatmapset.getSource());
-            values.add(beatmapset.getTags());
-            if (beatmapset.getGenre() != null) values.add(beatmapset.getGenre().getName());
-            if (beatmapset.getLanguage() != null) values.add(beatmapset.getLanguage().getName());
-            if (beatmapset.getPackTags() != null) values.addAll(beatmapset.getPackTags());
-            if (beatmapset.getRelatedTags() != null) {
-                beatmapset.getRelatedTags().forEach(tag -> {
-                    values.add(tag.getName());
-                    values.add(tag.getDescription());
-                });
-            }
-        }
-        return values;
     }
 
     private boolean compareBoolean(Boolean actual) {

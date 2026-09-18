@@ -11,11 +11,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 public final class PerfPlusApi {
@@ -36,22 +32,6 @@ public final class PerfPlusApi {
                 : URI.create(endpoint.strip().replaceAll("/+$", "") + "/batch/calculation");
     }
 
-    public boolean isConfigured() {
-        return calculationEndpoint != null;
-    }
-
-    public CompletableFuture<PerformancePlus> calculate(Score score) {
-        return calculate(toRequest(score));
-    }
-
-    public CompletableFuture<PerformancePlus> calculateBeatmap(long beatmapId, String mods) {
-        if (beatmapId <= 0) throw new IllegalArgumentException("beatmapId must be positive");
-        List<ModRequest> modRequests = parseModAcronyms(mods).stream()
-                .map(acronym -> new ModRequest(acronym, Map.of()))
-                .toList();
-        return calculate(new ScoreRequest(String.valueOf(beatmapId), modRequests, null, 0, 0, 0));
-    }
-
     public static List<String> parseModAcronyms(String mods) {
         if (mods == null || mods.isBlank()) return List.of();
         String normalized = mods.toUpperCase(Locale.ROOT).replaceAll("[+,\\s]", "");
@@ -63,21 +43,6 @@ public final class PerfPlusApi {
         return java.util.stream.IntStream.range(0, normalized.length() / 2)
                 .mapToObj(index -> normalized.substring(index * 2, index * 2 + 2))
                 .toList();
-    }
-
-    private CompletableFuture<PerformancePlus> calculate(ScoreRequest score) {
-        if (!isConfigured()) return CompletableFuture.completedFuture(null);
-
-        HttpRequest request = HttpRequest.newBuilder(calculationEndpoint)
-                .timeout(Duration.ofSeconds(15))
-                .header("Accept", "application/json")
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        GSON.toJson(List.of(score)), StandardCharsets.UTF_8))
-                .build();
-
-        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
-                .thenApply(response -> parseResponse(response.statusCode(), response.body()));
     }
 
     private static ScoreRequest toRequest(Score score) {
@@ -130,6 +95,37 @@ public final class PerfPlusApi {
         } catch (JsonParseException e) {
             throw new IllegalStateException("performance+ returned invalid JSON", e);
         }
+    }
+
+    public boolean isConfigured() {
+        return calculationEndpoint != null;
+    }
+
+    public CompletableFuture<PerformancePlus> calculate(Score score) {
+        return calculate(toRequest(score));
+    }
+
+    public CompletableFuture<PerformancePlus> calculateBeatmap(long beatmapId, String mods) {
+        if (beatmapId <= 0) throw new IllegalArgumentException("beatmapId must be positive");
+        List<ModRequest> modRequests = parseModAcronyms(mods).stream()
+                .map(acronym -> new ModRequest(acronym, Map.of()))
+                .toList();
+        return calculate(new ScoreRequest(String.valueOf(beatmapId), modRequests, null, 0, 0, 0));
+    }
+
+    private CompletableFuture<PerformancePlus> calculate(ScoreRequest score) {
+        if (!isConfigured()) return CompletableFuture.completedFuture(null);
+
+        HttpRequest request = HttpRequest.newBuilder(calculationEndpoint)
+                .timeout(Duration.ofSeconds(15))
+                .header("Accept", "application/json")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        GSON.toJson(List.of(score)), StandardCharsets.UTF_8))
+                .build();
+
+        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+                .thenApply(response -> parseResponse(response.statusCode(), response.body()));
     }
 
     private record ScoreRequest(
