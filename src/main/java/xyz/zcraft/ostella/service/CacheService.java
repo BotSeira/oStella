@@ -63,8 +63,8 @@ public class CacheService {
         Files.createDirectories(REPLAY_CACHE);
         Files.createDirectories(BEATMAPSET_CACHE);
         Files.createDirectories(SCORE_JSON_CACHE);
-//        Files.createDirectories(BEATMAP_JSON_CACHE);
-//        Files.createDirectories(BEATMAPSET_JSON_CACHE);
+        Files.createDirectories(BEATMAP_JSON_CACHE);
+        Files.createDirectories(BEATMAPSET_JSON_CACHE);
     }
 
     private static String bytesToHex(byte[] bytes) {
