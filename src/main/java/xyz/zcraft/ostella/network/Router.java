@@ -36,6 +36,7 @@ public class Router implements Closeable {
     static final Logger LOG = LogManager.getLogger(Router.class);
     public final RenderService renderer;
     public final AsyncService executor;
+    public final xyz.zcraft.ostella.service.AutoCacheService autoCache;
     public final TokenManager tokenManager;
     public final ReplayService replayService;
     public final AppConfig conf;
@@ -58,6 +59,7 @@ public class Router implements Closeable {
                 conf.ostella().replayMaxConcurrent());
 
         CacheService.initialize(this.executor);
+        this.autoCache = new xyz.zcraft.ostella.service.AutoCacheService(executor, tokenManager);
 
         this.renderer = new RenderService(conf.ostella().renderWorkers());
 
@@ -170,6 +172,7 @@ public class Router implements Closeable {
 
     @Override
     public void close() {
+        autoCache.close();
         executor.close();
         renderer.close();
         replayService.close();

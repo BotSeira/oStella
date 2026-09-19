@@ -21,5 +21,7 @@ public interface OstellaConsoleAccess {
 
     CacheControlResult controlCache(CacheControlRequest request);
 
+    void setAutoCache(xyz.zcraft.ostella.service.AutoCacheService.Type type, boolean enabled);
+
     void requestStop();
 }

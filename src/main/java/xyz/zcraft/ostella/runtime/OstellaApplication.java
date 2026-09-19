@@ -95,6 +95,11 @@ public final class OstellaApplication implements AutoCloseable, OstellaConsoleAc
     }
 
     @Override
+    public void setAutoCache(xyz.zcraft.ostella.service.AutoCacheService.Type type, boolean enabled) {
+        requireServer().setAutoCache(type, enabled);
+    }
+
+    @Override
     public void requestStop() {
         stopSignal.countDown();
         Thread current = runner;

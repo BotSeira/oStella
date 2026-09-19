@@ -155,6 +155,7 @@ public class WebServer implements Closeable {
     public void start() {
         app.start(conf.webserver().port());
         running.set(true);
+        router.autoCache.start();
         LOG.info("Started web server on port {}", conf.webserver().port());
     }
 
@@ -187,6 +188,10 @@ public class WebServer implements Closeable {
 
     public void deleteReplayJob(String jobId) {
         router.replayService.deleteJob(jobId);
+    }
+
+    public void setAutoCache(xyz.zcraft.ostella.service.AutoCacheService.Type type, boolean enabled) {
+        router.autoCache.setEnabled(type, enabled);
     }
 
     public int clearCache(CacheService.CacheArea area) {

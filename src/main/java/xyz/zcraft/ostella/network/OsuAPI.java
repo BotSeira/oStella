@@ -30,6 +30,22 @@ public class OsuAPI {
     private static final Gson GSON = new Gson();
     private static final int USER_SCORES_PAGE_LIMIT = 100;
 
+    private static <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
+            throws IOException, InterruptedException {
+        if (ApiActivity.isBackground()) {
+            ApiActivity.checkBackground();
+            HttpRequest bounded = HttpRequest.newBuilder(request, (name, value) -> true)
+                    .timeout(Duration.ofSeconds(30)).build();
+            return CLIENT.send(bounded, handler);
+        }
+        ApiActivity.begin();
+        try {
+            return CLIENT.send(request, handler);
+        } finally {
+            ApiActivity.end();
+        }
+    }
+
     public static TokenData getToken(AppConfig conf) {
         try {
             final JsonObject payload = new JsonObject();
@@ -45,7 +61,7 @@ public class OsuAPI {
                     .header("Accept", "application/json")
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             final JsonObject asJsonObject = JsonParser.parseString(body).getAsJsonObject();
             return new TokenData(
@@ -66,7 +82,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
@@ -95,7 +111,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
@@ -128,7 +144,7 @@ public class OsuAPI {
             for (UserScoresPage page : userScoresPages(limit, offset)) {
                 final String url = userScoresUrl(uid, type, fail, page);
                 final var request = newRequestBuilder(tokenData, url).GET().build();
-                final HttpResponse<String> send = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+                final HttpResponse<String> send = send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (send.statusCode() == 404) {
                     throw new ApiException(ErrorCode.NO_USER_FOUND, "User not found for uid " + uid);
@@ -200,7 +216,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
@@ -223,7 +239,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 401 || response.statusCode() == 403) {
                 throw new ApiException(
@@ -266,7 +282,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -292,7 +308,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -322,7 +338,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -353,7 +369,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -386,7 +402,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -412,7 +428,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -444,7 +460,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -474,7 +490,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -504,7 +520,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -533,7 +549,7 @@ public class OsuAPI {
             final var request = newRequestBuilder(tokenData, "/rooms/" + roomId)
                     .GET()
                     .build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer room " + roomId + " was not found");
@@ -575,7 +591,7 @@ public class OsuAPI {
             final var request = newRequestBuilder(tokenData, "/rooms/" + roomId + "/events")
                     .GET()
                     .build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return List.of();
@@ -625,7 +641,7 @@ public class OsuAPI {
             final var request = newRequestBuilder(tokenData, "/matches/" + matchId + "?limit=101")
                     .GET()
                     .build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer match " + matchId + " was not found");
@@ -657,7 +673,7 @@ public class OsuAPI {
             String endpoint = "/rooms/%d/playlist/%d/scores?limit=100&sort=score_desc"
                     .formatted(roomId, playlistItemId);
             final var request = newRequestBuilder(tokenData, endpoint).GET().build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores for playlist item " + playlistItemId);
@@ -716,7 +732,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 404) {
                 return null;
             }
@@ -744,7 +760,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -787,7 +803,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<byte[]> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -826,7 +842,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<byte[]> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -851,7 +867,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<byte[]> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(
@@ -880,7 +896,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            HttpResponse<Void> response = CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
+            HttpResponse<Void> response = send(request, HttpResponse.BodyHandlers.discarding());
             return response.statusCode() == 200;
         } catch (InterruptedException | IOException e) {
             return false;
@@ -894,7 +910,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -923,7 +939,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;

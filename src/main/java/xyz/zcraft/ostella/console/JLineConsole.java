@@ -84,7 +84,9 @@ public final class JLineConsole implements AutoCloseable {
         public void complete(LineReader reader, ParsedLine line, List<Candidate> candidates) {
             List<String> values = line.wordIndex() == 0 ? OstellaConsoleProcessor.rootCommands()
                     : line.wordIndex() == 1 && !line.words().isEmpty()
-                    ? OstellaConsoleProcessor.subcommands(line.words().getFirst()) : List.of();
+                    ? OstellaConsoleProcessor.subcommands(line.words().getFirst())
+                    : line.wordIndex() == 2 && "autocache".equalsIgnoreCase(line.words().getFirst())
+                    ? List.of("on", "off") : List.of();
             values.forEach(value -> candidates.add(new Candidate(value)));
         }
     }
