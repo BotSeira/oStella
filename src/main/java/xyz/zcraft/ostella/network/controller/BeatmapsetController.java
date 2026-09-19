@@ -104,6 +104,7 @@ public class BeatmapsetController {
         if (header != null && header.contains("application/json")) {
             context.future(
                     () -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
+                            .thenApply(CacheService::tryCache)
                             .thenAccept(beatmapset -> putResult(context, beatmapset))
             );
         } else {

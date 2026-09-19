@@ -31,6 +31,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
+import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class UserController {
@@ -70,26 +71,6 @@ public class UserController {
         return limit;
     }
 
-    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        return applyFilters(scores, filters, 1);
-    }
-
-    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
-        List<Score> result = new ArrayList<>();
-        List<Integer> originalPositions = new ArrayList<>();
-        for (int index = 0; index < scores.size(); index++) {
-            Score score = scores.get(index);
-            if (filters.stream().allMatch(filter -> filter.matches(score))) {
-                result.add(score);
-                originalPositions.add(index + firstPosition);
-            }
-        }
-        if (!filters.isEmpty() && result.isEmpty()) {
-            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
-        }
-        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
-    }
-
     private static int requireScoreListStart(Context context, int endPosition) {
         String startParam = context.queryParam("start");
         int start = startParam == null ? 1 : requirePositiveInt(context, "start");
@@ -118,6 +99,31 @@ public class UserController {
 
     private static List<String> filterLabels(List<ScoreFilter> filters) {
         return filters.stream().map(ScoreFilter::displayText).toList();
+    }
+
+    private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        return applyFilters(scores, filters, 1);
+    }
+
+    private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> originalPositions = new ArrayList<>();
+        for (int index = 0; index < scores.size(); index++) {
+            Score score = scores.get(index);
+            if (filters.stream().allMatch(filter -> filter.matches(score, () -> {
+                final Long id = score.getBeatmapset().getId();
+                final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                tryCache(beatmapset);
+                return beatmapset;
+            }))) {
+                result.add(score);
+                originalPositions.add(index + firstPosition);
+            }
+        }
+        if (!filters.isEmpty() && result.isEmpty()) {
+            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
     }
 
     public void getUsers(@NotNull Context context) {

@@ -24,10 +24,7 @@ import xyz.zcraft.ostella.util.RequestUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
@@ -43,6 +40,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class ScoreController {
@@ -76,12 +74,17 @@ public class ScoreController {
         }
     }
 
-    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+    private List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
         if (filters.isEmpty()) {
             return scores;
         }
         return scores.stream()
-                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
+                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score, () -> {
+                    final Long id = score.getBeatmapset().getId();
+                    final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                    tryCache(beatmapset);
+                    return beatmapset;
+                })))
                 .toList();
     }
 

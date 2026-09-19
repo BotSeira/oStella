@@ -1,9 +1,7 @@
 package xyz.zcraft.ostella.data;
 
 import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
@@ -14,6 +12,7 @@ import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,7 +22,7 @@ import java.util.regex.Pattern;
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
-                    + "|any|title|artist|mapper|genre|language|video|storyboard|fullcombo|ar|od|cs|hp)"
+                    + "|any|title|artist|mapper|genre|language|tag|source|video|storyboard|fullcombo|ar|od|cs|hp)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
     private static final Pattern DURATION_PATTERN = Pattern.compile("(?i)^(?:(\\d+)m)?(?:(\\d+(?:\\.\\d+)?)s)?$");
@@ -40,12 +39,7 @@ public final class ScoreFilter {
     private final String displayText;
 
     private ScoreFilter(
-            Field field,
-            Operator operator,
-            double numericValue,
-            Set<String> textValues,
-            Pattern regexValue,
-            String displayText
+            Field field, Operator operator, double numericValue, Set<String> textValues, Pattern regexValue, String displayText
     ) {
         this.field = field;
         this.operator = operator;
@@ -99,11 +93,7 @@ public final class ScoreFilter {
         double numericValue = field == Field.LENGTH ? parseDuration(value) : parseNumber(value, token);
         validateRange(field, numericValue);
         return new ScoreFilter(
-                field,
-                operator,
-                numericValue,
-                Set.of(),
-                null,
+                field, operator, numericValue, Set.of(), null,
                 field.label + " " + operator.display + " " + formatValue(field, numericValue)
         );
     }
@@ -116,11 +106,7 @@ public final class ScoreFilter {
         Set<String> mods = parseMods(value);
         String displayValue = mods.isEmpty() ? "NM" : String.join("", mods.stream().sorted().toList());
         return new ScoreFilter(
-                field,
-                operator,
-                Double.NaN,
-                mods,
-                null,
+                field, operator, Double.NaN, mods, null,
                 field.label + " " + operator.display + " " + displayValue
         );
     }
@@ -187,11 +173,7 @@ public final class ScoreFilter {
             }
         }
         return new ScoreFilter(
-                field,
-                operator,
-                Double.NaN,
-                Set.of(value.toLowerCase(Locale.ROOT)),
-                regex,
+                field, operator, Double.NaN, Set.of(value.toLowerCase(Locale.ROOT)), regex,
                 field.label + " " + operator.display + " " + value
         );
     }
@@ -205,11 +187,7 @@ public final class ScoreFilter {
             throw new IllegalArgumentException(field.label + " must be true or false");
         }
         return new ScoreFilter(
-                field,
-                operator,
-                Double.NaN,
-                Set.of(normalized),
-                null,
+                field, operator, Double.NaN, Set.of(normalized), null,
                 field.label + " " + operator.display + " " + normalized
         );
     }
@@ -325,7 +303,8 @@ public final class ScoreFilter {
             case BPM -> formatNumber(value) + " BPM";
             case MISS -> formatNumber(value) + " miss";
             case SCORE, AR, CS, HP, OD -> formatNumber(value);
-            case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
+            case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, TAG, SOURCE,
+                 VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
     }
@@ -342,13 +321,22 @@ public final class ScoreFilter {
         return "%d:%02d".formatted(seconds / 60, seconds % 60);
     }
 
-    private static List<String> allMetadataText(Score score) {
+    private static List<String> allMetadataText(Score score, BeatmapExtended beatmap, Beatmapset beatmapset) {
         List<String> values = new ArrayList<>();
+
+        if (beatmap == null) {
+            beatmap = score.getBeatmap();
+        }
+
         if (score.getBeatmap() != null) {
             values.add(score.getBeatmap().getVersion());
         }
-        if (score.getBeatmapset() != null) {
-            var beatmapset = score.getBeatmapset();
+
+        if (beatmapset == null) {
+            beatmapset = score.getBeatmapset();
+        }
+
+        if (beatmapset != null) {
             values.add(beatmapset.getTitle());
             values.add(beatmapset.getTitleUnicode());
             values.add(beatmapset.getArtist());
@@ -369,12 +357,13 @@ public final class ScoreFilter {
         return values;
     }
 
-    public boolean matches(Score score) {
+    public boolean matches(Score score, Supplier<Beatmapset> beatmapsetSupplier) {
         if (score == null) {
             return false;
         }
 
-        final BeatmapExtended beatmap = score.getBeatmap();
+        BeatmapExtended beatmap = score.getBeatmap();
+        Beatmapset beatmapset = score.getBeatmapset();
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(score);
         final DiffSpec diffSpec;
 
@@ -390,6 +379,10 @@ public final class ScoreFilter {
             }
         } else {
             diffSpec = null;
+        }
+
+        if (field == Field.TAG || field == Field.ANY) {
+            beatmapset = CacheService.getBeatmapsetJsonCache(beatmapset.getId()).orElseGet(beatmapsetSupplier);
         }
 
         return switch (field) {
@@ -412,20 +405,23 @@ public final class ScoreFilter {
             case SCORE -> score.getTotalScore() != null && compare(score.getTotalScore());
             case MODS -> compareMods(score.getMods());
             case RANK -> compareRank(score.getRank());
-            case ANY -> compareText(allMetadataText(score));
-            case TITLE -> score.getBeatmapset() != null
-                    && compareText(score.getBeatmapset().getTitle(), score.getBeatmapset().getTitleUnicode());
-            case ARTIST -> score.getBeatmapset() != null
-                    && compareText(score.getBeatmapset().getArtist(), score.getBeatmapset().getArtistUnicode());
-            case MAPPER -> score.getBeatmapset() != null && compareText(score.getBeatmapset().getCreator());
-            case GENRE -> score.getBeatmapset() != null && score.getBeatmapset().getGenre() != null
-                    && compareText(score.getBeatmapset().getGenre().getName());
-            case LANGUAGE -> score.getBeatmapset() != null && score.getBeatmapset().getLanguage() != null
-                    && compareText(score.getBeatmapset().getLanguage().getName());
-            case VIDEO -> score.getBeatmapset() != null && compareBoolean(score.getBeatmapset().getVideo());
-            case STORYBOARD -> score.getBeatmapset() != null && compareBoolean(score.getBeatmapset().getStoryboard());
+            case ANY -> compareText(allMetadataText(score, beatmap, beatmapset));
+            case TITLE -> beatmapset != null
+                    && compareText(beatmapset.getTitle(), beatmapset.getTitleUnicode());
+            case ARTIST -> beatmapset != null
+                    && compareText(beatmapset.getArtist(), beatmapset.getArtistUnicode());
+            case MAPPER -> beatmapset != null && compareText(beatmapset.getCreator());
+            case GENRE -> beatmapset != null && beatmapset.getGenre() != null
+                    && compareText(beatmapset.getGenre().getName());
+            case LANGUAGE -> beatmapset != null && beatmapset.getLanguage() != null
+                    && compareText(beatmapset.getLanguage().getName());
+            case VIDEO -> beatmapset != null && compareBoolean(beatmapset.getVideo());
+            case STORYBOARD -> beatmapset != null && compareBoolean(beatmapset.getStoryboard());
             case REPLAY -> compareBoolean(score.getHasReplay() || CacheService.hasReplayCache(score.getId()));
             case FULL_COMBO -> compareBoolean(score.getIsPerfectCombo());
+            case TAG -> beatmapset != null && beatmapset.getTags() != null
+                    && compareText(beatmapset.getTags());
+            case SOURCE -> beatmapset != null && compareText(beatmapset.getSource());
         };
     }
 
@@ -489,7 +485,8 @@ public final class ScoreFilter {
             String normalized = actual.toLowerCase(Locale.ROOT);
             if (regexValue != null) {
                 matches |= regexValue.matcher(actual).find();
-            } else if (field == Field.ANY || operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS) {
+            } else if (field == Field.ANY || field == Field.TAG
+                    || operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS) {
                 matches |= normalized.contains(expected);
             } else {
                 matches |= normalized.equals(expected);
@@ -534,6 +531,8 @@ public final class ScoreFilter {
         MAPPER("Mapper"),
         GENRE("Genre"),
         LANGUAGE("Language"),
+        TAG("Tag"),
+        SOURCE("Source"),
         VIDEO("Video"),
         STORYBOARD("Storyboard"),
         REPLAY("Replay"),
@@ -567,6 +566,8 @@ public final class ScoreFilter {
                 case "mapper" -> MAPPER;
                 case "genre" -> GENRE;
                 case "language" -> LANGUAGE;
+                case "source" -> SOURCE;
+                case "tag" -> TAG;
                 case "video" -> VIDEO;
                 case "storyboard" -> STORYBOARD;
                 case "replay" -> REPLAY;
@@ -576,7 +577,9 @@ public final class ScoreFilter {
         }
 
         boolean isMetadataText() {
-            return this == ANY || this == TITLE || this == ARTIST || this == MAPPER || this == GENRE || this == LANGUAGE;
+            return this == ANY || this == TITLE || this == ARTIST
+                    || this == MAPPER || this == GENRE || this == LANGUAGE
+                    || this == TAG || this == SOURCE;
         }
 
         boolean isBoolean() {

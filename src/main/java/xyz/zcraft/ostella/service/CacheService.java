@@ -11,6 +11,8 @@ import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Score;
 
 import java.io.IOException;
@@ -43,8 +45,8 @@ public class CacheService {
 
     private static final Path JSON_CACHE = CACHE_PATH.resolve("json");
     private static final Path SCORE_JSON_CACHE = JSON_CACHE.resolve("score");
-//    private static final Path BEATMAP_JSON_CACHE = JSON_CACHE.resolve("beatmap");
-//    private static final Path BEATMAPSET_JSON_CACHE = JSON_CACHE.resolve("beatmapset");
+    private static final Path BEATMAP_JSON_CACHE = JSON_CACHE.resolve("beatmap");
+    private static final Path BEATMAPSET_JSON_CACHE = JSON_CACHE.resolve("beatmapset");
 
     private static final Path BEATMAPSET_CACHE = CACHE_PATH.resolve("beatmapset");
 
@@ -372,6 +374,10 @@ public class CacheService {
         }
     }
 
+    public static void cacheScoreJson(Score score) throws IOException {
+        Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
+    }
+
     public static Optional<Score> getScoreJsonCache(long id) throws IOException {
         if (!Files.exists(SCORE_JSON_CACHE.resolve(id + ".json"))) {
             return Optional.empty();
@@ -381,8 +387,55 @@ public class CacheService {
         return Optional.of(GSON.fromJson(jsonElement, Score.class));
     }
 
-    public static void cacheScoreJson(Score score) throws IOException {
-        Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
+    public static void cacheBeatmapsetJson(Beatmapset beatmapset) throws IOException {
+        Files.writeString(BEATMAPSET_JSON_CACHE.resolve(beatmapset.getId() + ".json"), GSON.toJson(beatmapset));
+    }
+
+    public static boolean tryCache(Object obj) {
+        try {
+            if (obj instanceof Beatmapset beatmapset) {
+                cacheBeatmapsetJson(beatmapset);
+            } else if (obj instanceof BeatmapExtended beatmap) {
+                cacheBeatmapJson(beatmap);
+            } else if (obj instanceof Score score) {
+                cacheScoreJson(score);
+            }
+            return true;
+        } catch (IOException e) {
+            LOG.error("Failed to cache object", e);
+            return false;
+        }
+    }
+
+    public static Optional<Beatmapset> getBeatmapsetJsonCache(long id) {
+        if (!Files.exists(BEATMAPSET_JSON_CACHE.resolve(id + ".json"))) {
+            return Optional.empty();
+        }
+
+        try {
+            final var json = JsonParser.parseString(Files.readString(BEATMAPSET_JSON_CACHE.resolve(id + ".json")));
+            return Optional.of(GSON.fromJson(json, Beatmapset.class));
+        } catch (IOException e) {
+            LOG.error("Failed to read beatmapset JSON cache", e);
+            return Optional.empty();
+        }
+    }
+
+    public static void cacheBeatmapJson(BeatmapExtended beatmap) throws IOException {
+        Files.writeString(BEATMAP_JSON_CACHE.resolve(beatmap.getId() + ".json"), GSON.toJson(beatmap));
+    }
+
+    public static Optional<BeatmapExtended> getBeatmapJsonCache(long id) {
+        if (!Files.exists(BEATMAP_JSON_CACHE.resolve(id + ".json"))) {
+            return Optional.empty();
+        }
+
+        try {
+            final var json = JsonParser.parseString(Files.readString(BEATMAP_JSON_CACHE.resolve(id + ".json")));
+            return Optional.of(GSON.fromJson(json, BeatmapExtended.class));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static void transferReplay(Long id, byte[] bytes) throws IOException {
