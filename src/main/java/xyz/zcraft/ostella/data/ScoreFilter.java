@@ -304,7 +304,7 @@ public final class ScoreFilter {
             case MISS -> formatNumber(value) + " miss";
             case SCORE, AR, CS, HP, OD -> formatNumber(value);
             case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, TAG, SOURCE,
-                 VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
+                 NSFW, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
     }
@@ -415,6 +415,7 @@ public final class ScoreFilter {
                     && compareText(beatmapset.getGenre().getName());
             case LANGUAGE -> beatmapset != null && beatmapset.getLanguage() != null
                     && compareText(beatmapset.getLanguage().getName());
+            case NSFW -> beatmapset != null && compareBoolean(beatmapset.getNsfw());
             case VIDEO -> beatmapset != null && compareBoolean(beatmapset.getVideo());
             case STORYBOARD -> beatmapset != null && compareBoolean(beatmapset.getStoryboard());
             case REPLAY -> compareBoolean(score.getHasReplay() || CacheService.hasReplayCache(score.getId()));
@@ -533,6 +534,7 @@ public final class ScoreFilter {
         LANGUAGE("Language"),
         TAG("Tag"),
         SOURCE("Source"),
+        NSFW("NSFW"),
         VIDEO("Video"),
         STORYBOARD("Storyboard"),
         REPLAY("Replay"),
@@ -568,6 +570,7 @@ public final class ScoreFilter {
                 case "language" -> LANGUAGE;
                 case "source" -> SOURCE;
                 case "tag" -> TAG;
+                case "nsfw" -> NSFW;
                 case "video" -> VIDEO;
                 case "storyboard" -> STORYBOARD;
                 case "replay" -> REPLAY;
@@ -583,7 +586,7 @@ public final class ScoreFilter {
         }
 
         boolean isBoolean() {
-            return this == VIDEO || this == STORYBOARD || this == FULL_COMBO || this == REPLAY;
+            return this == NSFW || this == VIDEO || this == STORYBOARD || this == FULL_COMBO || this == REPLAY;
         }
     }
 
