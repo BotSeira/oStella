@@ -99,7 +99,7 @@ public class BeatmapController {
     }
 
     private void lookupBeatmapFromSomeRoom(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);

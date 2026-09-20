@@ -42,7 +42,7 @@ public class WebServer implements Closeable {
             cfg.routes.beforeMatched(ctx -> {
                 final String token = conf.ostella().token();
                 if (token != null && !token.isBlank()) {
-                    final String header = ctx.header("Authorization");
+                    final String header = ctx.header(Headers.SERVICE_AUTHORIZATION);
                     if (header == null || !header.equals("Bearer " + token)) {
                         ctx.status(401).result("Unauthorized");
                         throw new UnauthorizedResponse();

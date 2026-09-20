@@ -12,6 +12,7 @@ import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Headers;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -176,11 +177,11 @@ public class UserController {
     }
 
     public void getSelf(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             context.status(401)
-                    .result(Response.error("Missing Authorization header", ErrorCode.UNAUTHORIZED).toString());
+                    .result(Response.error("Missing X-Osu-Authorization header", ErrorCode.UNAUTHORIZED).toString());
             return;
         }
 
@@ -386,11 +387,11 @@ public class UserController {
     }
 
     public void getFriends(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             context.status(401)
-                    .result(Response.error("Missing Authorization header", ErrorCode.UNAUTHORIZED).toString());
+                    .result(Response.error("Missing X-Osu-Authorization header", ErrorCode.UNAUTHORIZED).toString());
             return;
         }
 

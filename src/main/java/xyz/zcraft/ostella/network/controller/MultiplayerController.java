@@ -13,6 +13,7 @@ import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Headers;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -394,7 +395,7 @@ public class MultiplayerController {
     }
 
     public void getCurrentRoom(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
@@ -413,7 +414,7 @@ public class MultiplayerController {
     }
 
     public void getCurrentRoomItem(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);

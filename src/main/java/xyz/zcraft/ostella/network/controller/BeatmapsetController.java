@@ -7,6 +7,7 @@ import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.network.ImageResponse;
+import xyz.zcraft.ostella.network.Headers;
 import xyz.zcraft.ostella.data.SearchResultItem;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
@@ -54,7 +55,7 @@ public class BeatmapsetController {
     }
 
     private void lookupBeatmapsetFromCurrentRoom(@NonNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
