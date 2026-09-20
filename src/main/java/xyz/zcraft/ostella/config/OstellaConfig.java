@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.config;
 
 public record OstellaConfig(
+        String token,
         int requestPerSecond,
         int replayRequestIntervalMillis,
         int replayMaxConcurrent,

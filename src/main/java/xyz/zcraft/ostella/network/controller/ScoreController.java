@@ -9,6 +9,7 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreType;
@@ -166,38 +167,40 @@ public class ScoreController {
         }
     }
 
-    public void renderScoreById(@NotNull Context context) {
+    public void getScoreById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
 
         context.future(() -> router.getScore(scoreId)
-                .thenApplyAsync(score -> {
+                .thenApply(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    final BeatmapExtended beatmap = score.getBeatmap();
-
-                    context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
+                    context.header("X-Beatmap-Id", String.valueOf(score.getBeatmap().getId()))
                             .header("X-Score-Id", ScoreId.format(score));
+                    return score;
+                })
+                .thenCompose(score -> ImageResponse.respond(context, score, this::renderScore, renderer.getRenderExecutor())));
+    }
 
-                    try {
-                        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-                        final DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+    private byte[] renderScore(Score score) {
+        final BeatmapExtended beatmap = score.getBeatmap();
+        try {
+            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
+            final DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
 
-                        Double calPp = null;
-                        try {
-                            calPp = OsuParser.estimatePp(score, osuBeatmap);
-                        } catch (AnalyzeException e) {
-                            LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
-                        }
+            Double calPp = null;
+            try {
+                calPp = OsuParser.estimatePp(score, osuBeatmap);
+            } catch (AnalyzeException e) {
+                LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
+            }
 
-                        final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
+            final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
 
-                        return renderer.renderScore(score, diffSpec, calPp, replayPresent);
-                    } catch (ParseException e) {
-                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-                    } catch (AnalyzeException e) {
-                        throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
-                    }
-                }, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+            return renderer.renderScore(score, diffSpec, calPp, replayPresent);
+        } catch (ParseException e) {
+            throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+        } catch (AnalyzeException e) {
+            throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
+        }
     }
 
     private void lookupScoreOfIdAsync(@NotNull Context context) {

@@ -6,6 +6,9 @@ multiplayer info, and rendered osu! images.
 It is the backend for [Seira](https://github.com/BotSeira/SeiraCore) bot,
 and also provides a standalone API for other clients to consume.
 
+Image endpoints also return JSON when requested with `Accept: application/json`.
+See [response formats and supported endpoints](docs/image-responses.md).
+
 ## What You Get
 
 - PNG score panels for best and recent scores, beatmap, beatmapset, and so on!

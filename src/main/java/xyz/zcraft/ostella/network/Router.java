@@ -5,6 +5,7 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
@@ -213,7 +214,7 @@ public class Router implements Closeable {
     }
 
     public void renderCustomTemplate(@NotNull Context context) {
-        final String s = context.pathParam("templateName");
+        final String templateName = context.pathParam("templateName");
 
         final JsonObject data = JsonParser.parseString(context.body()).getAsJsonObject();
 
@@ -288,8 +289,8 @@ public class Router implements Closeable {
                     }
                     return variables;
                 })
-                .thenApplyAsync(variables -> renderer.renderCustomTemplate(s, variables), renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes))
+                .thenCompose(variables -> ImageResponse.respond(context, variables,
+                        values -> renderer.renderCustomTemplate(templateName, values), renderer.getRenderExecutor()))
         );
     }
 }

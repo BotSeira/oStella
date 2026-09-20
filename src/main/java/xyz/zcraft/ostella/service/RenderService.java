@@ -14,7 +14,7 @@ import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.controller.AnalyzeController;
+import xyz.zcraft.ostella.data.ScoreAnalysisData;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.ostella.util.format.*;
@@ -311,7 +311,7 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
-    public byte[] renderScoreAnalysis(AnalyzeController.ScoreAnalyzeData analyzeData) {
+    public byte[] renderScoreAnalysis(ScoreAnalysisData analyzeData) {
         Context ctx = createContext();
         ctx.setVariable("score", analyzeData.score());
         ctx.setVariable("diff", analyzeData.diffSpec());

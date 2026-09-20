@@ -16,7 +16,7 @@ public class RequestUtil {
     private final static Gson GSON = new Gson();
 
     public static void putResult(Context context, Object result) {
-        context.status(200);
+        context.status(200).contentType("application/json");
         JsonElement data;
 
         if (result instanceof JsonElement) {

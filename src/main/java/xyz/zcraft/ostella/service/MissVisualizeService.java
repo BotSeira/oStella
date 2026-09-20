@@ -46,6 +46,10 @@ public class MissVisualizeService {
     }
 
     public static byte[] visualizeMiss(ReplayAnalyze replayAnalyze, int missIndex) {
+        return renderMiss(prepareMiss(replayAnalyze, missIndex));
+    }
+
+    public static MissVisualizationData prepareMiss(ReplayAnalyze replayAnalyze, int missIndex) {
         final List<HitEvent> missEvents = replayAnalyze.events().stream()
                 .filter(hitEvent -> !hitEvent.wasHit())
                 .filter(hitEvent -> hitEvent.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
@@ -69,7 +73,7 @@ public class MissVisualizeService {
         final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(
                 replayAnalyze.beatmap(), replayAnalyze, mods);
 
-        return ImageHelper.drawMiss(
+        return new MissVisualizationData(
                 missIndex,
                 targetMiss,
                 extractNearbyKeyFrames(keyFrames, targetMiss.hitObject()),
@@ -78,6 +82,30 @@ public class MissVisualizeService {
                 ReplayAnalyzer.hasHardRock(replayAnalyze.replay()),
                 realtimePpLoss, finalPpLoss, totalMissPpLoss
         );
+    }
+
+    public static byte[] renderMiss(MissVisualizationData data) {
+        return ImageHelper.drawMiss(data.index(), data.target(), data.keyFrames(), data.beatmap(),
+                data.difficulty(), data.hardRock(), data.realtimePpLoss(), data.finalPpLoss(), data.totalMissPpLoss());
+    }
+
+    public record MissVisualizationData(int index, HitEvent target, List<OsuReplay.TimedKeyFrame> keyFrames,
+                                        OsuBeatmap beatmap, DifficultyAttribute difficulty, boolean hardRock,
+                                        AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
+                                        AnalyzeController.PPLoss totalMissPpLoss) {
+        public java.util.Map<String, Object> responseData() {
+            return java.util.Map.of(
+                    "index", index,
+                    "beatmapId", beatmap.getBeatmapId(),
+                    "objectIndex", target.objectIndex(),
+                    "time", target.hitObject().getTime(),
+                    "type", target.eventType(),
+                    "keyFrames", keyFrames,
+                    "difficulty", difficulty,
+                    "realtimePpLoss", realtimePpLoss,
+                    "finalPpLoss", finalPpLoss,
+                    "totalMissPpLoss", totalMissPpLoss);
+        }
     }
 
     private static List<OsuReplay.TimedKeyFrame> extractNearbyKeyFrames(List<OsuReplay.TimedKeyFrame> keyFrames, HitObject hitObject) {

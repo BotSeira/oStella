@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.network.controller;
 
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.osu.model.multiplayer.Match;
 
 import com.google.gson.Gson;
@@ -458,7 +459,7 @@ public class MultiplayerController {
         );
     }
 
-    public void renderRoomResult(@NotNull Context context) {
+    public void getRoomResult(@NotNull Context context) {
         long roomId = positivePathId(context, "roomId");
         long playlistItemId = positivePathId(context, "playlistItemId");
         RoomVersion version = roomVersion(context);
@@ -467,8 +468,7 @@ public class MultiplayerController {
                     case LAZER -> getLazerResultData(roomId, playlistItemId);
                     case STABLE -> getStableResultData(roomId, playlistItemId);
                 })
-                .thenApplyAsync(renderer::renderMultiplayerResult, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes))
+                .thenCompose(data -> ImageResponse.respond(context, data, renderer::renderMultiplayerResult, renderer.getRenderExecutor()))
         );
     }
 
