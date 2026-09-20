@@ -126,30 +126,17 @@ public class WebServer implements Closeable {
             cfg.routes
                     .exception(ApiException.class, (e, ctx) -> {
                         failures.incrementAndGet();
-                        switch (e.getErrorCode()) {
-                            case ErrorCode.NO_BEATMAP_FOUND,
-                                 ErrorCode.NO_BEATMAPSET_FOUND,
-                                 ErrorCode.NO_SCORE_FOUND,
-                                 ErrorCode.NO_ROOM_FOUND,
-                                 ErrorCode.NO_USER_FOUND -> ctx.status(404);
 
-                            case ErrorCode.UNAUTHORIZED -> ctx.status(401);
-
-                            case ErrorCode.ILLEGAL_ARGUMENT,
-                                 ErrorCode.REPLAY_UNAVAILABLE -> ctx.status(400);
-
-                            case ErrorCode.BEATMAP_FETCH_FAILED,
-                                 ErrorCode.BEATMAPSET_FETCH_FAILED,
-                                 ErrorCode.SCORE_FETCH_FAILED,
-                                 ErrorCode.USER_FETCH_FAILED,
-                                 ErrorCode.RENDER_QUEUE_FULL -> ctx.status(429);
-
-                            case ErrorCode.RENDERER_UNAVAILABLE,
-                                 ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE -> ctx.status(502);
-
-                            default -> ctx.status(500);
+                        if ("body".equalsIgnoreCase(ctx.header("X-Error-Mode"))) {
+                            ctx.status(200)
+                                    .contentType("application/json")
+                                    .result(new Response(false, e.getMessage(), e.getErrorCode().toJson()).toString());
+                        } else {
+                            ctx.status(e.getErrorCode().getHttpCode())
+                                    .contentType("application/json")
+                                    .result(new Response(false, e.getMessage(), e.getErrorCode().toJson()).toString());
                         }
-                        ctx.contentType("application/json").result(new Response(false, e.getMessage(), e.getErrorCode().toJson()).toString());
+
                         if (e.getWrappedException() != null) {
                             LOG.error("API error occurred while processing request: {} - {}", ctx.queryString(), e.getMessage(), e.getWrappedException());
                         } else {
