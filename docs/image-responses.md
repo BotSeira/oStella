@@ -60,13 +60,3 @@ endpoint returns calculated modded data.
 
 Existing JSON-only endpoints, beatmapset archive downloads, and replay video
 endpoints keep their existing response formats.
-
-## Implementation
-
-`ImageResponse` centralizes negotiation and asynchronous rendering. Controllers
-prepare data first and pass a render function which runs only for image requests.
-The HTTP handler names use `get…` for resources offering either representation.
-`ScoreAnalysisData` and `PerformanceGraphData` live in the data package;
-`MissVisualizeService` separates analysis preparation from drawing so both formats
-share validation and calculations. `BeatmapData` creates independent enriched
-models without mutating cached API objects.
