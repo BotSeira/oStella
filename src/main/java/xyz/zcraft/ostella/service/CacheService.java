@@ -580,7 +580,8 @@ public class CacheService {
             AreaStats replays = areaStats(REPLAY_CACHE);
             AreaStats scoreJson = areaStats(SCORE_JSON_CACHE);
             AreaStats beatmapsets = areaStats(BEATMAPSET_CACHE);
-            return new CacheSummary(beatmaps, images, replays, scoreJson, beatmapsets);
+            return new CacheSummary(beatmaps, images, replays, scoreJson, beatmapsets,
+                    areaStats(BEATMAP_JSON_CACHE), areaStats(BEATMAPSET_JSON_CACHE));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to inspect oStella cache", e);
         }
@@ -594,6 +595,8 @@ public class CacheService {
             if (area == CacheArea.REPLAYS || area == CacheArea.ALL) removed += clearChildren(REPLAY_CACHE);
             if (area == CacheArea.SCORE_JSON || area == CacheArea.ALL) removed += clearChildren(SCORE_JSON_CACHE);
             if (area == CacheArea.BEATMAPSETS || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_CACHE);
+            if (area == CacheArea.BEATMAP_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAP_JSON_CACHE);
+            if (area == CacheArea.BEATMAPSET_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_JSON_CACHE);
             return removed;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to clear oStella cache", e);
@@ -655,6 +658,8 @@ public class CacheService {
             }
             switch (type) {
                 case "SCORE" -> cacheScoreJson(OsuAPI.getScore(tokenData, request.id()));
+                case "BEATMAP-JSON" -> cacheBeatmapJson(OsuAPI.getBeatmap(tokenData, request.id()));
+                case "BEATMAPSET-JSON" -> cacheBeatmapsetJson(OsuAPI.getBeatmapset(tokenData, request.id()));
                 case "BEATMAP" -> getBeatmapPath(request.id(), true);
                 case "BEATMAPSET" -> getBeatmapsetArchivePath(request.id());
                 case "REPLAY" -> getReplayBlocking(tokenData, request.id());
@@ -686,6 +691,8 @@ public class CacheService {
     private static List<Path> cachePaths(String type, long id) throws IOException {
         return switch (type) {
             case "SCORE" -> List.of(SCORE_JSON_CACHE.resolve(id + ".json"));
+            case "BEATMAP-JSON" -> List.of(BEATMAP_JSON_CACHE.resolve(id + ".json"));
+            case "BEATMAPSET-JSON" -> List.of(BEATMAPSET_JSON_CACHE.resolve(id + ".json"));
             case "BEATMAP" -> List.of(beatmapCachePath(id));
             case "REPLAY" -> List.of(REPLAY_CACHE.resolve(id + ".osr"));
             case "BEATMAPSET" -> {
@@ -737,8 +744,8 @@ public class CacheService {
 
     private static String normalizeType(String value) {
         String normalized = value == null ? "" : value.toUpperCase(Locale.ROOT);
-        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY").contains(normalized))
-            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, or replay");
+        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY", "BEATMAP-JSON", "BEATMAPSET-JSON").contains(normalized))
+            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, replay, beatmap-json, or beatmapset-json");
         return normalized;
     }
 
@@ -779,6 +786,8 @@ public class CacheService {
         REPLAYS,
         SCORE_JSON,
         BEATMAPSETS,
+        BEATMAP_JSON,
+        BEATMAPSET_JSON,
         ALL
     }
 
@@ -790,14 +799,18 @@ public class CacheService {
             AreaStats images,
             AreaStats replays,
             AreaStats scoreJson,
-            AreaStats beatmapsets
+            AreaStats beatmapsets,
+            AreaStats beatmapJson,
+            AreaStats beatmapsetJson
     ) {
         public long totalFiles() {
-            return beatmaps.files + images.files + replays.files + scoreJson.files + beatmapsets.files;
+            return beatmaps.files + images.files + replays.files + scoreJson.files + beatmapsets.files
+                    + beatmapJson.files + beatmapsetJson.files;
         }
 
         public long totalBytes() {
-            return beatmaps.bytes + images.bytes + replays.bytes + scoreJson.bytes + beatmapsets.bytes;
+            return beatmaps.bytes + images.bytes + replays.bytes + scoreJson.bytes + beatmapsets.bytes
+                    + beatmapJson.bytes + beatmapsetJson.bytes;
         }
     }
 }

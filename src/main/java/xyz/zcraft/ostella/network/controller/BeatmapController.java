@@ -15,9 +15,8 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Beatmapset;
-import xyz.zcraft.osu.model.MultiplayerRoom;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
@@ -34,7 +33,6 @@ import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.function.Function;
 
 import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
@@ -111,7 +109,7 @@ public class BeatmapController {
                     if (room == null)
                         throw new ApiException(ErrorCode.NO_ROOM_FOUND, "No multiplayer room found");
 
-                    final MultiplayerRoom.CurrentPlaylistItem currentPlaylistItem = room.getCurrentPlaylistItem();
+                    final Room.PlaylistItem currentPlaylistItem = room.getCurrentPlaylistItem();
                     if (currentPlaylistItem == null || currentPlaylistItem.getBeatmap() == null)
                         throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found for current multiplayer room");
 

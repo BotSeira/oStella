@@ -1,8 +1,8 @@
 package xyz.zcraft.ostella.network.controller;
 
+import xyz.zcraft.osu.model.multiplayer.Match;
+
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
@@ -19,6 +19,8 @@ import xyz.zcraft.ostella.service.MultiplayerResultFactory;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.multiplayer.Room;
+import xyz.zcraft.osu.model.multiplayer.MatchScore;
 
 import java.util.*;
 
@@ -37,34 +39,9 @@ public class MultiplayerController {
         this.tokenManager = router.tokenManager;
     }
 
-    private static String scoreTeam(JsonObject score) {
-        if (score.has("team") && !score.get("team").isJsonNull()) {
-            return score.get("team").getAsString();
-        }
-        if (score.has("match") && score.get("match").isJsonObject()) {
-            JsonObject match = score.getAsJsonObject("match");
-            if (match.has("team") && !match.get("team").isJsonNull()) {
-                return match.get("team").getAsString();
-            }
-        }
-        return null;
-    }
-
-    private static void normalizeStableMods(JsonObject score) {
-        if (!score.has("mods") || !score.get("mods").isJsonArray()) {
-            return;
-        }
-        JsonArray mods = score.getAsJsonArray("mods");
-        if (mods.isEmpty() || mods.get(0).isJsonObject()) {
-            return;
-        }
-        JsonArray normalized = new JsonArray();
-        for (JsonElement mod : mods) {
-            JsonObject value = new JsonObject();
-            value.addProperty("acronym", mod.getAsString());
-            normalized.add(value);
-        }
-        score.add("mods", normalized);
+    private static String scoreTeam(MatchScore score) {
+        if (score.getTeam() != null) return score.getTeam();
+        return score.getMatch() == null ? null : score.getMatch().team();
     }
 
     private static Comparator<Score> stableScoreComparator(String scoringType) {
@@ -81,19 +58,19 @@ public class MultiplayerController {
         };
     }
 
-    private static List<MultiplayerRoomDetails.PlaylistItem> completedItemsThrough(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem currentItem
+    private static List<Room.PlaylistItem> completedItemsThrough(
+            Room room,
+            Room.PlaylistItem currentItem
     ) {
-        Map<Long, MultiplayerRoomDetails.PlaylistItem> items = new LinkedHashMap<>();
+        Map<Long, Room.PlaylistItem> items = new LinkedHashMap<>();
         if (room.getPlaylist() != null) {
             room.getPlaylist().stream().filter(Objects::nonNull)
                     .forEach(item -> items.putIfAbsent(item.getId(), item));
         }
         items.putIfAbsent(currentItem.getId(), currentItem);
 
-        List<MultiplayerRoomDetails.PlaylistItem> completed = new ArrayList<>();
-        for (MultiplayerRoomDetails.PlaylistItem item : items.values()) {
+        List<Room.PlaylistItem> completed = new ArrayList<>();
+        for (Room.PlaylistItem item : items.values()) {
             if (item.getId() == currentItem.getId()
                     || item.getPlayedAt() != null && !item.getPlayedAt().isBlank()) {
                 completed.add(item);
@@ -105,8 +82,8 @@ public class MultiplayerController {
 
     private static String lazerTeamWinner(
             List<MultiplayerRoomScore> scores,
-            MultiplayerRoomDetails.PlaylistItem item,
-            MultiplayerRoomDetails.PlaylistItem eventItem
+            Room.PlaylistItem item,
+            Room.PlaylistItem eventItem
     ) {
         long red = 0;
         long blue = 0;
@@ -151,8 +128,8 @@ public class MultiplayerController {
     }
 
     private static MultiplayerResultData.SeriesScore stableSeriesScore(
-            MultiplayerMatchDetails match,
-            MultiplayerMatchDetails.MatchGame currentGame
+            Match match,
+            Match.MatchGame currentGame
     ) {
         boolean teamMode = isTeamMode(currentGame.getTeamType());
         Set<Long> duelUsers = teamMode ? Set.of() : stableUserIds(currentGame.getScores());
@@ -163,7 +140,7 @@ public class MultiplayerController {
         Map<Long, Integer> playerWins = new HashMap<>();
         int redWins = 0;
         int blueWins = 0;
-        for (MultiplayerMatchDetails.MatchGame game : completedGamesThrough(match, currentGame)) {
+        for (Match.MatchGame game : completedGamesThrough(match, currentGame)) {
             if (teamMode) {
                 if (!isTeamMode(game.getTeamType())) continue;
                 String winner = stableTeamWinner(game);
@@ -178,22 +155,22 @@ public class MultiplayerController {
         return new MultiplayerResultData.SeriesScore(playerWins, redWins, blueWins);
     }
 
-    private static List<MultiplayerMatchDetails.MatchGame> completedGamesThrough(
-            MultiplayerMatchDetails match,
-            MultiplayerMatchDetails.MatchGame currentGame
+    private static List<Match.MatchGame> completedGamesThrough(
+            Match match,
+            Match.MatchGame currentGame
     ) {
-        Map<Long, MultiplayerMatchDetails.MatchGame> games = new LinkedHashMap<>();
+        Map<Long, Match.MatchGame> games = new LinkedHashMap<>();
         if (match.getEvents() != null) {
             match.getEvents().stream()
                     .filter(Objects::nonNull)
-                    .map(MultiplayerMatchDetails.MatchEvent::getGame)
+                    .map(Match.MatchEvent::getGame)
                     .filter(Objects::nonNull)
                     .forEach(game -> games.putIfAbsent(game.getId(), game));
         }
         games.putIfAbsent(currentGame.getId(), currentGame);
 
-        List<MultiplayerMatchDetails.MatchGame> completed = new ArrayList<>();
-        for (MultiplayerMatchDetails.MatchGame game : games.values()) {
+        List<Match.MatchGame> completed = new ArrayList<>();
+        for (Match.MatchGame game : games.values()) {
             if (game.getId() == currentGame.getId()
                     || game.getEndTime() != null && !game.getEndTime().isBlank()) {
                 completed.add(game);
@@ -203,12 +180,12 @@ public class MultiplayerController {
         return List.copyOf(completed);
     }
 
-    private static String stableTeamWinner(MultiplayerMatchDetails.MatchGame game) {
+    private static String stableTeamWinner(Match.MatchGame game) {
         double red = 0;
         double blue = 0;
         boolean hasRed = false;
         boolean hasBlue = false;
-        for (JsonObject score : nullSafeScores(game.getScores())) {
+        for (MatchScore score : nullSafeScores(game.getScores())) {
             Double value = stableScoringValue(score, game.getScoringType());
             String team = normalizedTeam(scoreTeam(score));
             if (value == null) continue;
@@ -225,11 +202,11 @@ public class MultiplayerController {
     }
 
     private static Long stableDuelWinner(
-            MultiplayerMatchDetails.MatchGame game,
+            Match.MatchGame game,
             Set<Long> duelUsers
     ) {
         Map<Long, Double> values = new HashMap<>();
-        for (JsonObject score : nullSafeScores(game.getScores())) {
+        for (MatchScore score : nullSafeScores(game.getScores())) {
             Long userId = stableUserId(score);
             Double value = stableScoringValue(score, game.getScoringType());
             if (userId != null && value != null) values.put(userId, value);
@@ -242,18 +219,13 @@ public class MultiplayerController {
                 ? null : ordered.get(0).getKey();
     }
 
-    private static Double stableScoringValue(JsonObject score, String scoringType) {
+    private static Double stableScoringValue(MatchScore score, String scoringType) {
         String normalized = scoringType == null ? "score" : scoringType.toLowerCase(Locale.ROOT);
-        if ("accuracy".equals(normalized)) return jsonNumber(score, "accuracy");
-        if ("combo".equals(normalized)) return jsonNumber(score, "max_combo");
-        return jsonNumber(score, "total_score", "legacy_total_score", "classic_total_score", "score");
-    }
-
-    private static Double jsonNumber(JsonObject object, String... names) {
-        for (String name : names) {
-            if (object.has(name) && !object.get(name).isJsonNull()) {
-                return object.get(name).getAsDouble();
-            }
+        if ("accuracy".equals(normalized)) return score.getAccuracy();
+        if ("combo".equals(normalized)) return score.getMaxCombo() == null ? null : score.getMaxCombo().doubleValue();
+        for (Long value : Arrays.asList(score.getTotalScore(), score.getLegacyTotalScore(),
+                score.getClassicTotalScore(), score.getScore())) {
+            if (value != null) return value.doubleValue();
         }
         return null;
     }
@@ -274,27 +246,20 @@ public class MultiplayerController {
         return score.getUser() == null || score.getUser().getId() <= 0 ? null : score.getUser().getId();
     }
 
-    private static Set<Long> stableUserIds(List<JsonObject> scores) {
+    private static Set<Long> stableUserIds(List<MatchScore> scores) {
         Set<Long> ids = new LinkedHashSet<>();
-        for (JsonObject score : nullSafeScores(scores)) {
+        for (MatchScore score : nullSafeScores(scores)) {
             Long userId = stableUserId(score);
             if (userId != null) ids.add(userId);
         }
         return Set.copyOf(ids);
     }
 
-    private static Long stableUserId(JsonObject score) {
-        if (score.has("user_id") && !score.get("user_id").isJsonNull()) {
-            return score.get("user_id").getAsLong();
-        }
-        if (score.has("user") && score.get("user").isJsonObject()) {
-            JsonObject user = score.getAsJsonObject("user");
-            if (user.has("id") && !user.get("id").isJsonNull()) return user.get("id").getAsLong();
-        }
-        return null;
+    private static Long stableUserId(MatchScore score) {
+        return scoreUserId(score);
     }
 
-    private static List<JsonObject> nullSafeScores(List<JsonObject> scores) {
+    private static List<MatchScore> nullSafeScores(List<MatchScore> scores) {
         return scores == null ? List.of() : scores.stream().filter(Objects::nonNull).toList();
     }
 
@@ -320,8 +285,8 @@ public class MultiplayerController {
         return null;
     }
 
-    static MultiplayerRoomWatchState toWatchState(MultiplayerRoomDetails room) {
-        Map<Long, MultiplayerRoomDetails.PlaylistItem> items = new LinkedHashMap<>();
+    static MultiplayerRoomWatchState toWatchState(Room room) {
+        Map<Long, Room.PlaylistItem> items = new LinkedHashMap<>();
         if (room.getPlaylist() != null) {
             room.getPlaylist().stream()
                     .filter(Objects::nonNull)
@@ -334,8 +299,8 @@ public class MultiplayerController {
         List<MultiplayerRoomWatchState.CompletedPlay> completed = items.values().stream()
                 .filter(item -> item.getId() > 0 && item.getPlayedAt() != null && !item.getPlayedAt().isBlank())
                 .sorted(Comparator
-                        .comparing(MultiplayerRoomDetails.PlaylistItem::getPlayedAt)
-                        .thenComparingLong(MultiplayerRoomDetails.PlaylistItem::getId))
+                        .comparing(Room.PlaylistItem::getPlayedAt)
+                        .thenComparingLong(Room.PlaylistItem::getId))
                 .map(item -> new MultiplayerRoomWatchState.CompletedPlay(item.getId(), item.getPlayedAt()))
                 .toList();
         boolean active = room.isActive()
@@ -343,35 +308,35 @@ public class MultiplayerController {
         return new MultiplayerRoomWatchState(room.getId(), room.getName(), active, completed);
     }
 
-    static MultiplayerRoomWatchState toWatchState(MultiplayerMatchDetails match) {
-        Map<Long, MultiplayerMatchDetails.MatchGame> games = new LinkedHashMap<>();
+    static MultiplayerRoomWatchState toWatchState(Match match) {
+        Map<Long, Match.MatchGame> games = new LinkedHashMap<>();
         if (match.getEvents() != null) {
             match.getEvents().stream()
                     .filter(Objects::nonNull)
-                    .map(MultiplayerMatchDetails.MatchEvent::getGame)
+                    .map(Match.MatchEvent::getGame)
                     .filter(Objects::nonNull)
                     .forEach(game -> games.put(game.getId(), game));
         }
         List<MultiplayerRoomWatchState.CompletedPlay> completed = games.values().stream()
                 .filter(game -> game.getId() > 0 && game.getEndTime() != null && !game.getEndTime().isBlank())
                 .sorted(Comparator
-                        .comparing(MultiplayerMatchDetails.MatchGame::getEndTime)
-                        .thenComparingLong(MultiplayerMatchDetails.MatchGame::getId))
+                        .comparing(Match.MatchGame::getEndTime)
+                        .thenComparingLong(Match.MatchGame::getId))
                 .map(game -> new MultiplayerRoomWatchState.CompletedPlay(game.getId(), game.getEndTime()))
                 .toList();
-        MultiplayerMatchDetails.MatchInfo info = match.getMatch();
+        Match.MatchInfo info = match.getMatch();
         boolean active = info.getEndTime() == null || info.getEndTime().isBlank();
         return new MultiplayerRoomWatchState(info.getId(), info.getName(), active, completed);
     }
 
-    private static MultiplayerMatchDetails.MatchGame findMatchGame(
-            MultiplayerMatchDetails match,
+    private static Match.MatchGame findMatchGame(
+            Match match,
             long gameId
     ) {
         if (match.getEvents() != null) {
-            MultiplayerMatchDetails.MatchGame game = match.getEvents().stream()
+            Match.MatchGame game = match.getEvents().stream()
                     .filter(Objects::nonNull)
-                    .map(MultiplayerMatchDetails.MatchEvent::getGame)
+                    .map(Match.MatchEvent::getGame)
                     .filter(Objects::nonNull)
                     .filter(value -> value.getId() == gameId)
                     .findFirst()
@@ -383,12 +348,12 @@ public class MultiplayerController {
         throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "Game was not found in match");
     }
 
-    private static MultiplayerRoomDetails.PlaylistItem findPlaylistItem(
-            MultiplayerRoomDetails room,
+    private static Room.PlaylistItem findPlaylistItem(
+            Room room,
             long playlistItemId
     ) {
         if (room.getPlaylist() != null) {
-            MultiplayerRoomDetails.PlaylistItem item = room.getPlaylist().stream()
+            Room.PlaylistItem item = room.getPlaylist().stream()
                     .filter(Objects::nonNull)
                     .filter(value -> value.getId() == playlistItemId)
                     .findFirst()
@@ -465,7 +430,7 @@ public class MultiplayerController {
                     }
                     return currentPlaylistItem;
                 })
-                .thenApply((MultiplayerRoom.CurrentPlaylistItem c) -> {
+                .thenApply((Room.PlaylistItem c) -> {
                     final BeatmapExtended beatmap = c.getBeatmap();
                     if (beatmap == null) {
                         throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "Beatmap is null!");
@@ -508,14 +473,14 @@ public class MultiplayerController {
     }
 
     private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId) {
-        MultiplayerRoomDetails room = OsuAPI.getRoom(tokenManager.getTokenData(), roomId);
-        MultiplayerRoomDetails.PlaylistItem item = findPlaylistItem(room, playlistItemId);
+        Room room = OsuAPI.getRoom(tokenManager.getTokenData(), roomId);
+        Room.PlaylistItem item = findPlaylistItem(room, playlistItemId);
         enrichPlaylistItem(item);
 
         List<MultiplayerRoomScore> roomScores = OsuAPI.getRoomPlaylistScores(
                 tokenManager.getTokenData(), roomId, playlistItemId
         );
-        List<MultiplayerRoomDetails.PlaylistItem> eventItems = isTeamMode(room.getType())
+        List<Room.PlaylistItem> eventItems = isTeamMode(room.getType())
                 ? OsuAPI.getRoomEventPlaylistItems(tokenManager.getTokenData(), roomId)
                 : List.of();
         enrichLazerTeamSnapshot(room, item, roomScores, eventItems);
@@ -537,10 +502,10 @@ public class MultiplayerController {
     }
 
     private void enrichLazerTeamSnapshot(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
+            Room room,
+            Room.PlaylistItem item,
             List<MultiplayerRoomScore> roomScores,
-            List<MultiplayerRoomDetails.PlaylistItem> eventItems
+            List<Room.PlaylistItem> eventItems
     ) {
         String roomType = room.getType();
         boolean teamVs = roomType != null
@@ -551,7 +516,7 @@ public class MultiplayerController {
             return;
         }
 
-        MultiplayerRoomDetails.PlaylistItem eventItem = eventItems.stream()
+        Room.PlaylistItem eventItem = eventItems.stream()
                 .filter(value -> value.getId() == item.getId())
                 .findFirst()
                 .orElse(null);
@@ -563,16 +528,16 @@ public class MultiplayerController {
     }
 
     private MultiplayerResultData getStableResultData(long matchId, long gameId) {
-        MultiplayerMatchDetails match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
-        MultiplayerMatchDetails.MatchGame game = findMatchGame(match, gameId);
+        Match match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
+        Match.MatchGame game = findMatchGame(match, gameId);
 
-        MultiplayerRoomDetails room = new MultiplayerRoomDetails();
+        Room room = new Room();
         room.setId(match.getMatch().getId());
         room.setName(match.getMatch().getName());
         room.setActive(match.getMatch().getEndTime() == null || match.getMatch().getEndTime().isBlank());
         room.setRecentParticipants(match.getUsers());
 
-        MultiplayerRoomDetails.PlaylistItem item = new MultiplayerRoomDetails.PlaylistItem();
+        Room.PlaylistItem item = new Room.PlaylistItem();
         item.setId(game.getId());
         item.setRoomId(matchId);
         item.setBeatmapId(game.getBeatmapId());
@@ -598,9 +563,9 @@ public class MultiplayerController {
     }
 
     private List<MultiplayerRoomScore> stableScores(
-            MultiplayerMatchDetails match,
-            MultiplayerMatchDetails.MatchGame game,
-            MultiplayerRoomDetails.PlaylistItem item
+            Match match,
+            Match.MatchGame game,
+            Room.PlaylistItem item
     ) {
         Map<Long, User> users = new HashMap<>();
         if (match.getUsers() != null) {
@@ -609,8 +574,9 @@ public class MultiplayerController {
 
         Comparator<Score> scoreComparator = stableScoreComparator(game.getScoringType());
         List<MultiplayerRoomScore> scores = (game.getScores() == null
-                ? List.<JsonObject>of()
+                ? List.<MatchScore>of()
                 : game.getScores()).stream()
+                .filter(Objects::nonNull)
                 .map(value -> new MultiplayerRoomScore(
                         stableScore(value, game, item, users),
                         null,
@@ -628,13 +594,12 @@ public class MultiplayerController {
     }
 
     private Score stableScore(
-            JsonObject value,
-            MultiplayerMatchDetails.MatchGame game,
-            MultiplayerRoomDetails.PlaylistItem item,
+            MatchScore value,
+            Match.MatchGame game,
+            Room.PlaylistItem item,
             Map<Long, User> users
     ) {
-        JsonObject normalized = value.deepCopy();
-        normalizeStableMods(normalized);
+        JsonObject normalized = GSON.toJsonTree(value).getAsJsonObject();
         if (!normalized.has("total_score")) {
             if (normalized.has("legacy_total_score")) {
                 normalized.add("total_score", normalized.get("legacy_total_score"));
@@ -686,10 +651,10 @@ public class MultiplayerController {
     }
 
     private MultiplayerResultData.SeriesScore lazerSeriesScore(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem currentItem,
+            Room room,
+            Room.PlaylistItem currentItem,
             List<MultiplayerRoomScore> currentScores,
-            List<MultiplayerRoomDetails.PlaylistItem> eventItems
+            List<Room.PlaylistItem> eventItems
     ) {
         boolean teamMode = isTeamMode(room.getType());
         Set<Long> duelUsers = teamMode ? Set.of() : scoreUserIds(currentScores);
@@ -697,13 +662,13 @@ public class MultiplayerController {
             return MultiplayerResultData.SeriesScore.empty();
         }
 
-        Map<Long, MultiplayerRoomDetails.PlaylistItem> eventsById = new HashMap<>();
+        Map<Long, Room.PlaylistItem> eventsById = new HashMap<>();
         eventItems.forEach(item -> eventsById.put(item.getId(), item));
         Map<Long, Integer> playerWins = new HashMap<>();
         int redWins = 0;
         int blueWins = 0;
 
-        for (MultiplayerRoomDetails.PlaylistItem item : completedItemsThrough(room, currentItem)) {
+        for (Room.PlaylistItem item : completedItemsThrough(room, currentItem)) {
             List<MultiplayerRoomScore> scores;
             if (item.getId() == currentItem.getId()) {
                 scores = currentScores;
@@ -730,7 +695,7 @@ public class MultiplayerController {
         return new MultiplayerResultData.SeriesScore(playerWins, redWins, blueWins);
     }
 
-    private void enrichPlaylistItem(MultiplayerRoomDetails.PlaylistItem item) {
+    private void enrichPlaylistItem(Room.PlaylistItem item) {
         if (item.getBeatmap() == null || item.getBeatmap().getBeatmapset() == null) {
             BeatmapExtended beatmap = OsuAPI.getBeatmap(tokenManager.getTokenData(), item.getBeatmapId());
             if (beatmap != null) {
@@ -741,7 +706,7 @@ public class MultiplayerController {
 
     private void enrichScores(
             List<MultiplayerRoomScore> roomScores,
-            MultiplayerRoomDetails.PlaylistItem item
+            Room.PlaylistItem item
     ) {
         Map<Long, BeatmapExtended> beatmaps = new HashMap<>();
         if (item.getBeatmap() != null) {
@@ -788,7 +753,7 @@ public class MultiplayerController {
         }
     }
 
-    private User resolveOwner(MultiplayerRoomDetails room, long ownerId) {
+    private User resolveOwner(Room room, long ownerId) {
         if (room.getRecentParticipants() != null) {
             User participant = room.getRecentParticipants().stream()
                     .filter(Objects::nonNull)

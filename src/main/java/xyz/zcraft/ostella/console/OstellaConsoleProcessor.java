@@ -67,16 +67,18 @@ public final class OstellaConsoleProcessor {
             case "replay", "replays" -> CacheService.CacheArea.REPLAYS;
             case "score-json", "scores" -> CacheService.CacheArea.SCORE_JSON;
             case "beatmapset", "beatmapsets" -> CacheService.CacheArea.BEATMAPSETS;
+            case "beatmap-json" -> CacheService.CacheArea.BEATMAP_JSON;
+            case "beatmapset-json" -> CacheService.CacheArea.BEATMAPSET_JSON;
             case "all" -> CacheService.CacheArea.ALL;
             default ->
-                    throw new IllegalArgumentException("Cache area must be beatmaps, images, replays, score-json, beatmapsets, or all.");
+                    throw new IllegalArgumentException("Cache area must be beatmaps, images, replays, score-json, beatmapsets, beatmap-json, beatmapset-json, or all.");
         };
     }
 
     private static String cacheControlType(String value) {
         String normalized = value.toUpperCase(Locale.ROOT);
-        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY").contains(normalized)) {
-            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, or replay.");
+        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY", "BEATMAP-JSON", "BEATMAPSET-JSON").contains(normalized)) {
+            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, replay, beatmap-json, or beatmapset-json.");
         }
         return normalized;
     }
@@ -205,7 +207,7 @@ public final class OstellaConsoleProcessor {
             case "replay" ->
                     "replay status\nreplay job <uuid>\nreplay delete <uuid> confirm\nCommands contact configured osuRenderer workers.";
             case "cache" ->
-                    "cache <query|delete|get|fetch> <score|beatmap|beatmapset|replay> <id>\nQueries oStella followed by every configured osuRenderer worker. get includes metadata; fetch downloads into oStella and pushes beatmapsets/replays to workers; delete removes all reachable copies.\ncache status\ncache clear <beatmaps|images|replays|score-json|beatmapsets|all> confirm";
+                    "cache <query|delete|get|fetch> <score|beatmap|beatmapset|replay|beatmap-json|beatmapset-json> <id>\nQueries oStella followed by every configured osuRenderer worker (beatmap-json and beatmapset-json are local only). get includes metadata; fetch downloads into oStella and pushes beatmapsets/replays to workers; delete removes all reachable copies.\ncache status\ncache clear <beatmaps|images|replays|score-json|beatmapsets|beatmap-json|beatmapset-json|all> confirm";
             case "autocache" -> "autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>\nEach type defaults to off. Prefetches missing files for cached-score users and their best 200 osu! scores, only while idle. Changes last until restart.";
             case "config" -> "config show\nconfig check\nSecrets are redacted. Runtime changes require restart.";
             case "log" -> "log show\nlog level <trace|debug|info|warn|error>";
@@ -313,18 +315,22 @@ public final class OstellaConsoleProcessor {
                       Replays: %d files, %s
                       Score JSON: %d files, %s
                       Beatmapsets: %d files, %s
+                      Beatmap JSON: %d files, %s
+                      Beatmapset JSON: %d files, %s
                       Total: %d files, %s
                     """.formatted(value.beatmaps().files(), bytes(value.beatmaps().bytes()),
                     value.images().files(), bytes(value.images().bytes()), value.replays().files(), bytes(value.replays().bytes()),
                     value.scoreJson().files(), bytes(value.scoreJson().bytes()), value.beatmapsets().files(),
-                    bytes(value.beatmapsets().bytes()), value.totalFiles(), bytes(value.totalBytes())).stripTrailing());
+                    bytes(value.beatmapsets().bytes()), value.beatmapJson().files(), bytes(value.beatmapJson().bytes()),
+                    value.beatmapsetJson().files(), bytes(value.beatmapsetJson().bytes()),
+                    value.totalFiles(), bytes(value.totalBytes())).stripTrailing());
         }
         if (input.size() == 4 && "clear".equalsIgnoreCase(input.value(1))
                 && "confirm".equalsIgnoreCase(input.value(3))) {
             CacheService.CacheArea area = cacheArea(input.value(2));
             return Result.ok("Removed " + access.clearCache(area) + " cache entries.");
         }
-        return Result.error("Usage: cache <query|delete|get|fetch> <score|beatmap|beatmapset|replay> <id> | cache status | cache clear <area> confirm");
+        return Result.error("Usage: cache <query|delete|get|fetch> <score|beatmap|beatmapset|replay|beatmap-json|beatmapset-json> <id> | cache status | cache clear <area> confirm");
     }
 
     private Result config(ConsoleInputParser.ParsedInput input) {

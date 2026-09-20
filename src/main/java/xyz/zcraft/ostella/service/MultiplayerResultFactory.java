@@ -1,7 +1,7 @@
 package xyz.zcraft.ostella.service;
 
 import xyz.zcraft.ostella.data.MultiplayerResultData;
-import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
+import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
 import xyz.zcraft.osu.model.*;
 
@@ -12,8 +12,8 @@ public final class MultiplayerResultFactory {
     }
 
     public static MultiplayerResultData create(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
+            Room room,
+            Room.PlaylistItem item,
             List<MultiplayerRoomScore> roomScores,
             User owner
     ) {
@@ -22,8 +22,8 @@ public final class MultiplayerResultFactory {
     }
 
     public static MultiplayerResultData create(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
+            Room room,
+            Room.PlaylistItem item,
             List<MultiplayerRoomScore> roomScores,
             User owner,
             String client,
@@ -35,8 +35,8 @@ public final class MultiplayerResultFactory {
     }
 
     public static MultiplayerResultData create(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
+            Room room,
+            Room.PlaylistItem item,
             List<MultiplayerRoomScore> roomScores,
             User owner,
             String client,

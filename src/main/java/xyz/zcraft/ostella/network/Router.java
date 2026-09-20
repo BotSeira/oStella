@@ -107,6 +107,7 @@ public class Router implements Closeable {
         CacheControlResult local = fetch
                 ? CacheService.fetch(request, tokenManager.getTokenData())
                 : CacheService.control(request);
+        if (List.of("BEATMAP-JSON", "BEATMAPSET-JSON").contains(local.type())) return local;
         List<CacheControlResult.CacheNodeResult> nodes = new ArrayList<>(local.nodes());
         Path fetchedPath = fetch && !local.nodes().isEmpty()
                 && List.of("FETCHED", "PRESENT").contains(local.nodes().getFirst().status())

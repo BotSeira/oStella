@@ -1,5 +1,7 @@
 package xyz.zcraft.ostella.network;
 
+import xyz.zcraft.osu.model.multiplayer.Match;
+
 import com.google.gson.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -8,6 +10,7 @@ import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.multiplayer.Room;
 
 import java.io.IOException;
 import java.net.URI;
@@ -232,7 +235,7 @@ public class OsuAPI {
         return getUserScore(tokenData, uid, beatmapId, null);
     }
 
-    public static MultiplayerRoom getCurrentRoom(String auth) {
+    public static Room getCurrentRoom(String auth) {
         LOG.debug("Getting current room");
         try {
             final var request = newRequestBuilder(auth, "/rooms?mode=participated&type_group=realtime&is_active=true")
@@ -269,7 +272,7 @@ public class OsuAPI {
                 return null;
             }
 
-            return GSON.fromJson(arr.get(0), MultiplayerRoom.class);
+            return GSON.fromJson(arr.get(0), Room.class);
         } catch (JsonSyntaxException | InterruptedException | IOException e) {
             throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Failed to fetch current room", e);
         }
@@ -421,7 +424,7 @@ public class OsuAPI {
         }
     }
 
-    public static List<MultiplayerRoom> getRooms(TokenData tokenData) {
+    public static List<Room> getRooms(TokenData tokenData) {
         LOG.debug("Fetching multiplayer rooms");
         try {
             final var request = newRequestBuilder(tokenData, "/rooms")
@@ -443,9 +446,9 @@ public class OsuAPI {
 
             final String body = response.body();
 
-            final LinkedList<MultiplayerRoom> rooms = new LinkedList<>();
+            final LinkedList<Room> rooms = new LinkedList<>();
             JsonParser.parseString(body).getAsJsonArray().forEach(
-                    s -> rooms.add(GSON.fromJson(s, MultiplayerRoom.class)));
+                    s -> rooms.add(GSON.fromJson(s, Room.class)));
 
             return rooms;
         } catch (IOException | InterruptedException e) {
@@ -543,7 +546,7 @@ public class OsuAPI {
         }
     }
 
-    public static MultiplayerRoomDetails getRoom(TokenData tokenData, long roomId) {
+    public static Room getRoom(TokenData tokenData, long roomId) {
         LOG.debug("Fetching multiplayer room {}", roomId);
         try {
             final var request = newRequestBuilder(tokenData, "/rooms/" + roomId)
@@ -561,7 +564,7 @@ public class OsuAPI {
                 );
             }
 
-            MultiplayerRoomDetails room = GSON.fromJson(response.body(), MultiplayerRoomDetails.class);
+            Room room = GSON.fromJson(response.body(), Room.class);
             if (room == null || room.getId() <= 0) {
                 throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for room " + roomId);
             }
@@ -571,10 +574,8 @@ public class OsuAPI {
         }
     }
 
-    public static MultiplayerRoomDetails.PlaylistItem getRoomEventPlaylistItem(
-            TokenData tokenData,
-            long roomId,
-            long playlistItemId
+    public static Room.PlaylistItem getRoomEventPlaylistItem(
+            TokenData tokenData, long roomId, long playlistItemId
     ) {
         return getRoomEventPlaylistItems(tokenData, roomId).stream()
                 .filter(item -> item.getId() == playlistItemId)
@@ -582,9 +583,8 @@ public class OsuAPI {
                 .orElse(null);
     }
 
-    public static List<MultiplayerRoomDetails.PlaylistItem> getRoomEventPlaylistItems(
-            TokenData tokenData,
-            long roomId
+    public static List<Room.PlaylistItem> getRoomEventPlaylistItems(
+            TokenData tokenData, long roomId
     ) {
         LOG.debug("Fetching events for multiplayer room {}", roomId);
         try {
@@ -613,29 +613,29 @@ public class OsuAPI {
         }
     }
 
-    static MultiplayerRoomDetails.PlaylistItem eventPlaylistItem(String body, long playlistItemId) {
+    static Room.PlaylistItem eventPlaylistItem(String body, long playlistItemId) {
         return eventPlaylistItems(body).stream()
                 .filter(item -> item.getId() == playlistItemId)
                 .findFirst()
                 .orElse(null);
     }
 
-    static List<MultiplayerRoomDetails.PlaylistItem> eventPlaylistItems(String body) {
+    static List<Room.PlaylistItem> eventPlaylistItems(String body) {
         JsonObject root = JsonParser.parseString(body).getAsJsonObject();
         JsonArray playlistItems = root.has("playlist_items") && root.get("playlist_items").isJsonArray()
                 ? root.getAsJsonArray("playlist_items")
                 : new JsonArray();
-        List<MultiplayerRoomDetails.PlaylistItem> result = new ArrayList<>(playlistItems.size());
+        List<Room.PlaylistItem> result = new ArrayList<>(playlistItems.size());
         for (JsonElement element : playlistItems) {
             if (!element.isJsonObject()) {
                 continue;
             }
-            result.add(GSON.fromJson(element, MultiplayerRoomDetails.PlaylistItem.class));
+            result.add(GSON.fromJson(element, Room.PlaylistItem.class));
         }
         return List.copyOf(result);
     }
 
-    public static MultiplayerMatchDetails getMatch(TokenData tokenData, long matchId) {
+    public static Match getMatch(TokenData tokenData, long matchId) {
         LOG.debug("Fetching stable multiplayer match {}", matchId);
         try {
             final var request = newRequestBuilder(tokenData, "/matches/" + matchId + "?limit=101")
@@ -653,7 +653,7 @@ public class OsuAPI {
                 );
             }
 
-            MultiplayerMatchDetails match = GSON.fromJson(response.body(), MultiplayerMatchDetails.class);
+            Match match = GSON.fromJson(response.body(), Match.class);
             if (match == null || match.getMatch() == null || match.getMatch().getId() <= 0) {
                 throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for match " + matchId);
             }
@@ -664,9 +664,7 @@ public class OsuAPI {
     }
 
     public static List<MultiplayerRoomScore> getRoomPlaylistScores(
-            TokenData tokenData,
-            long roomId,
-            long playlistItemId
+            TokenData tokenData, long roomId, long playlistItemId
     ) {
         LOG.debug("Fetching scores for multiplayer room {} playlist item {}", roomId, playlistItemId);
         try {
@@ -710,6 +708,7 @@ public class OsuAPI {
             );
         }
     }
+
 
     private static String multiplayerTeam(JsonObject score) {
         if (score.has("team") && !score.get("team").isJsonNull()) {
