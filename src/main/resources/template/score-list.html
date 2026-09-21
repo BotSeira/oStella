@@ -435,6 +435,10 @@
             font-size: 1.8em;
             font-weight: bold;
         }
+
+        .hidden {
+            display: none !important;
+        }
     </style>
     <style>
         .score-type {
@@ -556,6 +560,10 @@
                 <div style="max-width: 700px; margin-top: 15px; margin-left: auto;">
                     <div class="chart-wrapper" style="width: 700px; height: 80px; ">
                         <canvas id="historyChart"></canvas>
+                        <div id="historyText"
+                             style="position: absolute; top: 50%; left: 50%; font-size: 1.5em; color: #9ca3af;" class="hidden">
+                            Rank history is currently not available...
+                        </div>
                     </div>
                 </div>
             </div>
@@ -669,8 +677,10 @@
 <!--suppress ThymeleafObsoleteInlineAttributeInspection -->
 <script th:inline="javascript">
     const historyChart = document.getElementById('historyChart');
-    if (historyChart) {
-        const historyData = /*[[${user.rankHistory.data}]]*/ [12345, 12222, 11111, 10000, 9876];
+    const rankHistory = /*[[${user.rankHistory}]]*/ {data:[12345, 56789, 67890]};
+    // noinspection PointlessBooleanExpressionJS
+    if (historyChart && rankHistory != null) {
+        const historyData = rankHistory.data;
 
         let max = 0;
         for (let i = 0; i < historyData.length; i++) max = max < historyData[i] ? historyData[i] : max;
@@ -709,6 +719,8 @@
                 }
             }
         });
+    } else if (historyChart) {
+        document.getElementById('historyText').classList.remove('hidden');
     }
 
     window.__OSTELLA_RENDER_READY__ = true;
