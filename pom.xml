@@ -112,7 +112,7 @@
         <dependency>
             <groupId>com.github.BotSeira</groupId>
             <artifactId>osuModel</artifactId>
-            <version>v1.0.7</version>
+            <version>master-SNAPSHOT</version>
         </dependency>
 
         <dependency>

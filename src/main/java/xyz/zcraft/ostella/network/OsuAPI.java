@@ -646,6 +646,7 @@ public class OsuAPI {
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer match " + matchId + " was not found");
             }
+
             if (response.statusCode() >= 400) {
                 throw new ApiException(
                         ErrorCode.ROOM_FETCH_FAILED,

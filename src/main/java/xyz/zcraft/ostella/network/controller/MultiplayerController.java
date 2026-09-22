@@ -226,7 +226,7 @@ public class MultiplayerController {
         if ("accuracy".equals(normalized)) return score.getAccuracy();
         if ("combo".equals(normalized)) return score.getMaxCombo() == null ? null : score.getMaxCombo().doubleValue();
         for (Long value : Arrays.asList(score.getTotalScore(), score.getLegacyTotalScore(),
-                score.getClassicTotalScore(), score.getScore())) {
+                score.getClassicTotalScore())) {
             if (value != null) return value.doubleValue();
         }
         return null;
