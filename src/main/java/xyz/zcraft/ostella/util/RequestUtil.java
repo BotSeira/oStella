@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.util;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import io.javalin.http.Context;
 import xyz.zcraft.ostella.data.ScoreId;
@@ -13,7 +14,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public class RequestUtil {
-    private final static Gson GSON = new Gson();
+    private final static Gson GSON = new GsonBuilder().serializeSpecialFloatingPointValues().create();
 
     public static void putResult(Context context, Object result) {
         context.status(200).contentType("application/json");
