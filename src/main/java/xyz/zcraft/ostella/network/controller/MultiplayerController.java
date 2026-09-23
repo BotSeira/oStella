@@ -1,28 +1,27 @@
 package xyz.zcraft.ostella.network.controller;
 
-import xyz.zcraft.ostella.network.ImageResponse;
-import xyz.zcraft.osu.model.multiplayer.Match;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.data.*;
+import xyz.zcraft.ostella.data.MultiplayerResultData;
+import xyz.zcraft.ostella.data.MultiplayerRoomScore;
+import xyz.zcraft.ostella.data.MultiplayerRoomWatchState;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.OsuAPI;
-import xyz.zcraft.ostella.network.Headers;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.MultiplayerResultFactory;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.osu.model.*;
-import xyz.zcraft.osu.model.multiplayer.Room;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.User;
+import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.multiplayer.Match;
 import xyz.zcraft.osu.model.multiplayer.MatchScore;
+import xyz.zcraft.osu.model.multiplayer.Room;
 
 import java.util.*;
 
@@ -463,17 +462,30 @@ public class MultiplayerController {
     public void getRoomResult(@NotNull Context context) {
         long roomId = positivePathId(context, "roomId");
         long playlistItemId = positivePathId(context, "playlistItemId");
+        final String obj = context.queryParam("bo");
+
+        final Integer customBo;
+        if (obj != null) {
+            try {
+                customBo = Integer.parseInt(obj);
+            } catch (IllegalArgumentException | NullPointerException e) {
+                throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: bo");
+            }
+        } else {
+            customBo = null;
+        }
+
         RoomVersion version = roomVersion(context);
         context.future(() -> executor
                 .enqueueAsync(() -> switch (version) {
-                    case LAZER -> getLazerResultData(roomId, playlistItemId);
-                    case STABLE -> getStableResultData(roomId, playlistItemId);
+                    case LAZER -> getLazerResultData(roomId, playlistItemId, customBo);
+                    case STABLE -> getStableResultData(roomId, playlistItemId, customBo);
                 })
                 .thenCompose(data -> ImageResponse.respond(context, data, renderer::renderMultiplayerResult, renderer.getRenderExecutor()))
         );
     }
 
-    private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId) {
+    private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId, Integer customBo) {
         Room room = OsuAPI.getRoom(tokenManager.getTokenData(), roomId);
         Room.PlaylistItem item = findPlaylistItem(room, playlistItemId);
         enrichPlaylistItem(item);
@@ -498,7 +510,8 @@ public class MultiplayerController {
                 "lazer",
                 "scorev2",
                 room.getType(),
-                seriesScore
+                seriesScore,
+                customBo
         );
     }
 
@@ -528,7 +541,7 @@ public class MultiplayerController {
         item.setDetails(eventItem.getDetails());
     }
 
-    private MultiplayerResultData getStableResultData(long matchId, long gameId) {
+    private MultiplayerResultData getStableResultData(long matchId, long gameId, Integer customBo) {
         Match match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
         Match.MatchGame game = findMatchGame(match, gameId);
 
@@ -559,7 +572,8 @@ public class MultiplayerController {
                 "stable",
                 game.getScoringType(),
                 game.getTeamType(),
-                seriesScore
+                seriesScore,
+                customBo
         );
     }
 

@@ -983,6 +983,7 @@
         }
 
         .versus-total-separator {
+            padding: 4px 8px 0 8px;
             color: var(--faint);
             font-size: 18px;
             font-weight: 900;
@@ -1940,17 +1941,16 @@
                          th:if="${leftScore.wins > 0}"
                          th:each="i : ${#numbers.sequence(1, leftScore.wins)}"></div>
                     <div class="lose-indicator red"
-                         th:if="${rightScore.wins > leftScore.wins}"
-                         th:each="i : ${#numbers.sequence(1, rightScore.wins - leftScore.wins)}"></div>
+                         th:each="i : ${#numbers.sequence(1, MPs.getLeftLoseIndicatorCount(result))}"></div>
                 </div>
             </div>
-            <div class="versus-total-separator">|</div>
+            <div class="versus-total-separator" th:text="${result.customBo() == null ? '|' : 'BO' + result.customBo()}">BO11</div>
+
             <div class="versus-total right" th:classappend="${rightScore.key}">
                 <span th:text="${rightScore.name}">Right side</span>
                 <div style="display: flex; flex-direction: row; justify-content: right; align-items: center; gap: 10px;">
                     <div class="lose-indicator blue"
-                         th:if="${leftScore.wins > rightScore.wins}"
-                         th:each="i : ${#numbers.sequence(1, leftScore.wins - rightScore.wins)}"></div>
+                         th:each="i : ${#numbers.sequence(1, MPs.getRightLoseIndicatorCount(result))}"></div>
                     <div class="win-indicator blue"
                          th:if="${rightScore.wins > 0}"
                          th:each="i : ${#numbers.sequence(1, rightScore.wins)}"></div>

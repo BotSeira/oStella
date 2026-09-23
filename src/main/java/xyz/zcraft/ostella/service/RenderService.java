@@ -175,6 +175,8 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("cache", new CacheService());
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("MiscUtil", new MiscUtil());
+        //noinspection InstantiationOfUtilityClass
+        ctx.setVariable("MPs", new MultiplayerFormatUtil());
         return ctx;
     }
 
