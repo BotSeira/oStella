@@ -7,7 +7,7 @@ public class MultiplayerFormatUtil {
         final var leftScore = result.versusScores().getFirst();
         final var rightScore = result.versusScores().getLast();
         if (result.customBo() != null) {
-            return Math.max(result.customBo() - leftScore.wins(), 0);
+            return Math.max((result.customBo() + 1) / 2 - leftScore.wins(), 0);
         } else {
             return Math.max(rightScore.wins() - leftScore.wins() + 1, 1);
         }
@@ -17,7 +17,7 @@ public class MultiplayerFormatUtil {
         final var leftScore = result.versusScores().getFirst();
         final var rightScore = result.versusScores().getLast();
         if (result.customBo() != null) {
-            return Math.max(result.customBo() - rightScore.wins(), 0);
+            return Math.max((result.customBo() + 1) / 2 - rightScore.wins(), 0);
         } else {
             return Math.max(leftScore.wins() - rightScore.wins() + 1, 1);
         }

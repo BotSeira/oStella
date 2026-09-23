@@ -1941,6 +1941,7 @@
                          th:if="${leftScore.wins > 0}"
                          th:each="i : ${#numbers.sequence(1, leftScore.wins)}"></div>
                     <div class="lose-indicator red"
+                         th:if="${MPs.getLeftLoseIndicatorCount(result) > 0}"
                          th:each="i : ${#numbers.sequence(1, MPs.getLeftLoseIndicatorCount(result))}"></div>
                 </div>
             </div>
@@ -1950,6 +1951,7 @@
                 <span th:text="${rightScore.name}">Right side</span>
                 <div style="display: flex; flex-direction: row; justify-content: right; align-items: center; gap: 10px;">
                     <div class="lose-indicator blue"
+                         th:if="${MPs.getRightLoseIndicatorCount(result) > 0}"
                          th:each="i : ${#numbers.sequence(1, MPs.getRightLoseIndicatorCount(result))}"></div>
                     <div class="win-indicator blue"
                          th:if="${rightScore.wins > 0}"

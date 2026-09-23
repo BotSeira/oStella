@@ -447,7 +447,7 @@
         <div class="song-title"
              style="font-size: 2.2em; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
              th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
-        <span style="font-size: 1.1em; font-family: serif; align-self: end;"
+        <span style="font-size: 1.1em; font-family: serif; align-self: end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
               th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
               th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
     </div>
@@ -587,7 +587,7 @@
             </div>
             <div class="data-sub">
                 <span th:text="${score.getMaxCombo()} + 'x / ' + ${diff.getMaxCombo()} + 'x'">850x / 908x</span>
-                <span class="fc-badge" th:if="${score.getMaxCombo() == diff.getMaxCombo()}">PERFECT</span>
+                <span class="fc-badge" th:if="${score.getMaxCombo() == diff.getMaxCombo()}">PFC</span>
             </div>
         </div>
 
@@ -635,7 +635,7 @@
             </div>
         </div>
     </div>
-    <div style="display: flex; color: #a0a0b8; font-size: 1.0em; letter-spacing: 1px; padding: 8px 24px;">
+    <div style="display: flex; color: #a0a0b8; font-size: 0.85em; letter-spacing: 1px; padding: 6px 24px;">
         <span style=" " th:text="${'Ended at ' + score.getEndedAt()}">Ended at 2026-04-19T16:19:16Z</span>
         <div style="margin-left: auto;"
              th:text="${'MS' + score.getBeatmapset().getId() + ' / M' + score.getBeatmap().getId() + ' / U' + score.getUser().getId() + ' / S' + Scores.getDisplayScoreId(score)}">
