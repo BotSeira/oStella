@@ -66,9 +66,11 @@ public class MissVisualizeService {
         final var realtimePpLoss = AnalyzeController.calculateRealtimePpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
         final var finalPpLoss = AnalyzeController.calculateFinalPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
         final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods);
+        final var nearbyHitEvents = extractNearbyHitEvents(replayAnalyze.events(), targetMiss);
+        final var nearbyKeyFrames = extractNearbyKeyFrames(keyFrames, targetMiss.hitObject());
 
         return new MissVisualizationData(
-                missIndex, targetMiss, extractNearbyKeyFrames(keyFrames, targetMiss.hitObject()),
+                missIndex, targetMiss, nearbyHitEvents, nearbyKeyFrames,
                 replayAnalyze.beatmap(), replayAnalyze.calculatedDifficulty(),
                 ReplayAnalyzer.hasHardRock(replayAnalyze.replay()), realtimePpLoss, finalPpLoss, totalMissPpLoss
         );
@@ -77,6 +79,23 @@ public class MissVisualizeService {
     public static byte[] renderMiss(MissVisualizationData data) {
         return ImageHelper.drawMiss(data.index(), data.target(), data.keyFrames(), data.beatmap(),
                 data.difficulty(), data.hardRock(), data.realtimePpLoss(), data.finalPpLoss(), data.totalMissPpLoss());
+    }
+
+    private static List<HitEvent> extractNearbyHitEvents(List<HitEvent> events, HitEvent target) {
+        int index = -1;
+
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i).eventTime() == target.eventTime()) {
+                index = i;
+                break;
+            }
+        }
+
+        if (index == -1) {
+            return List.of();
+        }
+
+        return events.subList(Math.max(0, index - 5), Math.min(events.size(), index + 5));
     }
 
     private static List<OsuReplay.TimedKeyFrame> extractNearbyKeyFrames(List<OsuReplay.TimedKeyFrame> keyFrames, HitObject hitObject) {
@@ -106,7 +125,7 @@ public class MissVisualizeService {
     }
 
     public record MissVisualizationData(
-            int index, HitEvent target, List<OsuReplay.TimedKeyFrame> keyFrames,
+            int index, HitEvent target, List<HitEvent> nearbyHitEvents, List<OsuReplay.TimedKeyFrame> keyFrames,
             OsuBeatmap beatmap, DifficultyAttribute difficulty, boolean hardRock,
             AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
             AnalyzeController.PPLoss totalMissPpLoss
@@ -116,7 +135,8 @@ public class MissVisualizeService {
             result.put("index", index);
             result.put("beatmapId", beatmap.getBeatmapId());
             result.put("targetMiss", target);
-            result.put("keyFrames", keyFrames);
+            result.put("nearbyHitEvents", nearbyHitEvents);
+            result.put("nearbyKeyFrames", keyFrames);
             result.put("difficulty", difficulty);
             result.put("difficultySpecs", Map.of(
                     "circleRadius", difficulty.getCircleRadiusInPixel(),

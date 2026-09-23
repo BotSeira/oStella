@@ -38,6 +38,7 @@ public record ScoreAnalysisData(
         data.put("aimBias", aimBias);
         data.put("avgTimingError", avgTimingError);
         data.put("unstableRate", replayAnalyze.unstableRate());
+        data.put("aimUnstableRate", replayAnalyze.aimUnstableRate());
         data.put("performanceGraph", performanceGraph);
         data.put("performancePlus", performancePlus);
         data.put("isLazerScore", isLazerScore);
