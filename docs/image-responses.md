@@ -15,6 +15,9 @@ Use your configured server port. JSON responses use the existing envelope:
 {"success":true,"message":"Success","data":{}}
 ```
 
+When an endpoint returns an array, it is exposed as `data.result`, for example
+`{"success":true,"message":"Success","data":{"result":[]}}`.
+
 The response has `Content-Type: application/json`. Rendered images have
 `Content-Type: image/png`; background downloads retain their image format.
 Negotiated responses include `Vary: Accept` so caches distinguish representations.
@@ -36,7 +39,7 @@ Wildcard media types do not opt in to JSON.
 | `GET /users/{userId}/scores/recent`                                | `user`, filtered `scores`, `type`, `filters`, and original `positions`                                               |
 | `GET /users/{userId}/scores/bestof`                                | Same score-list structure                                                                                            |
 | `GET /users/{userId}/scores/today-best`                            | Same structure, plus `title` describing the time window                                                              |
-| `POST /users/leaderboards`                                         | Users sorted by osu! pp                                                                                              |
+| `POST /users/leaderboards`                                         | `result` array containing users sorted by osu! pp                                                                    |
 | `POST /beatmaps/{beatmapId}/leaderboards`                          | `beatmap` and sorted `placements`                                                                                    |
 | `GET /beatmaps/{beatmapId}/analysis`                               | `beatmap`, `diff`, `mods`, `performance`, and `patterns`                                                             |
 | `GET /scores/{scoreId}/analysis`                                   | Score, difficulty, hit/miss positions, timing errors, unstable rate, performance graphs, PP+, and simulation results |

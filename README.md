@@ -103,7 +103,8 @@ curl "http://localhost:8721/bp?u=12345678&n=20" --output best_of_20.png
 
 Base URL: `http://localhost:<OSTELLA_PORT>`
 
-Most JSON endpoints return: `{"success": boolean, "message": string, "data": any}`.
+Most JSON endpoints return: `{"success": boolean, "message": string, "data": object}`.
+Array results are wrapped as `{"data":{"result":[...]}}` instead of being placed directly in `data`.
 Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 When `ostella.token` is configured, every request must include

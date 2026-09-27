@@ -23,8 +23,17 @@ public class Response {
         final JsonObject obj = new JsonObject();
         obj.addProperty("success", success);
         obj.addProperty("message", message);
-        obj.add("data", data);
+        obj.add("data", responseData());
 
         return obj.toString();
+    }
+
+    private JsonElement responseData() {
+        if (data != null && data.isJsonArray()) {
+            JsonObject result = new JsonObject();
+            result.add("result", data);
+            return result;
+        }
+        return data;
     }
 }
