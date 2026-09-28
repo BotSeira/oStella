@@ -79,6 +79,8 @@ public class Router implements Closeable {
     }
 
     protected void getServerStatus(@NotNull Context context) {
+        final int onlineWorkers = replayService.probeWorkers().size();
+        final int configuredWorkers = conf.replayRender().workers().size();
         context.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.isOsuApiHealthy(tokenManager.getTokenData()))
                 .thenAccept(r -> context.status(200)
@@ -88,6 +90,8 @@ public class Router implements Closeable {
                                 GSON.toJsonTree(Map.of(
                                         "ostella", true,
                                         "ostella_version", VersionInfo.getVersion(),
+                                        "all_render_workers", configuredWorkers,
+                                        "online_render_workers", onlineWorkers,
                                         "osu_api", r
                                 ))).toString())));
 

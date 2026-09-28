@@ -559,7 +559,7 @@ public final class ReplayService implements Closeable {
         }
     }
 
-    private List<WorkerStatus> probeWorkers() {
+    public List<WorkerStatus> probeWorkers() {
         List<CompletableFuture<WorkerStatus>> probes = rotatedWorkers().stream()
                 .map(worker -> CompletableFuture.supplyAsync(() -> getWorkerStatus(worker), workerProbeExecutor)
                         .exceptionally(_ -> {
@@ -693,7 +693,7 @@ public final class ReplayService implements Closeable {
     private record RendererWorker(URI uri) {
     }
 
-    private record WorkerStatus(RendererWorker worker, int queue, int active) {
+    public record WorkerStatus(RendererWorker worker, int queue, int active) {
     }
 
     private record JobLookup(boolean found, JobProgress progress) {
