@@ -539,7 +539,7 @@ public final class ReplayService implements Closeable {
 
     private WorkerStatus getWorkerStatus(RendererWorker worker) {
         HttpResponse<String> response = sendString(worker, request(worker, "renders/status")
-                .timeout(Duration.ofSeconds(10))
+                .timeout(Duration.ofSeconds(5))
                 .GET()
                 .build());
         if (response.statusCode() == 404) {
