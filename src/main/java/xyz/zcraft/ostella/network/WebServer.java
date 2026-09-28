@@ -62,7 +62,7 @@ public class WebServer implements Closeable {
                     .post("/beatmaps/{beatmapId}/leaderboards", router.leaderboardController::getMapLeaderboard)
                     .get("/beatmaps/{beatmapId}/background", router.beatmapController::getBackground)
 
-                    .get("/beatmapsets", router.beatmapsetController::getBeatmapsets)
+                    .post("/beatmapsets", router.beatmapsetController::getBeatmapsets)
                     .get("/beatmapsets/lookup", router.beatmapsetController::lookupBeatmapset)
                     .get("/beatmapsets/search", router.beatmapsetController::searchBeatmapset)
                     .get("/beatmapsets/{beatmapsetId}", router.beatmapsetController::getBeatmapsetById)
