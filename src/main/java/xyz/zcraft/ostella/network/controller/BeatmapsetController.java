@@ -1,19 +1,14 @@
 package xyz.zcraft.ostella.network.controller;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import io.javalin.http.Context;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
-import xyz.zcraft.ostella.network.ImageResponse;
-import xyz.zcraft.ostella.network.Headers;
 import xyz.zcraft.ostella.data.SearchResultItem;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.OsuAPI;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
@@ -24,14 +19,18 @@ import xyz.zcraft.osu.model.Beatmapset;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class BeatmapsetController {
     private static final Gson GSON = new Gson();
+    private static final Logger LOG = LogManager.getLogger(BeatmapsetController.class);
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -52,6 +51,80 @@ public class BeatmapsetController {
         } else {
             lookupBeatmapsetOfIdAsync(context);
         }
+    }
+
+    public void getBeatmapsets(@NotNull Context context) {
+        final JsonElement body = JsonParser.parseString(context.body());
+        final var idArr = body.getAsJsonObject().getAsJsonArray("ids");
+
+        if (idArr == null || idArr.isEmpty()) {
+            context.status(400).result(Response.error("Missing 'ids' array in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        context.future(() -> {
+            List<CompletableFuture<Beatmapset>> beatmapsetFutures = new ArrayList<>(idArr.size());
+            for (JsonElement jsonElement : idArr) {
+                final long id = jsonElement.getAsLong();
+                beatmapsetFutures.add(
+                        CompletableFuture.supplyAsync(
+                                () -> CacheService.getBeatmapsetJsonCache(id)
+                                        .orElseGet(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id))
+                        )
+                );
+            }
+
+            return CompletableFuture.allOf(beatmapsetFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(_ -> {
+                        JsonArray resultArr = new JsonArray();
+                        for (var future : beatmapsetFutures) {
+                            try {
+                                final Beatmapset beatmapset = future.join();
+                                if (beatmapset == null) {
+                                    continue;
+                                }
+                                CacheService.tryCache(beatmapset);
+
+                                final List<Beatmap> beatmaps = new ArrayList<>(beatmapset.getBeatmaps().size());
+                                for (BeatmapExtended beatmap : beatmapset.getBeatmaps()) {
+                                    final Beatmap e = convertToShort(beatmap);
+                                    beatmaps.add(e);
+                                }
+
+                                beatmapset.setConverts(null);
+                                beatmapset.setRecentFavourites(null);
+                                beatmapset.setRelatedUsers(null);
+
+                                final var obj = GSON.toJsonTree(beatmapset).getAsJsonObject();
+                                obj.add("beatmaps", GSON.toJsonTree(beatmaps));
+
+                                resultArr.add(obj);
+                            } catch (CompletionException e) {
+                                if (e.getCause() instanceof ApiException apiEx) {
+                                    if (apiEx.getErrorCode() == ErrorCode.NO_BEATMAPSET_FOUND || apiEx.getErrorCode() == ErrorCode.BEATMAPSET_FETCH_FAILED) {
+                                        LOG.warn("Beatmapset not found for one of the requested ids: {}", apiEx.getMessage());
+                                    }
+                                }
+                                LOG.error("Error fetching beatmapset data", e);
+                            }
+                        }
+                        return resultArr;
+                    }).thenAccept(usersArr -> context.status(200).result(new Response(true, "Success", usersArr).toString()));
+        });
+    }
+
+    private @NonNull Beatmap convertToShort(BeatmapExtended beatmap) {
+        final Beatmap e = new Beatmap();
+        e.setBeatmapsetId(beatmap.getBeatmapsetId());
+        e.setDifficultyRating(beatmap.getDifficultyRating());
+        e.setId(beatmap.getBeatmapsetId());
+        e.setMode(beatmap.getMode());
+        e.setStatus(beatmap.getStatus());
+        e.setTopUserTagIds(beatmap.getTopUserTagIds());
+        e.setTotalLength(beatmap.getTotalLength());
+        e.setUserId(beatmap.getUserId());
+        e.setVersion(beatmap.getVersion());
+        return e;
     }
 
     private void lookupBeatmapsetFromCurrentRoom(@NonNull Context context) {
