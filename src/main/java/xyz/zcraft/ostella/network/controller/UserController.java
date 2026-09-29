@@ -6,11 +6,13 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Headers;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -27,11 +29,11 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
+import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class UserController {
@@ -71,26 +73,6 @@ public class UserController {
         return limit;
     }
 
-    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        return applyFilters(scores, filters, 1);
-    }
-
-    static FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
-        List<Score> result = new ArrayList<>();
-        List<Integer> originalPositions = new ArrayList<>();
-        for (int index = 0; index < scores.size(); index++) {
-            Score score = scores.get(index);
-            if (filters.stream().allMatch(filter -> filter.matches(score))) {
-                result.add(score);
-                originalPositions.add(index + firstPosition);
-            }
-        }
-        if (!filters.isEmpty() && result.isEmpty()) {
-            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
-        }
-        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
-    }
-
     private static int requireScoreListStart(Context context, int endPosition) {
         String startParam = context.queryParam("start");
         int start = startParam == null ? 1 : requirePositiveInt(context, "start");
@@ -119,6 +101,31 @@ public class UserController {
 
     private static List<String> filterLabels(List<ScoreFilter> filters) {
         return filters.stream().map(ScoreFilter::displayText).toList();
+    }
+
+    private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        return applyFilters(scores, filters, 1);
+    }
+
+    private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
+        List<Score> result = new ArrayList<>();
+        List<Integer> originalPositions = new ArrayList<>();
+        for (int index = 0; index < scores.size(); index++) {
+            Score score = scores.get(index);
+            if (filters.stream().allMatch(filter -> filter.matches(score, () -> {
+                final Long id = score.getBeatmapset().getId();
+                final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                tryCache(beatmapset);
+                return beatmapset;
+            }))) {
+                result.add(score);
+                originalPositions.add(index + firstPosition);
+            }
+        }
+        if (!filters.isEmpty() && result.isEmpty()) {
+            throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
+        }
+        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
     }
 
     public void getUsers(@NotNull Context context) {
@@ -170,11 +177,11 @@ public class UserController {
     }
 
     public void getSelf(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             context.status(401)
-                    .result(Response.error("Missing Authorization header", ErrorCode.UNAUTHORIZED).toString());
+                    .result(Response.error("Missing X-Osu-Authorization header", ErrorCode.UNAUTHORIZED).toString());
             return;
         }
 
@@ -202,7 +209,7 @@ public class UserController {
                         tokenManager.getTokenData(), u, type, n - start + 1, start - 1)
                 )
                 .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
-                        .thenApplyAsync(user -> {
+                        .thenApply(user -> {
                             if (user == null) {
                                 throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
                             }
@@ -211,18 +218,9 @@ public class UserController {
                             }
 
                             FilteredScores filteredScores = applyFilters(scores, filters, start);
-                            context.header("X-User-Id", String.valueOf(user.getId()));
-                            context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-
-                            return renderer.renderScores(
-                                    user,
-                                    filteredScores.scores(),
-                                    type,
-                                    filterLabels(filters),
-                                    filteredScores.originalPositions()
-                            );
-                        }, renderer.getRenderExecutor()))
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                            return prepareScoreList(context, user, filteredScores, type, filterLabels(filters), null);
+                        }))
+                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getRecentScoresBatch(@NotNull Context context) {
@@ -278,32 +276,23 @@ public class UserController {
                 .thenCompose(scores -> {
                     if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
-                            .thenApplyAsync(user -> {
+                            .thenApply(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
                                 for (Score score : scores) {
                                     router.ensurePp(score);
                                 }
                                 FilteredScores filteredScores = applyFilters(scores, filters, start);
-                                context.header("X-User-Id", String.valueOf(user.getId()));
-                                context.header("X-Score-Ids", filteredScores.scores().stream().map(Score::getId).map(String::valueOf).collect(Collectors.joining(",")));
-                                return renderer.renderScores(
-                                        user,
-                                        filteredScores.scores(),
-                                        ScoreType.BEST,
-                                        filterLabels(filters),
-                                        filteredScores.originalPositions()
-                                );
-                            }, renderer.getRenderExecutor());
+                                return prepareScoreList(context, user, filteredScores, ScoreType.BEST, filterLabels(filters), null);
+                            });
                 })
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getUserInfo(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
 
-        final String accept = context.header("Accept");
-        if (accept != null && accept.toLowerCase().contains("application/json")) {
-            handleUserInfoRaw(context);
+        if (ImageResponse.wantsJson(context)) {
+            getUserInfoJson(context, userId);
             return;
         }
 
@@ -339,14 +328,16 @@ public class UserController {
                     );
                     return renderer.renderUserInfo(data.user(), data.topScores());
                 }, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes)));
     }
 
-    private void handleUserInfoRaw(@NotNull Context context) {
-        final long userId = requirePathLong(context, "userId");
-
+    private void getUserInfoJson(@NotNull Context context, long userId) {
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
-                .thenAccept(user -> putResult(context, user)));
+                .thenAccept(user -> {
+                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                    context.header("X-User-Id", String.valueOf(user.getId()));
+                    putResult(context, user);
+                }));
     }
 
     public void getUserRank(@NotNull Context context) {
@@ -383,38 +374,24 @@ public class UserController {
                         throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No best scores found in the last " + days + " days");
                     }
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
-                            .thenApplyAsync(user -> {
+                            .thenApply(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
                                 for (Score score : recentBestScores.scores()) {
                                     router.ensurePp(score);
                                 }
-                                context.header("X-User-Id", String.valueOf(user.getId()));
-                                context.header(
-                                        "X-Score-Ids",
-                                        recentBestScores.scores().stream()
-                                                .map(Score::getId)
-                                                .map(String::valueOf)
-                                                .collect(Collectors.joining(","))
-                                );
-                                return renderer.renderScores(
-                                        user,
-                                        recentBestScores.scores(),
-                                        ScoreType.BEST,
-                                        List.of(),
-                                        recentBestScores.originalPositions(),
-                                        "Best Scores Achieved in the Last " + days + (days == 1 ? " Day" : " Days")
-                                );
-                            }, renderer.getRenderExecutor());
+                                return prepareScoreList(context, user, recentBestScores, ScoreType.BEST, List.of(),
+                                        "Best Scores Achieved in the Last " + days + (days == 1 ? " Day" : " Days"));
+                            });
                 })
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getFriends(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             context.status(401)
-                    .result(Response.error("Missing Authorization header", ErrorCode.UNAUTHORIZED).toString());
+                    .result(Response.error("Missing X-Osu-Authorization header", ErrorCode.UNAUTHORIZED).toString());
             return;
         }
 
@@ -453,6 +430,24 @@ public class UserController {
                 })
                 .thenAccept(u -> context.status(200).result(new Response(true, "Success", GSON.toJsonTree(u)).toString()))
         );
+    }
+
+    private ScoreListData prepareScoreList(Context context, UserExtended user, FilteredScores scores,
+                                           ScoreType type, List<String> filters, String title) {
+        context.header("X-User-Id", String.valueOf(user.getId()));
+        context.header("X-Score-Ids", scores.scores().stream().map(Score::getId)
+                .map(String::valueOf).collect(Collectors.joining(",")));
+        return new ScoreListData(user, scores.scores(), type, filters, scores.originalPositions(), title);
+    }
+
+    private byte[] renderScoreList(ScoreListData data) {
+        return data.title() == null
+                ? renderer.renderScores(data.user(), data.scores(), data.type(), data.filters(), data.positions())
+                : renderer.renderScores(data.user(), data.scores(), data.type(), data.filters(), data.positions(), data.title());
+    }
+
+    private record ScoreListData(UserExtended user, List<Score> scores, ScoreType type,
+                                 List<String> filters, List<Integer> positions, String title) {
     }
 
     record FilteredScores(List<Score> scores, List<Integer> originalPositions) {

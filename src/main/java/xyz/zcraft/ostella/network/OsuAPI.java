@@ -1,17 +1,16 @@
 package xyz.zcraft.ostella.network;
 
+import xyz.zcraft.osu.model.multiplayer.Match;
+
 import com.google.gson.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.AppConfig;
-import xyz.zcraft.ostella.data.ScoreType;
-import xyz.zcraft.ostella.data.TokenData;
-import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
-import xyz.zcraft.ostella.data.MultiplayerRoomScore;
-import xyz.zcraft.ostella.data.MultiplayerMatchDetails;
+import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.multiplayer.Room;
 
 import java.io.IOException;
 import java.net.URI;
@@ -27,12 +26,28 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class OsuAPI {
+    public static final int MAX_USER_SCORES_LIMIT = 200;
     private static final Logger LOG = LogManager.getLogger(OsuAPI.class);
     private static final HttpClient CLIENT = HttpClient.newBuilder().build();
     private static final String BASE_URL = "https://osu.ppy.sh/api/v2";
     private static final Gson GSON = new Gson();
     private static final int USER_SCORES_PAGE_LIMIT = 100;
-    public static final int MAX_USER_SCORES_LIMIT = 200;
+
+    private static <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
+            throws IOException, InterruptedException {
+        if (ApiActivity.isBackground()) {
+            ApiActivity.checkBackground();
+            HttpRequest bounded = HttpRequest.newBuilder(request, (name, value) -> true)
+                    .timeout(Duration.ofSeconds(30)).build();
+            return CLIENT.send(bounded, handler);
+        }
+        ApiActivity.begin();
+        try {
+            return CLIENT.send(request, handler);
+        } finally {
+            ApiActivity.end();
+        }
+    }
 
     public static TokenData getToken(AppConfig conf) {
         try {
@@ -49,7 +64,7 @@ public class OsuAPI {
                     .header("Accept", "application/json")
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             final JsonObject asJsonObject = JsonParser.parseString(body).getAsJsonObject();
             return new TokenData(
@@ -70,7 +85,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
@@ -99,7 +114,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
@@ -132,7 +147,7 @@ public class OsuAPI {
             for (UserScoresPage page : userScoresPages(limit, offset)) {
                 final String url = userScoresUrl(uid, type, fail, page);
                 final var request = newRequestBuilder(tokenData, url).GET().build();
-                final HttpResponse<String> send = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+                final HttpResponse<String> send = send(request, HttpResponse.BodyHandlers.ofString());
 
                 if (send.statusCode() == 404) {
                     throw new ApiException(ErrorCode.NO_USER_FOUND, "User not found for uid " + uid);
@@ -191,9 +206,6 @@ public class OsuAPI {
         );
     }
 
-    record UserScoresPage(int limit, int offset) {
-    }
-
     public static Score getUserScore(TokenData tokenData, long uid, long beatmapId, String mods) {
         LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
         try {
@@ -207,7 +219,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final String body = CLIENT.send(request, HttpResponse.BodyHandlers.ofString()).body();
+            final String body = send(request, HttpResponse.BodyHandlers.ofString()).body();
 
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
@@ -223,14 +235,14 @@ public class OsuAPI {
         return getUserScore(tokenData, uid, beatmapId, null);
     }
 
-    public static MultiplayerRoom getCurrentRoom(String auth) {
+    public static Room getCurrentRoom(String auth) {
         LOG.debug("Getting current room");
         try {
             final var request = newRequestBuilder(auth, "/rooms?mode=participated&type_group=realtime&is_active=true")
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 401 || response.statusCode() == 403) {
                 throw new ApiException(
@@ -260,7 +272,7 @@ public class OsuAPI {
                 return null;
             }
 
-            return GSON.fromJson(arr.get(0), MultiplayerRoom.class);
+            return GSON.fromJson(arr.get(0), Room.class);
         } catch (JsonSyntaxException | InterruptedException | IOException e) {
             throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Failed to fetch current room", e);
         }
@@ -273,7 +285,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -299,7 +311,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -329,7 +341,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -360,7 +372,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -393,7 +405,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -412,14 +424,14 @@ public class OsuAPI {
         }
     }
 
-    public static List<MultiplayerRoom> getRooms(TokenData tokenData) {
+    public static List<Room> getRooms(TokenData tokenData) {
         LOG.debug("Fetching multiplayer rooms");
         try {
             final var request = newRequestBuilder(tokenData, "/rooms")
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -434,9 +446,9 @@ public class OsuAPI {
 
             final String body = response.body();
 
-            final LinkedList<MultiplayerRoom> rooms = new LinkedList<>();
+            final LinkedList<Room> rooms = new LinkedList<>();
             JsonParser.parseString(body).getAsJsonArray().forEach(
-                    s -> rooms.add(GSON.fromJson(s, MultiplayerRoom.class)));
+                    s -> rooms.add(GSON.fromJson(s, Room.class)));
 
             return rooms;
         } catch (IOException | InterruptedException e) {
@@ -451,7 +463,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -481,7 +493,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -511,7 +523,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -534,13 +546,13 @@ public class OsuAPI {
         }
     }
 
-    public static MultiplayerRoomDetails getRoom(TokenData tokenData, long roomId) {
+    public static Room getRoom(TokenData tokenData, long roomId) {
         LOG.debug("Fetching multiplayer room {}", roomId);
         try {
             final var request = newRequestBuilder(tokenData, "/rooms/" + roomId)
                     .GET()
                     .build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer room " + roomId + " was not found");
@@ -552,7 +564,7 @@ public class OsuAPI {
                 );
             }
 
-            MultiplayerRoomDetails room = GSON.fromJson(response.body(), MultiplayerRoomDetails.class);
+            Room room = GSON.fromJson(response.body(), Room.class);
             if (room == null || room.getId() <= 0) {
                 throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for room " + roomId);
             }
@@ -562,10 +574,8 @@ public class OsuAPI {
         }
     }
 
-    public static MultiplayerRoomDetails.PlaylistItem getRoomEventPlaylistItem(
-            TokenData tokenData,
-            long roomId,
-            long playlistItemId
+    public static Room.PlaylistItem getRoomEventPlaylistItem(
+            TokenData tokenData, long roomId, long playlistItemId
     ) {
         return getRoomEventPlaylistItems(tokenData, roomId).stream()
                 .filter(item -> item.getId() == playlistItemId)
@@ -573,16 +583,15 @@ public class OsuAPI {
                 .orElse(null);
     }
 
-    public static List<MultiplayerRoomDetails.PlaylistItem> getRoomEventPlaylistItems(
-            TokenData tokenData,
-            long roomId
+    public static List<Room.PlaylistItem> getRoomEventPlaylistItems(
+            TokenData tokenData, long roomId
     ) {
         LOG.debug("Fetching events for multiplayer room {}", roomId);
         try {
             final var request = newRequestBuilder(tokenData, "/rooms/" + roomId + "/events")
                     .GET()
                     .build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return List.of();
@@ -604,39 +613,40 @@ public class OsuAPI {
         }
     }
 
-    static MultiplayerRoomDetails.PlaylistItem eventPlaylistItem(String body, long playlistItemId) {
+    static Room.PlaylistItem eventPlaylistItem(String body, long playlistItemId) {
         return eventPlaylistItems(body).stream()
                 .filter(item -> item.getId() == playlistItemId)
                 .findFirst()
                 .orElse(null);
     }
 
-    static List<MultiplayerRoomDetails.PlaylistItem> eventPlaylistItems(String body) {
+    static List<Room.PlaylistItem> eventPlaylistItems(String body) {
         JsonObject root = JsonParser.parseString(body).getAsJsonObject();
         JsonArray playlistItems = root.has("playlist_items") && root.get("playlist_items").isJsonArray()
                 ? root.getAsJsonArray("playlist_items")
                 : new JsonArray();
-        List<MultiplayerRoomDetails.PlaylistItem> result = new ArrayList<>(playlistItems.size());
+        List<Room.PlaylistItem> result = new ArrayList<>(playlistItems.size());
         for (JsonElement element : playlistItems) {
             if (!element.isJsonObject()) {
                 continue;
             }
-            result.add(GSON.fromJson(element, MultiplayerRoomDetails.PlaylistItem.class));
+            result.add(GSON.fromJson(element, Room.PlaylistItem.class));
         }
         return List.copyOf(result);
     }
 
-    public static MultiplayerMatchDetails getMatch(TokenData tokenData, long matchId) {
+    public static Match getMatch(TokenData tokenData, long matchId) {
         LOG.debug("Fetching stable multiplayer match {}", matchId);
         try {
             final var request = newRequestBuilder(tokenData, "/matches/" + matchId + "?limit=101")
                     .GET()
                     .build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_ROOM_FOUND, "Multiplayer match " + matchId + " was not found");
             }
+
             if (response.statusCode() >= 400) {
                 throw new ApiException(
                         ErrorCode.ROOM_FETCH_FAILED,
@@ -644,7 +654,7 @@ public class OsuAPI {
                 );
             }
 
-            MultiplayerMatchDetails match = GSON.fromJson(response.body(), MultiplayerMatchDetails.class);
+            Match match = GSON.fromJson(response.body(), Match.class);
             if (match == null || match.getMatch() == null || match.getMatch().getId() <= 0) {
                 throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for match " + matchId);
             }
@@ -655,16 +665,14 @@ public class OsuAPI {
     }
 
     public static List<MultiplayerRoomScore> getRoomPlaylistScores(
-            TokenData tokenData,
-            long roomId,
-            long playlistItemId
+            TokenData tokenData, long roomId, long playlistItemId
     ) {
         LOG.debug("Fetching scores for multiplayer room {} playlist item {}", roomId, playlistItemId);
         try {
             String endpoint = "/rooms/%d/playlist/%d/scores?limit=100&sort=score_desc"
                     .formatted(roomId, playlistItemId);
             final var request = newRequestBuilder(tokenData, endpoint).GET().build();
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores for playlist item " + playlistItemId);
@@ -702,6 +710,7 @@ public class OsuAPI {
         }
     }
 
+
     private static String multiplayerTeam(JsonObject score) {
         if (score.has("team") && !score.get("team").isJsonNull()) {
             return score.get("team").getAsString();
@@ -715,7 +724,6 @@ public class OsuAPI {
         return null;
     }
 
-
     public static BeatmapExtended getBeatmapByChecksum(TokenData tokenData, String checksum) {
         LOG.debug("Fetching beatmap with checksum {}", checksum);
         try {
@@ -724,7 +732,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 404) {
                 return null;
             }
@@ -752,7 +760,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -795,7 +803,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<byte[]> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -834,7 +842,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<byte[]> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -859,7 +867,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<byte[]> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            final HttpResponse<byte[]> response = send(request, HttpResponse.BodyHandlers.ofByteArray());
 
             if (response.statusCode() == 404) {
                 throw new ApiException(
@@ -888,7 +896,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            HttpResponse<Void> response = CLIENT.send(request, HttpResponse.BodyHandlers.discarding());
+            HttpResponse<Void> response = send(request, HttpResponse.BodyHandlers.discarding());
             return response.statusCode() == 200;
         } catch (InterruptedException | IOException e) {
             return false;
@@ -902,7 +910,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -931,7 +939,7 @@ public class OsuAPI {
                     .GET()
                     .build();
 
-            final HttpResponse<String> response = CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
                 return null;
@@ -949,6 +957,9 @@ public class OsuAPI {
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get self data", e);
         }
+    }
+
+    record UserScoresPage(int limit, int offset) {
     }
 }
 

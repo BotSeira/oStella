@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.network;
 
 import io.javalin.Javalin;
+import io.javalin.http.UnauthorizedResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -38,6 +39,17 @@ public class WebServer implements Closeable {
             threadPool.setName("ServPool");
             cfg.jetty.threadPool = threadPool;
 
+            cfg.routes.beforeMatched(ctx -> {
+                final String token = conf.ostella().token();
+                if (token != null && !token.isBlank()) {
+                    final String header = ctx.header(Headers.SERVICE_AUTHORIZATION);
+                    if (header == null || !header.equals("Bearer " + token)) {
+                        ctx.status(401).result("Unauthorized");
+                        throw new UnauthorizedResponse();
+                    }
+                }
+            });
+
             cfg.routes.before(ctx -> {
                 requests.incrementAndGet();
                 LOG.debug("{} {} {}", ctx.method(), ctx.path(), ctx.queryString());
@@ -45,14 +57,15 @@ public class WebServer implements Closeable {
 
             cfg.routes
                     .get("/beatmaps/lookup", router.beatmapController::lookupBeatmap)
-                    .get("/beatmaps/{beatmapId}/analysis", router.beatmapController::renderBeatmapAnalysisById)
-                    .get("/beatmaps/{beatmapId}", router.beatmapController::renderBeatmapById)
+                    .get("/beatmaps/{beatmapId}/analysis", router.beatmapController::getBeatmapAnalysisById)
+                    .get("/beatmaps/{beatmapId}", router.beatmapController::getBeatmapById)
                     .post("/beatmaps/{beatmapId}/leaderboards", router.leaderboardController::getMapLeaderboard)
                     .get("/beatmaps/{beatmapId}/background", router.beatmapController::getBackground)
 
+                    .post("/beatmapsets", router.beatmapsetController::getBeatmapsets)
                     .get("/beatmapsets/lookup", router.beatmapsetController::lookupBeatmapset)
                     .get("/beatmapsets/search", router.beatmapsetController::searchBeatmapset)
-                    .get("/beatmapsets/{beatmapsetId}", router.beatmapsetController::renderBeatmapsetById)
+                    .get("/beatmapsets/{beatmapsetId}", router.beatmapsetController::getBeatmapsetById)
                     .get("/beatmapsets/{beatmapsetId}/background", router.beatmapsetController::getBeatmapsetBg)
                     .get("/beatmapsets/{beatmapsetId}/download", router.beatmapsetController::downloadBeatmapset)
 
@@ -61,8 +74,8 @@ public class WebServer implements Closeable {
                     .post("/scores/random/users", router.scoreController::randomScoreFromUsers)
                     .get("/scores/random/users/{userId}/weights", router.scoreController::randomScoreFromUsersWeights)
                     .post("/scores/random/users/{userId}/weights", router.scoreController::randomScoreFromUsersWeights)
-                    .get("/scores/{scoreId}", router.scoreController::renderScoreById)
-                    .get("/scores/{scoreId}/analysis", router.analyzeController::renderScoreAnalysisById)
+                    .get("/scores/{scoreId}", router.scoreController::getScoreById)
+                    .get("/scores/{scoreId}/analysis", router.analyzeController::getScoreAnalysisById)
                     .get("/scores/{scoreId}/highlight", router.analyzeController::getScoreHighlight)
                     .get("/scores/{scoreId}/misses", router.analyzeController::getMisses)
                     .get("/scores/{scoreId}/misses/{missIndex}/visualize", router.analyzeController::visualizeMiss)
@@ -71,7 +84,7 @@ public class WebServer implements Closeable {
                     .get("/multiplayer/rooms/current/item", router.multiplayerController::getCurrentRoomItem)
                     .get("/multiplayer/rooms/{roomId}/watch", router.multiplayerController::getRoomWatchState)
                     .get("/multiplayer/rooms/{roomId}/playlist/{playlistItemId}/result",
-                            router.multiplayerController::renderRoomResult)
+                            router.multiplayerController::getRoomResult)
 
                     .post("/users", router.userController::getUsers)
                     .post("/users/lookup", router.userController::lookupUser)
@@ -114,30 +127,17 @@ public class WebServer implements Closeable {
             cfg.routes
                     .exception(ApiException.class, (e, ctx) -> {
                         failures.incrementAndGet();
-                        switch (e.getErrorCode()) {
-                            case ErrorCode.NO_BEATMAP_FOUND,
-                                 ErrorCode.NO_BEATMAPSET_FOUND,
-                                 ErrorCode.NO_SCORE_FOUND,
-                                 ErrorCode.NO_ROOM_FOUND,
-                                 ErrorCode.NO_USER_FOUND -> ctx.status(404);
 
-                            case ErrorCode.UNAUTHORIZED -> ctx.status(401);
-
-                            case ErrorCode.ILLEGAL_ARGUMENT,
-                                 ErrorCode.REPLAY_UNAVAILABLE -> ctx.status(400);
-
-                            case ErrorCode.BEATMAP_FETCH_FAILED,
-                                 ErrorCode.BEATMAPSET_FETCH_FAILED,
-                                 ErrorCode.SCORE_FETCH_FAILED,
-                                 ErrorCode.USER_FETCH_FAILED,
-                                 ErrorCode.RENDER_QUEUE_FULL -> ctx.status(429);
-
-                            case ErrorCode.RENDERER_UNAVAILABLE,
-                                 ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE -> ctx.status(502);
-
-                            default -> ctx.status(500);
+                        if ("body".equalsIgnoreCase(ctx.header("X-Error-Mode"))) {
+                            ctx.status(200)
+                                    .contentType("application/json")
+                                    .result(new Response(false, e.getMessage(), e.getErrorCode().toJson()).toString());
+                        } else {
+                            ctx.status(e.getErrorCode().getHttpCode())
+                                    .contentType("application/json")
+                                    .result(new Response(false, e.getMessage(), e.getErrorCode().toJson()).toString());
                         }
-                        ctx.result(new Response(false, e.getMessage(), e.getErrorCode().toJson()).toString());
+
                         if (e.getWrappedException() != null) {
                             LOG.error("API error occurred while processing request: {} - {}", ctx.queryString(), e.getMessage(), e.getWrappedException());
                         } else {
@@ -146,7 +146,7 @@ public class WebServer implements Closeable {
                     })
                     .exception(Exception.class, (e, ctx) -> {
                         failures.incrementAndGet();
-                        ctx.status(500).result(new Response(false, "An error occurred while processing the request!", null).toString());
+                        ctx.status(500).contentType("application/json").result(new Response(false, "An error occurred while processing the request!", null).toString());
                         LOG.error("An error occurred while processing request: {}", ctx.queryString(), e);
                     });
         });
@@ -155,6 +155,7 @@ public class WebServer implements Closeable {
     public void start() {
         app.start(conf.webserver().port());
         running.set(true);
+        router.autoCache.start();
         LOG.info("Started web server on port {}", conf.webserver().port());
     }
 
@@ -187,6 +188,10 @@ public class WebServer implements Closeable {
 
     public void deleteReplayJob(String jobId) {
         router.replayService.deleteJob(jobId);
+    }
+
+    public void setAutoCache(xyz.zcraft.ostella.service.AutoCacheService.Type type, boolean enabled) {
+        router.autoCache.setEnabled(type, enabled);
     }
 
     public int clearCache(CacheService.CacheArea area) {

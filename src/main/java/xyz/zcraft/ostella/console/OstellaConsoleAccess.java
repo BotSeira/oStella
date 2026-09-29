@@ -1,8 +1,8 @@
 package xyz.zcraft.ostella.console;
 
-import xyz.zcraft.ostella.network.WebServer;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
+import xyz.zcraft.ostella.network.WebServer;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.ReplayService;
 
@@ -20,6 +20,8 @@ public interface OstellaConsoleAccess {
     int clearCache(CacheService.CacheArea area);
 
     CacheControlResult controlCache(CacheControlRequest request);
+
+    void setAutoCache(xyz.zcraft.ostella.service.AutoCacheService.Type type, boolean enabled);
 
     void requestStop();
 }

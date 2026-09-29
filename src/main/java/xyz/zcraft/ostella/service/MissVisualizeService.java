@@ -22,9 +22,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedList;
+import java.util.*;
 import java.util.List;
 
 public class MissVisualizeService {
@@ -46,6 +44,10 @@ public class MissVisualizeService {
     }
 
     public static byte[] visualizeMiss(ReplayAnalyze replayAnalyze, int missIndex) {
+        return renderMiss(prepareMiss(replayAnalyze, missIndex));
+    }
+
+    public static MissVisualizationData prepareMiss(ReplayAnalyze replayAnalyze, int missIndex) {
         final List<HitEvent> missEvents = replayAnalyze.events().stream()
                 .filter(hitEvent -> !hitEvent.wasHit())
                 .filter(hitEvent -> hitEvent.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
@@ -60,24 +62,40 @@ public class MissVisualizeService {
 
         final var keyFrames = replayAnalyze.replay().timedKeyFrames();
 
-
         final int mods = replayAnalyze.replay().mods();
-        final var realtimePpLoss = AnalyzeController.calculateRealtimePpLoss(
-                replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
-        final var finalPpLoss = AnalyzeController.calculateFinalPpLoss(
-                replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
-        final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(
-                replayAnalyze.beatmap(), replayAnalyze, mods);
+        final var realtimePpLoss = AnalyzeController.calculateRealtimePpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
+        final var finalPpLoss = AnalyzeController.calculateFinalPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
+        final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods);
+        final var nearbyHitEvents = extractNearbyHitEvents(replayAnalyze.events(), targetMiss);
+        final var nearbyKeyFrames = extractNearbyKeyFrames(keyFrames, targetMiss.hitObject());
 
-        return ImageHelper.drawMiss(
-                missIndex,
-                targetMiss,
-                extractNearbyKeyFrames(keyFrames, targetMiss.hitObject()),
-                replayAnalyze.beatmap(),
-                replayAnalyze.calculatedDifficulty(),
-                ReplayAnalyzer.hasHardRock(replayAnalyze.replay()),
-                realtimePpLoss, finalPpLoss, totalMissPpLoss
+        return new MissVisualizationData(
+                missIndex, targetMiss, nearbyHitEvents, nearbyKeyFrames,
+                replayAnalyze.beatmap(), replayAnalyze.calculatedDifficulty(),
+                ReplayAnalyzer.hasHardRock(replayAnalyze.replay()), realtimePpLoss, finalPpLoss, totalMissPpLoss
         );
+    }
+
+    public static byte[] renderMiss(MissVisualizationData data) {
+        return ImageHelper.drawMiss(data.index(), data.target(), data.keyFrames(), data.beatmap(),
+                data.difficulty(), data.hardRock(), data.realtimePpLoss(), data.finalPpLoss(), data.totalMissPpLoss());
+    }
+
+    private static List<HitEvent> extractNearbyHitEvents(List<HitEvent> events, HitEvent target) {
+        int index = -1;
+
+        for (int i = 0; i < events.size(); i++) {
+            if (events.get(i).eventTime() == target.eventTime()) {
+                index = i;
+                break;
+            }
+        }
+
+        if (index == -1) {
+            return List.of();
+        }
+
+        return events.subList(Math.max(0, index - 5), Math.min(events.size(), index + 5));
     }
 
     private static List<OsuReplay.TimedKeyFrame> extractNearbyKeyFrames(List<OsuReplay.TimedKeyFrame> keyFrames, HitObject hitObject) {
@@ -104,6 +122,36 @@ public class MissVisualizeService {
         }
 
         return keyFrames.subList(leftIndex, rightIndex + 1);
+    }
+
+    public record MissVisualizationData(
+            int index, HitEvent target, List<HitEvent> nearbyHitEvents, List<OsuReplay.TimedKeyFrame> keyFrames,
+            OsuBeatmap beatmap, DifficultyAttribute difficulty, boolean hardRock,
+            AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
+            AnalyzeController.PPLoss totalMissPpLoss
+    ) {
+        public Map<String, Object> responseData() {
+            Map<String, Object> result = new HashMap<>();
+            result.put("index", index);
+            result.put("beatmapId", beatmap.getBeatmapId());
+            result.put("targetMiss", target);
+            result.put("nearbyHitEvents", nearbyHitEvents);
+            result.put("nearbyKeyFrames", keyFrames);
+            result.put("difficulty", difficulty);
+            result.put("difficultySpecs", Map.of(
+                    "circleRadius", difficulty.getCircleRadiusInPixel(),
+                    "windows", Map.of(
+                            "perfect", difficulty.getPerfectWindow(),
+                            "ok", difficulty.getOkWindow(),
+                            "meh", difficulty.getMehWindow(),
+                            "miss", difficulty.getMissWindow()
+                    )
+            ));
+            result.put("realtimePpLoss", realtimePpLoss);
+            result.put("finalPpLoss", finalPpLoss);
+            result.put("totalMissPpLoss", totalMissPpLoss);
+            return result;
+        }
     }
 
     private static final class Colors {

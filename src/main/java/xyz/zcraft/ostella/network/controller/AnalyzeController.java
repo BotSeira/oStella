@@ -4,6 +4,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import desu.life.RosuFFI;
 import io.javalin.http.Context;
+import xyz.zcraft.ostella.network.ImageResponse;
+import xyz.zcraft.ostella.data.ScoreAnalysisData;
+import xyz.zcraft.ostella.data.PerformanceGraphData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -182,12 +185,9 @@ public class AnalyzeController {
                 event -> event.objectIndex() == replaceMissIndex);
     }
 
-    public record PPLoss(
-            double withoutMiss,
-            double actual
-    ){};
-
-    /** Calculates the PP lost at the moment the target miss occurs. */
+    /**
+     * Calculates the PP lost at the moment the target miss occurs.
+     */
     public static PPLoss calculateRealtimePpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, HitEvent targetMiss
     ) {
@@ -205,7 +205,9 @@ public class AnalyzeController {
         return new PPLoss(withoutMissPp, actualPp);
     }
 
-    /** Calculates how much the target miss changes the PP at the end of the map. */
+    /**
+     * Calculates how much the target miss changes the PP at the end of the map.
+     */
     public static PPLoss calculateFinalPpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits, HitEvent targetMiss
     ) {
@@ -225,7 +227,9 @@ public class AnalyzeController {
         return new PPLoss(withoutMissPp, actualPp);
     }
 
-    /** Calculates the final PP lost to all object-start misses while preserving 100s and 50s. */
+    /**
+     * Calculates the final PP lost to all object-start misses while preserving 100s and 50s.
+     */
     public static PPLoss calculateTotalMissPpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits
     ) {
@@ -314,7 +318,7 @@ public class AnalyzeController {
                 .toList();
     }
 
-    public void renderScoreAnalysisById(@NotNull Context context) {
+    public void getScoreAnalysisById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenCompose(score -> {
@@ -437,13 +441,12 @@ public class AnalyzeController {
                                         ScoreId.format(score), error);
                                 return null;
                             })
-                            .thenApply(performancePlus -> new ScoreAnalyzeData(
+                            .thenApply(performancePlus -> new ScoreAnalysisData(
                                     score, diffSpec, hitErrors, hitPos, hitPosAbs,
                                     missPos, missPosAbs, aimBias, avgTimingError, analyze,
                                     performanceGraph, performancePlus, isLazerScore, doSimMatch, simHitResult));
                 })
-                .thenApplyAsync(renderer::renderScoreAnalysis, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenCompose(data -> ImageResponse.respond(context, data, ScoreAnalysisData::responseData, renderer::renderScoreAnalysis, renderer.getRenderExecutor())));
     }
 
     public void getMisses(@NotNull Context context) {
@@ -521,38 +524,18 @@ public class AnalyzeController {
         final int missIndex = requirePathInt(context, "missIndex");
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
-                .thenApply(analyze -> MissVisualizeService.visualizeMiss(analyze, missIndex))
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenApply(analyze -> MissVisualizeService.prepareMiss(analyze, missIndex))
+                .thenCompose(data -> ImageResponse.respond(context, data,
+                        MissVisualizeService.MissVisualizationData::responseData,
+                        MissVisualizeService::renderMiss, Runnable::run)));
     }
 
-    public record ScoreAnalyzeData(
-            Score score,
-            DiffSpec diffSpec,
-            List<Long> hitErrors,
-            List<double[]> hitPositions,
-            List<double[]> hitPositionsAbsolute,
-            List<double[]> missPositions,
-            List<double[]> missPositionsAbsolute,
-            double aimBias,
-            double avgTimingError,
-            ReplayAnalyze replayAnalyze,
-            PerformanceGraphData performanceGraph,
-            PerfPlusApi.PerformancePlus performancePlus,
-            boolean isLazerScore,
-            boolean doSimMatch,
-            String simHitResult
+    public record PPLoss(
+            double withoutMiss,
+            double actual
     ) {
     }
 
-    public record PerformanceGraphData(
-            List<double[]> windowDifficulties,
-            List<double[]> realtimePp,
-            List<Long> misses,
-            List<Long> hit50s,
-            List<Long> hit100s,
-            List<Long> sliderTickBreaks,
-            List<Long> sliderEndBreaks,
-            long mapEndTime
-    ) {
-    }
+
+
 }

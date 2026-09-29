@@ -5,9 +5,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
+import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.util.MiscUtil;
@@ -51,13 +51,37 @@ public final class ReplayService implements Closeable {
                 .build();
     }
 
+    private static String rootMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) current = current.getCause();
+        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
+    }
+
+    private static String stringOrNull(JsonObject json, String name) {
+        return json.has(name) && !json.get(name).isJsonNull() ? json.get(name).getAsString() : null;
+    }
+
+    private static void requireSuccess(int statusCode, String body) {
+        if (statusCode >= 200 && statusCode < 300) {
+            return;
+        }
+        String suffix = body == null || body.isBlank() ? "" : ": " + body;
+        throw new ApiException(ErrorCode.RENDERER_UNAVAILABLE,
+                "osuRenderer returned HTTP " + statusCode + suffix);
+    }
+
+    private static ApiException unavailable(String message, Exception error) {
+        LOG.warn(message, error);
+        return new ApiException(ErrorCode.RENDERER_UNAVAILABLE, message, error);
+    }
+
     public QueuedJob queueRender(long scoreId, Path replay, long beatmapsetId, Path beatmapset,
-                                  double start, double end, boolean obscured) {
+                                 double start, double end, boolean obscured) {
         return queueRender(scoreId, replay, beatmapsetId, beatmapset, start, end, obscured, null);
     }
 
     public QueuedJob queueRender(long scoreId, Path replay, long beatmapsetId, Path beatmapset,
-                                  double start, double end, boolean obscured, QqUploadRequest qqUpload) {
+                                 double start, double end, boolean obscured, QqUploadRequest qqUpload) {
         return upload("single", null, beatmapsetId, beatmapset,
                 List.of(new ReplayInput(scoreId, replay)), start, end, "", obscured, qqUpload);
     }
@@ -69,15 +93,15 @@ public final class ReplayService implements Closeable {
     }
 
     public QueuedJob queueRenderShowcase(String beatmapId, long beatmapsetId,
-                                          List<ReplayInput> replays, Path beatmapset,
-                                          QqUploadRequest qqUpload) {
+                                         List<ReplayInput> replays, Path beatmapset,
+                                         QqUploadRequest qqUpload) {
         return upload("showcase", beatmapId, beatmapsetId, beatmapset,
                 replays, Double.NaN, Double.NaN, "", false, qqUpload);
     }
 
     public QueuedJob queueRenderPreview(long beatmapId, long beatmapsetId, Path beatmapset,
-                                         double start, double end, String mods,
-                                         QqUploadRequest qqUpload) {
+                                        double start, double end, String mods,
+                                        QqUploadRequest qqUpload) {
         return upload("autoplay", String.valueOf(beatmapId), beatmapsetId, beatmapset,
                 List.of(), start, end, mods, false, qqUpload);
     }
@@ -300,12 +324,6 @@ public final class ReplayService implements Closeable {
         }
     }
 
-    private static String rootMessage(Throwable error) {
-        Throwable current = error;
-        while (current.getCause() != null) current = current.getCause();
-        return current.getMessage() == null ? current.getClass().getSimpleName() : current.getMessage();
-    }
-
     public InputStream openJobResult(String jobId) {
         RendererWorker assigned = jobWorkers.get(jobId);
         if (assigned != null) {
@@ -521,7 +539,7 @@ public final class ReplayService implements Closeable {
 
     private WorkerStatus getWorkerStatus(RendererWorker worker) {
         HttpResponse<String> response = sendString(worker, request(worker, "renders/status")
-                .timeout(Duration.ofSeconds(10))
+                .timeout(Duration.ofSeconds(5))
                 .GET()
                 .build());
         if (response.statusCode() == 404) {
@@ -541,7 +559,7 @@ public final class ReplayService implements Closeable {
         }
     }
 
-    private List<WorkerStatus> probeWorkers() {
+    public List<WorkerStatus> probeWorkers() {
         List<CompletableFuture<WorkerStatus>> probes = rotatedWorkers().stream()
                 .map(worker -> CompletableFuture.supplyAsync(() -> getWorkerStatus(worker), workerProbeExecutor)
                         .exceptionally(_ -> {
@@ -615,24 +633,6 @@ public final class ReplayService implements Closeable {
         return rotated;
     }
 
-    private static String stringOrNull(JsonObject json, String name) {
-        return json.has(name) && !json.get(name).isJsonNull() ? json.get(name).getAsString() : null;
-    }
-
-    private static void requireSuccess(int statusCode, String body) {
-        if (statusCode >= 200 && statusCode < 300) {
-            return;
-        }
-        String suffix = body == null || body.isBlank() ? "" : ": " + body;
-        throw new ApiException(ErrorCode.RENDERER_UNAVAILABLE,
-                "osuRenderer returned HTTP " + statusCode + suffix);
-    }
-
-    private static ApiException unavailable(String message, Exception error) {
-        LOG.warn(message, error);
-        return new ApiException(ErrorCode.RENDERER_UNAVAILABLE, message, error);
-    }
-
     @Override
     public void close() {
         workerProbeExecutor.close();
@@ -693,7 +693,7 @@ public final class ReplayService implements Closeable {
     private record RendererWorker(URI uri) {
     }
 
-    private record WorkerStatus(RendererWorker worker, int queue, int active) {
+    public record WorkerStatus(RendererWorker worker, int queue, int active) {
     }
 
     private record JobLookup(boolean found, JobProgress progress) {

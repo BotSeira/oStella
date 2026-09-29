@@ -2,26 +2,26 @@ package xyz.zcraft.ostella.network.controller;
 
 import com.google.gson.JsonObject;
 import io.javalin.http.Context;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.BeatmapAnalysisData;
+import xyz.zcraft.ostella.data.BeatmapData;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.OsuAPI;
-import xyz.zcraft.ostella.network.PerfPlusApi;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.MultiplayerRoom;
 import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
-import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
@@ -36,9 +36,11 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
+import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class BeatmapController {
+    private static final Logger LOG = LogManager.getLogger(BeatmapController.class);
     final RenderService renderer;
     final AsyncService executor;
     final TokenManager tokenManager;
@@ -72,10 +74,13 @@ public class BeatmapController {
                 .thenApply(beatmapset -> {
                     if (beatmapset == null)
                         throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
+
+                    tryCache(beatmapset);
+
                     final List<BeatmapExtended> beatmaps = beatmapset.getBeatmaps();
                     beatmaps.sort(Comparator.comparingDouble(BeatmapExtended::getDifficultyRating));
-                    final BeatmapExtended beatmapExtended = beatmaps.get(i - 1);
-                    beatmapExtended.setBeatmapset(beatmapset);
+                    BeatmapExtended beatmapExtended = beatmaps.get(i - 1);
+                    beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
                     return beatmapExtended;
                 })
                 .thenAccept(beatmapExtended -> context.status(200).result(
@@ -94,7 +99,7 @@ public class BeatmapController {
     }
 
     private void lookupBeatmapFromSomeRoom(@NotNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
@@ -106,7 +111,7 @@ public class BeatmapController {
                     if (room == null)
                         throw new ApiException(ErrorCode.NO_ROOM_FOUND, "No multiplayer room found");
 
-                    final MultiplayerRoom.CurrentPlaylistItem currentPlaylistItem = room.getCurrentPlaylistItem();
+                    final Room.PlaylistItem currentPlaylistItem = room.getCurrentPlaylistItem();
                     if (currentPlaylistItem == null || currentPlaylistItem.getBeatmap() == null)
                         throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found for current multiplayer room");
 
@@ -146,10 +151,17 @@ public class BeatmapController {
                             .thenApply(beatmapset -> {
                                 if (beatmapset == null)
                                     throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-                                final BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
-                                        .stream().filter(b -> Objects.equals(b.getId(), beatmapId))
-                                        .findFirst().orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                                beatmapExtended.setBeatmapset(beatmapset);
+
+                                tryCache(beatmapset);
+
+                                BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
+                                        .stream()
+                                        .filter(b -> Objects.equals(b.getId(), beatmapId))
+                                        .findFirst()
+                                        .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
+
+                                beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
+
                                 return beatmapExtended;
                             });
                 })
@@ -173,12 +185,16 @@ public class BeatmapController {
                 .thenApply(beatmapset -> {
                     if (beatmapset == null)
                         throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-                    final BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
+
+                    tryCache(beatmapset);
+
+                    BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
                             .stream()
                             .filter(b -> Objects.equals(b.getId(), m))
                             .findFirst()
                             .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                    beatmapExtended.setBeatmapset(beatmapset);
+                    beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
+
                     return beatmapExtended;
                 })
                 .thenAccept(beatmapExtended -> context.status(200).result(
@@ -186,7 +202,7 @@ public class BeatmapController {
                 )));
     }
 
-    public void renderBeatmapById(@NotNull Context context) {
+    public void getBeatmapById(@NotNull Context context) {
         final String mod = optionalString(context, "mod");
         final long m = requirePathLong(context, "beatmapId");
 
@@ -195,38 +211,44 @@ public class BeatmapController {
                 .thenApply(beatmapset -> {
                     if (beatmapset == null)
                         throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-                    final BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
+
+                    tryCache(beatmapset);
+
+                    BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
                             .stream()
                             .filter(b -> Objects.equals(b.getId(), m))
                             .findFirst()
                             .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                    beatmapExtended.setBeatmapset(beatmapset);
+                    beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
+
                     context.header("X-Beatmap-Id", String.valueOf(beatmapExtended.getId()));
                     context.header("X-Beatmapset-Id", String.valueOf(beatmapExtended.getBeatmapsetId()));
 
                     return beatmapExtended;
                 })
-                .thenApplyAsync(beatmap -> {
-                    try {
-                        final Path beatmapPath = CacheService.getBeatmapPath(beatmap.getId());
-                        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
-                        DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, mod);
-
-                        final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) Math.max(3, (beatmap.getTotalLength() / 50.0))))
-                                .stream()
-                                .map(WindowDifficulty::pp)
-                                .map(pp -> pp * pp)
-                                .toList();
-
-                        return renderer.renderBeatmap(beatmap, diffSpec, diff);
-                    } catch (Exception e) {
-                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-                    }
-                }, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenCompose(beatmap -> ImageResponse.respond(context, beatmap,
+                        data -> renderBeatmap(data, mod), renderer.getRenderExecutor())));
     }
 
-    public void renderBeatmapAnalysisById(@NotNull Context context) {
+    private byte[] renderBeatmap(BeatmapExtended beatmap, String mod) {
+        try {
+            final Path beatmapPath = CacheService.getBeatmapPath(beatmap.getId());
+            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
+            DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, mod);
+
+            final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) Math.max(3, (beatmap.getTotalLength() / 50.0))))
+                    .stream()
+                    .map(WindowDifficulty::pp)
+                    .map(pp -> pp * pp)
+                    .toList();
+
+            return renderer.renderBeatmap(beatmap, diffSpec, diff);
+        } catch (Exception e) {
+            throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+        }
+    }
+
+    public void getBeatmapAnalysisById(@NotNull Context context) {
         final long beatmapId = requirePathLong(context, "beatmapId");
         final String requestedMods = optionalString(context, "mod");
         final List<String> mods;
@@ -251,7 +273,7 @@ public class BeatmapController {
                             .findFirst()
                             .orElseThrow(() -> new ApiException(
                                     ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                    beatmap.setBeatmapset(beatmapset);
+                    beatmap = BeatmapData.withBeatmapset(beatmap, beatmapset);
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
                     context.header("X-Beatmapset-Id", String.valueOf(beatmap.getBeatmapsetId()));
                     return beatmap;
@@ -295,8 +317,7 @@ public class BeatmapController {
                                         wrapped);
                             });
                 })
-                .thenApplyAsync(renderer::renderBeatmapAnalysis, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+                .thenCompose(data -> ImageResponse.respond(context, data, renderer::renderBeatmapAnalysis, renderer.getRenderExecutor())));
     }
 
     public void getBackground(@NotNull Context context) {
@@ -324,12 +345,22 @@ public class BeatmapController {
                                 fileName = fileName.substring(1, fileName.length() - 1);
                             }
 
-                            CacheService.cacheBeatmapsetFile(b.getBeatmapSetId());
-
-                            return CacheService.extractFile(b.getBeatmapSetId(), fileName)
-                                    .orElseThrow(() -> new ApiException(ErrorCode.NO_BACKGROUND_FOUND, "No background found"));
+                            return new BackgroundData(b.getBeatmapId(), b.getBeatmapSetId(), fileName);
                         })
-                        .thenAccept(bytes -> context.status(200).result(bytes))
+                        .thenAccept(background -> {
+                            if (ImageResponse.wantsJson(context)) {
+                                putResult(context, background);
+                                return;
+                            }
+                            CacheService.cacheBeatmapsetFile(background.beatmapsetId());
+                            byte[] bytes = CacheService.extractFile(background.beatmapsetId(), background.fileName())
+                                    .orElseThrow(() -> new ApiException(ErrorCode.NO_BACKGROUND_FOUND, "No background found"));
+                            String contentType = java.net.URLConnection.guessContentTypeFromName(background.fileName());
+                            context.status(200).contentType(contentType == null ? "application/octet-stream" : contentType).result(bytes);
+                        })
         );
+    }
+
+    private record BackgroundData(long beatmapId, long beatmapsetId, String fileName) {
     }
 }

@@ -5,10 +5,11 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.config.AppConfig;
-import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
+import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -17,7 +18,9 @@ import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.VersionInfo;
-import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
@@ -34,13 +37,14 @@ public class Router implements Closeable {
     static final Logger LOG = LogManager.getLogger(Router.class);
     public final RenderService renderer;
     public final AsyncService executor;
+    public final xyz.zcraft.ostella.service.AutoCacheService autoCache;
     public final TokenManager tokenManager;
     public final ReplayService replayService;
     public final AppConfig conf;
-    final Gson GSON = new Gson();
     public final ReplayController replayController;
-    final BeatmapController beatmapController;
     public final ScoreController scoreController;
+    final Gson GSON = new Gson();
+    final BeatmapController beatmapController;
     final BeatmapsetController beatmapsetController;
     final LeaderboardController leaderboardController;
     final AnalyzeController analyzeController;
@@ -56,6 +60,7 @@ public class Router implements Closeable {
                 conf.ostella().replayMaxConcurrent());
 
         CacheService.initialize(this.executor);
+        this.autoCache = new xyz.zcraft.ostella.service.AutoCacheService(executor, tokenManager);
 
         this.renderer = new RenderService(conf.ostella().renderWorkers());
 
@@ -74,6 +79,8 @@ public class Router implements Closeable {
     }
 
     protected void getServerStatus(@NotNull Context context) {
+        final int onlineWorkers = replayService.probeWorkers().size();
+        final int configuredWorkers = conf.replayRender().workers().size();
         context.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.isOsuApiHealthy(tokenManager.getTokenData()))
                 .thenAccept(r -> context.status(200)
@@ -83,6 +90,8 @@ public class Router implements Closeable {
                                 GSON.toJsonTree(Map.of(
                                         "ostella", true,
                                         "ostella_version", VersionInfo.getVersion(),
+                                        "all_render_workers", configuredWorkers,
+                                        "online_render_workers", onlineWorkers,
                                         "osu_api", r
                                 ))).toString())));
 
@@ -103,6 +112,7 @@ public class Router implements Closeable {
         CacheControlResult local = fetch
                 ? CacheService.fetch(request, tokenManager.getTokenData())
                 : CacheService.control(request);
+        if (List.of("BEATMAP-JSON", "BEATMAPSET-JSON").contains(local.type())) return local;
         List<CacheControlResult.CacheNodeResult> nodes = new ArrayList<>(local.nodes());
         Path fetchedPath = fetch && !local.nodes().isEmpty()
                 && List.of("FETCHED", "PRESENT").contains(local.nodes().getFirst().status())
@@ -168,6 +178,7 @@ public class Router implements Closeable {
 
     @Override
     public void close() {
+        autoCache.close();
         executor.close();
         renderer.close();
         replayService.close();
@@ -207,7 +218,7 @@ public class Router implements Closeable {
     }
 
     public void renderCustomTemplate(@NotNull Context context) {
-        final String s = context.pathParam("templateName");
+        final String templateName = context.pathParam("templateName");
 
         final JsonObject data = JsonParser.parseString(context.body()).getAsJsonObject();
 
@@ -282,8 +293,8 @@ public class Router implements Closeable {
                     }
                     return variables;
                 })
-                .thenApplyAsync(variables -> renderer.renderCustomTemplate(s, variables), renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes))
+                .thenCompose(variables -> ImageResponse.respond(context, variables,
+                        values -> renderer.renderCustomTemplate(templateName, values), renderer.getRenderExecutor()))
         );
     }
 }

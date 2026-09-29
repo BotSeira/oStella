@@ -1,5 +1,7 @@
 # === Config for oStella ===
 ostella:
+  # Bearer token for authenticating when calling oStella's API
+  token:
   # Maximum number of requests per second to send to the osu! API
   requestPerSecond: 10
   # Minimum delay between replay download requests in milliseconds

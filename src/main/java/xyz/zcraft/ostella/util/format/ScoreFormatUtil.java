@@ -1,9 +1,9 @@
 package xyz.zcraft.ostella.util.format;
 
+import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
-import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 

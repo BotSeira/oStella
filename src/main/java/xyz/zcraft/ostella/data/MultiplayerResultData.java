@@ -9,7 +9,7 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
                                     long totalScore, long averageScore, double teamLeadPercent, String winningTeam,
                                     SeriesScore seriesScore,
                                     BeatmapInfo beatmap, UserInfo queuedBy, List<PlayerResult> players,
-                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers) {
+                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, Integer customBo) {
     public MultiplayerResultData(
             long roomId,
             String roomName,
@@ -27,7 +27,8 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
             UserInfo queuedBy,
             List<PlayerResult> players,
             List<TeamResult> teams,
-            List<PlayerResult> unassignedPlayers
+            List<PlayerResult> unassignedPlayers,
+            Integer customBo
     ) {
         this.roomId = roomId;
         this.roomName = roomName;
@@ -46,6 +47,15 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         this.players = List.copyOf(players);
         this.teams = List.copyOf(teams);
         this.unassignedPlayers = List.copyOf(unassignedPlayers);
+        this.customBo = customBo;
+    }
+
+    private static int teamOrder(String team) {
+        return switch (team == null ? "" : team) {
+            case "red" -> 0;
+            case "blue" -> 1;
+            default -> 2;
+        };
     }
 
     public boolean isTeamVs() {
@@ -87,14 +97,6 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
                         seriesScore.playerWins().getOrDefault(player.userId(), 0)
                 ))
                 .toList();
-    }
-
-    private static int teamOrder(String team) {
-        return switch (team == null ? "" : team) {
-            case "red" -> 0;
-            case "blue" -> 1;
-            default -> 2;
-        };
     }
 
     private boolean isTeamDuel() {

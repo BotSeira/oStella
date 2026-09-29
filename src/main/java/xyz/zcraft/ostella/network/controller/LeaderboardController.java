@@ -3,6 +3,7 @@ package xyz.zcraft.ostella.network.controller;
 import com.google.gson.Gson;
 import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.Placement;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
@@ -56,20 +57,24 @@ public class LeaderboardController {
                 })
                 .thenCompose(placements ->
                         executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), m))
-                                .thenApplyAsync(beatmap -> {
+                                .thenApply(beatmap -> {
                                     if (beatmap == null) throw new ApiException(ErrorCode.NO_BEATMAP_FOUND);
-                                    final Path rosuBeatmapPath = CacheService.getBeatmapPath(m);
-
-                                    return finalizeMapLeaderboard(placements, beatmap, rosuBeatmapPath);
-                                }, renderer.getRenderExecutor()))
-                .thenAccept(imgByte -> context.status(200).result(imgByte)));
+                                    return new MapLeaderboardData(beatmap, placements);
+                                }))
+                .thenCompose(data -> ImageResponse.respond(context, data,
+                        this::renderMapLeaderboard, renderer.getRenderExecutor())));
     }
 
-    private byte[] finalizeMapLeaderboard(LinkedList<Placement> placements, BeatmapExtended beatmap, Path beatmapPath) {
+    private record MapLeaderboardData(BeatmapExtended beatmap, List<Placement> placements) {
+    }
+
+    private byte[] renderMapLeaderboard(MapLeaderboardData data) {
+        BeatmapExtended beatmap = data.beatmap();
+        Path beatmapPath = CacheService.getBeatmapPath(beatmap.getId());
         try {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
             final DiffSpec diffSpecForMap = OsuParser.getDiffSpecForMap(osuBeatmap, "");
-            return renderer.renderMapLeaderboard(beatmap, placements, diffSpecForMap.getPpSS());
+            return renderer.renderMapLeaderboard(beatmap, data.placements(), diffSpecForMap.getPpSS());
         } catch (ParseException | AnalyzeException e) {
             throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, "Failed to calculate difficulty", e);
         }
@@ -136,7 +141,7 @@ public class LeaderboardController {
                                         .filter(Objects::nonNull)
                                         .flatMap(List::stream)
                                         .collect(Collectors.toCollection(LinkedList::new)))
-                        .thenApplyAsync(users -> {
+                        .thenApply(users -> {
                             users.sort(Comparator.comparingDouble((User user) ->
                                     Optional.ofNullable(user)
                                             .map(User::getStatisticsRulesets)
@@ -144,10 +149,11 @@ public class LeaderboardController {
                                             .map(User.Statistics::getPp)
                                             .orElse(0.0)
                             ).reversed());
-                            return renderer.renderLeaderboard(users);
+                            return users;
 
-                        }, renderer.getRenderExecutor())
-                        .thenAccept(imgByte -> context.status(200).result(imgByte))
+                        })
+                        .thenCompose(users -> ImageResponse.respond(context, users,
+                                renderer::renderLeaderboard, renderer.getRenderExecutor()))
         );
     }
 

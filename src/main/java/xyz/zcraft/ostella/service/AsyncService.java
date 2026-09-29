@@ -1,5 +1,7 @@
 package xyz.zcraft.ostella.service;
 
+import xyz.zcraft.ostella.network.ApiActivity;
+
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -43,35 +45,49 @@ public class AsyncService {
             AtomicInteger active
     ) {
         submitted.incrementAndGet();
-        return CompletableFuture.supplyAsync(() -> {
-            boolean acquired = false;
+        ApiActivity.begin();
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                boolean acquired = false;
 
-            try {
-                if (concurrencyLimit != null) {
-                    concurrencyLimit.acquire();
-                    acquired = true;
-                }
-                rateGate.acquire();
-                active.incrementAndGet();
                 try {
-                    T result = supplier.get();
-                    completed.incrementAndGet();
-                    return result;
-                } catch (RuntimeException e) {
-                    failed.incrementAndGet();
-                    throw e;
+                    if (concurrencyLimit != null) {
+                        concurrencyLimit.acquire();
+                        acquired = true;
+                    }
+                    rateGate.acquire();
+                    active.incrementAndGet();
+                    try {
+                        T result = supplier.get();
+                        completed.incrementAndGet();
+                        return result;
+                    } catch (RuntimeException e) {
+                        failed.incrementAndGet();
+                        throw e;
+                    } finally {
+                        active.decrementAndGet();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new CompletionException(e);
                 } finally {
-                    active.decrementAndGet();
+                    if (acquired) {
+                        concurrencyLimit.release();
+                    }
+                    ApiActivity.end();
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new CompletionException(e);
-            } finally {
-                if (acquired) {
-                    concurrencyLimit.release();
-                }
-            }
-        }, targetExecutor);
+            }, targetExecutor).thenApply(value -> value);
+        } catch (RuntimeException e) {
+            ApiActivity.end();
+            throw e;
+        }
+    }
+
+    /** One prefetch step, only when foreground work and the shared rate gate are idle. */
+    public boolean tryBackground(java.util.function.BooleanSupplier allowed, Runnable action) {
+        if (!ApiActivity.idle() || !allowed.getAsBoolean() || !requestRateGate.tryAcquire()) return false;
+        ApiActivity.runBackground(allowed, action);
+        return true;
     }
 
     public Status status() {
@@ -89,6 +105,12 @@ public class AsyncService {
 
         private StrictRateGate(long intervalNanos) {
             this.intervalNanos = intervalNanos;
+        }
+
+        private synchronized boolean tryAcquire() {
+            if (System.nanoTime() < nextRequestNanos) return false;
+            nextRequestNanos = System.nanoTime() + intervalNanos;
+            return true;
         }
 
         private synchronized void acquire() throws InterruptedException {

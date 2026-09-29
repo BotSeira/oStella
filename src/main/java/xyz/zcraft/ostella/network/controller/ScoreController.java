@@ -9,6 +9,7 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreType;
@@ -24,10 +25,7 @@ import xyz.zcraft.ostella.util.RequestUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
@@ -43,6 +41,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class ScoreController {
@@ -76,12 +75,17 @@ public class ScoreController {
         }
     }
 
-    static List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+    private List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
         if (filters.isEmpty()) {
             return scores;
         }
         return scores.stream()
-                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score)))
+                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score, () -> {
+                    final Long id = score.getBeatmapset().getId();
+                    final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                    tryCache(beatmapset);
+                    return beatmapset;
+                })))
                 .toList();
     }
 
@@ -135,6 +139,22 @@ public class ScoreController {
         return bits;
     }
 
+    private static double getArFactor(double ar) {
+        if (ar >= 8.25) {
+            return 0.0;
+        }
+
+        return 2.5 * (1.0 - Math.exp(-1.3 * (8.25 - ar)));
+    }
+
+    private static double getCsFactor(double cs) {
+        if (cs <= 8.0) {
+            return 0.0;
+        }
+
+        return Math.pow((cs - 8.0) / 4.0, 1.25);
+    }
+
     public void lookupScore(@NotNull Context context) {
         if (context.queryParam("of") != null) {
             lookupScoreOfRefAsync(context);
@@ -147,38 +167,40 @@ public class ScoreController {
         }
     }
 
-    public void renderScoreById(@NotNull Context context) {
+    public void getScoreById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
 
         context.future(() -> router.getScore(scoreId)
-                .thenApplyAsync(score -> {
+                .thenApply(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    final BeatmapExtended beatmap = score.getBeatmap();
-
-                    context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
+                    context.header("X-Beatmap-Id", String.valueOf(score.getBeatmap().getId()))
                             .header("X-Score-Id", ScoreId.format(score));
+                    return score;
+                })
+                .thenCompose(score -> ImageResponse.respond(context, score, this::renderScore, renderer.getRenderExecutor())));
+    }
 
-                    try {
-                        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-                        final DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+    private byte[] renderScore(Score score) {
+        final BeatmapExtended beatmap = score.getBeatmap();
+        try {
+            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
+            final DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
 
-                        Double calPp = null;
-                        try {
-                            calPp = OsuParser.estimatePp(score, osuBeatmap);
-                        } catch (AnalyzeException e) {
-                            LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
-                        }
+            Double calPp = null;
+            try {
+                calPp = OsuParser.estimatePp(score, osuBeatmap);
+            } catch (AnalyzeException e) {
+                LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
+            }
 
-                        final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
+            final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
 
-                        return renderer.renderScore(score, diffSpec, calPp, replayPresent);
-                    } catch (ParseException e) {
-                        throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
-                    } catch (AnalyzeException e) {
-                        throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
-                    }
-                }, renderer.getRenderExecutor())
-                .thenAccept(bytes -> context.status(200).result(bytes)));
+            return renderer.renderScore(score, diffSpec, calPp, replayPresent);
+        } catch (ParseException e) {
+            throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+        } catch (AnalyzeException e) {
+            throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
+        }
     }
 
     private void lookupScoreOfIdAsync(@NotNull Context context) {
@@ -621,22 +643,6 @@ public class ScoreController {
         attributeFactor += getArFactor(difficultyAttribute.ar());
 
         return attributeFactor;
-    }
-
-    private static double getArFactor(double ar) {
-        if (ar >= 8.25) {
-            return 0.0;
-        }
-
-        return 2.5 * (1.0 - Math.exp(-1.3 * (8.25 - ar)));
-    }
-
-    private static double getCsFactor(double cs) {
-        if (cs <= 8.0) {
-            return 0.0;
-        }
-
-        return Math.pow((cs - 8.0) / 4.0, 1.25);
     }
 
     private record ModSet(Set<String> acronyms) {

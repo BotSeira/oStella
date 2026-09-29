@@ -1,9 +1,9 @@
 package xyz.zcraft.ostella.network.controller;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
+import com.google.gson.*;
 import io.javalin.http.Context;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.data.SearchResultItem;
@@ -19,13 +19,18 @@ import xyz.zcraft.osu.model.Beatmapset;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
 public class BeatmapsetController {
+    private static final Gson GSON = new Gson();
+    private static final Logger LOG = LogManager.getLogger(BeatmapsetController.class);
     public final RenderService renderer;
     public final AsyncService executor;
     public final TokenManager tokenManager;
@@ -48,8 +53,82 @@ public class BeatmapsetController {
         }
     }
 
+    public void getBeatmapsets(@NotNull Context context) {
+        final JsonElement body = JsonParser.parseString(context.body());
+        final var idArr = body.getAsJsonObject().getAsJsonArray("ids");
+
+        if (idArr == null || idArr.isEmpty()) {
+            context.status(400).result(Response.error("Missing 'ids' array in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        context.future(() -> {
+            List<CompletableFuture<Beatmapset>> beatmapsetFutures = new ArrayList<>(idArr.size());
+            for (JsonElement jsonElement : idArr) {
+                final long id = jsonElement.getAsLong();
+                beatmapsetFutures.add(
+                        CompletableFuture.supplyAsync(
+                                () -> CacheService.getBeatmapsetJsonCache(id)
+                                        .orElseGet(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id))
+                        )
+                );
+            }
+
+            return CompletableFuture.allOf(beatmapsetFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(_ -> {
+                        JsonArray resultArr = new JsonArray();
+                        for (var future : beatmapsetFutures) {
+                            try {
+                                final Beatmapset beatmapset = future.join();
+                                if (beatmapset == null) {
+                                    continue;
+                                }
+                                CacheService.tryCache(beatmapset);
+
+                                final List<Beatmap> beatmaps = new ArrayList<>(beatmapset.getBeatmaps().size());
+                                for (BeatmapExtended beatmap : beatmapset.getBeatmaps()) {
+                                    final Beatmap e = convertToShort(beatmap);
+                                    beatmaps.add(e);
+                                }
+
+                                beatmapset.setConverts(null);
+                                beatmapset.setRecentFavourites(null);
+                                beatmapset.setRelatedUsers(null);
+
+                                final var obj = GSON.toJsonTree(beatmapset).getAsJsonObject();
+                                obj.add("beatmaps", GSON.toJsonTree(beatmaps));
+
+                                resultArr.add(obj);
+                            } catch (CompletionException e) {
+                                if (e.getCause() instanceof ApiException apiEx) {
+                                    if (apiEx.getErrorCode() == ErrorCode.NO_BEATMAPSET_FOUND || apiEx.getErrorCode() == ErrorCode.BEATMAPSET_FETCH_FAILED) {
+                                        LOG.warn("Beatmapset not found for one of the requested ids: {}", apiEx.getMessage());
+                                    }
+                                }
+                                LOG.error("Error fetching beatmapset data", e);
+                            }
+                        }
+                        return resultArr;
+                    }).thenAccept(usersArr -> context.status(200).result(new Response(true, "Success", usersArr).toString()));
+        });
+    }
+
+    private @NonNull Beatmap convertToShort(BeatmapExtended beatmap) {
+        final Beatmap e = new Beatmap();
+        e.setBeatmapsetId(beatmap.getBeatmapsetId());
+        e.setDifficultyRating(beatmap.getDifficultyRating());
+        e.setId(beatmap.getBeatmapsetId());
+        e.setMode(beatmap.getMode());
+        e.setStatus(beatmap.getStatus());
+        e.setTopUserTagIds(beatmap.getTopUserTagIds());
+        e.setTotalLength(beatmap.getTotalLength());
+        e.setUserId(beatmap.getUserId());
+        e.setVersion(beatmap.getVersion());
+        return e;
+    }
+
     private void lookupBeatmapsetFromCurrentRoom(@NonNull Context context) {
-        final String auth = context.header("Authorization");
+        final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
         if (auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
@@ -93,20 +172,13 @@ public class BeatmapsetController {
         lookupBeatmapsetOfIdAsync(context, requireLong(context, "ms"));
     }
 
-    public void renderBeatmapsetById(@NotNull Context context) {
+    public void getBeatmapsetById(@NotNull Context context) {
         final long ms = requirePathLong(context, "beatmapsetId");
 
-        final String header = context.header("Accept");
-        if (header != null && header.contains("application/json")) {
-            context.future(
-                    () -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
-                            .thenAccept(beatmapset -> putResult(context, beatmapset))
-            );
-        } else {
-            context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
-                    .thenApplyAsync(beatmapset -> finalizeBeatmapset(beatmapset, context), renderer.getRenderExecutor())
-                    .thenAccept(bytes -> context.status(200).result(bytes)));
-        }
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
+                .thenApply(beatmapset -> prepareBeatmapsetResponse(beatmapset, context))
+                .thenCompose(beatmapset -> ImageResponse.respond(
+                        context, beatmapset, renderer::renderBeatmapset, renderer.getRenderExecutor())));
     }
 
     private void lookupBeatmapsetOfIdAsync(@NotNull Context context, long ms) {
@@ -141,7 +213,7 @@ public class BeatmapsetController {
         }
     }
 
-    private byte[] finalizeBeatmapset(Beatmapset beatmapset, Context context) {
+    private Beatmapset prepareBeatmapsetResponse(Beatmapset beatmapset, Context context) {
         if (beatmapset == null) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
         beatmapset.getBeatmaps().sort(Comparator.comparingDouble(Beatmap::getDifficultyRating));
         context.header("X-Beatmapset-Id", beatmapset.getId().toString())
@@ -154,7 +226,8 @@ public class BeatmapsetController {
                         .map(d -> String.format("%.2f", d))
                         .collect(Collectors.joining(",")));
 
-        return renderer.renderBeatmapset(beatmapset);
+        CacheService.tryCache(beatmapset);
+        return beatmapset;
     }
 
     public void downloadBeatmapset(@NotNull Context context) {
@@ -173,22 +246,26 @@ public class BeatmapsetController {
 
     public void getBeatmapsetBg(@NotNull Context context) {
         final long ms = requirePathLong(context, "beatmapsetId");
-        context.contentType("image/png");
+        final boolean json = ImageResponse.wantsJson(context);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
                 .thenAccept(beatmapset -> {
-                    if (beatmapset != null) {
-                        context.header("X-Beatmapset-Id", beatmapset.getId().toString());
-                        final String cover = beatmapset.getCovers().getCover();
-                        try {
-                            context.result(URI.create(cover).toURL().openStream());
-                        } catch (IOException e) {
-                            context.status(500).result(Response.error("Failed to parse bg url", ErrorCode.IMAGE_FETCH_FAILED).toString());
-                        }
+                    if (beatmapset == null) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
+                    context.header("X-Beatmapset-Id", beatmapset.getId().toString());
+                    final String cover = beatmapset.getCovers().getCover();
+                    if (json) {
+                        putResult(context, java.util.Map.of("beatmapset_id", ms, "url", cover));
+                        return;
+                    }
+                    try {
+                        var connection = URI.create(cover).toURL().openConnection();
+                        String contentType = connection.getContentType();
+                        context.contentType(contentType == null ? "application/octet-stream" : contentType)
+                                .result(connection.getInputStream());
+                    } catch (IOException e) {
+                        context.status(500).contentType("application/json").result(Response.error("Failed to parse bg url", ErrorCode.IMAGE_FETCH_FAILED).toString());
                     }
                 }));
     }
-
-    private static final Gson GSON = new Gson();
 
     public void searchBeatmapset(@NotNull Context context) {
         final String query = requireString(context, "q");

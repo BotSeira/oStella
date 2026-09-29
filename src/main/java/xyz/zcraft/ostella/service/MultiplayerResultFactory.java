@@ -1,15 +1,9 @@
 package xyz.zcraft.ostella.service;
 
 import xyz.zcraft.ostella.data.MultiplayerResultData;
-import xyz.zcraft.ostella.data.MultiplayerRoomDetails;
+import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
-import xyz.zcraft.osu.model.Beatmap;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Beatmapset;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.User;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 
 import java.util.*;
 
@@ -18,37 +12,39 @@ public final class MultiplayerResultFactory {
     }
 
     public static MultiplayerResultData create(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
+            Room room,
+            Room.PlaylistItem item,
             List<MultiplayerRoomScore> roomScores,
             User owner
     ) {
         return create(room, item, roomScores, owner, "lazer", "scorev2", room.getType(),
-                MultiplayerResultData.SeriesScore.empty());
+                MultiplayerResultData.SeriesScore.empty(), null);
     }
 
     public static MultiplayerResultData create(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores,
-            User owner,
-            String client,
-            String scoringType,
-            String teamType
-    ) {
-        return create(room, item, roomScores, owner, client, scoringType, teamType,
-                MultiplayerResultData.SeriesScore.empty());
-    }
-
-    public static MultiplayerResultData create(
-            MultiplayerRoomDetails room,
-            MultiplayerRoomDetails.PlaylistItem item,
+            Room room,
+            Room.PlaylistItem item,
             List<MultiplayerRoomScore> roomScores,
             User owner,
             String client,
             String scoringType,
             String teamType,
-            MultiplayerResultData.SeriesScore seriesScore
+            Integer customBo
+    ) {
+        return create(room, item, roomScores, owner, client, scoringType, teamType,
+                MultiplayerResultData.SeriesScore.empty(), customBo);
+    }
+
+    public static MultiplayerResultData create(
+            Room room,
+            Room.PlaylistItem item,
+            List<MultiplayerRoomScore> roomScores,
+            User owner,
+            String client,
+            String scoringType,
+            String teamType,
+            MultiplayerResultData.SeriesScore seriesScore,
+            Integer customBo
     ) {
         BeatmapExtended map = item.getBeatmap();
         MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map);
@@ -139,9 +135,9 @@ public final class MultiplayerResultFactory {
         long blueTotal = teamTotal(bluePlayers);
         List<MultiplayerResultData.TeamResult> teams = teamVs
                 ? List.of(
-                        new MultiplayerResultData.TeamResult("red", "Red Team", redTotal, redPlayers),
-                        new MultiplayerResultData.TeamResult("blue", "Blue Team", blueTotal, bluePlayers)
-                )
+                new MultiplayerResultData.TeamResult("red", "Red Team", redTotal, redPlayers),
+                new MultiplayerResultData.TeamResult("blue", "Blue Team", blueTotal, bluePlayers)
+        )
                 : List.of();
         String winningTeam = !teamVs || redTotal == blueTotal ? "tie" : redTotal > blueTotal ? "red" : "blue";
         long higherTeamScore = Math.max(redTotal, blueTotal);
@@ -166,7 +162,8 @@ public final class MultiplayerResultFactory {
                 queuedBy,
                 players,
                 teams,
-                unassignedPlayers
+                unassignedPlayers,
+                customBo
         );
     }
 

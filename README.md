@@ -6,6 +6,9 @@ multiplayer info, and rendered osu! images.
 It is the backend for [Seira](https://github.com/BotSeira/SeiraCore) bot,
 and also provides a standalone API for other clients to consume.
 
+Image endpoints also return JSON when requested with `Accept: application/json`.
+See [response formats and supported endpoints](docs/image-responses.md).
+
 ## What You Get
 
 - PNG score panels for best and recent scores, beatmap, beatmapset, and so on!
@@ -100,8 +103,14 @@ curl "http://localhost:8721/bp?u=12345678&n=20" --output best_of_20.png
 
 Base URL: `http://localhost:<OSTELLA_PORT>`
 
-Most JSON endpoints return: `{"success": boolean, "message": string, "data": any}`.
+Most JSON endpoints return: `{"success": boolean, "message": string, "data": object}`.
+Array results are wrapped as `{"data":{"result":[...]}}` instead of being placed directly in `data`.
 Image endpoints return PNG bytes. Replay download returns `video/mp4`.
+
+When `ostella.token` is configured, every request must include
+`Authorization: Bearer <ostellaToken>`. Endpoints that need a player's osu! OAuth
+credential use the separate `X-Osu-Authorization: Bearer <osuAccessToken>` header;
+the player credential must not replace the oStella service header.
 
 ### Beatmaps
 
@@ -136,22 +145,22 @@ Image endpoints return PNG bytes. Replay download returns `video/mp4`.
 
 ### Multiplayer Rooms
 
-| Method | Path                              | Purpose                    | Params / POST Body            | Response |
-|--------|-----------------------------------|----------------------------|-------------------------------|----------|
-| GET    | `/multiplayer/rooms/current`      | Current multiplayer room   | Requires Authorization Header | JSON     |
-| GET    | `/multiplayer/rooms/current/item` | Current room playlist item | Requires Authorization Header | JSON     |
+| Method | Path                              | Purpose                    | Params / POST Body                                      | Response |
+|--------|-----------------------------------|----------------------------|---------------------------------------------------------|----------|
+| GET    | `/multiplayer/rooms/current`      | Current multiplayer room   | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
+| GET    | `/multiplayer/rooms/current/item` | Current room playlist item | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
 
 ### Users
 
-| Method | Path                                | Purpose                       | Params / POST Body                               | Response |
-|--------|-------------------------------------|-------------------------------|--------------------------------------------------|----------|
-| POST   | `/users`                            | Get multiple user data        | POST Body `{"ids":[user ids]}`                   | JSON     |
-| GET    | `/users/me`                         | User data                     | Requires Authorization Header                    | JSON     |
-| GET    | `/users/me/friends`                 | Friends list for user         | Requires Authorization Header                    | JSON     |
-| POST   | `/users/leaderboards`               | User PP leaderboard image     | `{"uids":[user ids]}`                            | PNG      |
-| GET    | `/users/{userId}/scores/bestof`     | Best-of-N scores image        | path `userId`, query `n` (count)                 | PNG      |
-| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n` (count)                 | PNG      |
-| GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1) | PNG      |
+| Method | Path                                | Purpose                       | Params / POST Body                                      | Response |
+|--------|-------------------------------------|-------------------------------|---------------------------------------------------------|----------|
+| POST   | `/users`                            | Get multiple user data        | POST Body `{"ids":[user ids]}`                          | JSON     |
+| GET    | `/users/me`                         | User data                     | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
+| GET    | `/users/me/friends`                 | Friends list for user         | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
+| POST   | `/users/leaderboards`               | User PP leaderboard image     | `{"uids":[user ids]}`                                   | PNG      |
+| GET    | `/users/{userId}/scores/bestof`     | Best-of-N scores image        | path `userId`, query `n` (count)                        | PNG      |
+| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n` (count)                        | PNG      |
+| GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1)        | PNG      |
 
 ### Replays (enabled when `replayRender.enabled` is true)
 

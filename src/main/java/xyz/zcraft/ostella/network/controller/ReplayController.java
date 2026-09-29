@@ -14,11 +14,7 @@ import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
-import xyz.zcraft.ostella.service.AsyncService;
-import xyz.zcraft.ostella.service.BeatmapPreviewService;
-import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.ostella.service.LocalScoreService;
-import xyz.zcraft.ostella.service.ReplayService;
+import xyz.zcraft.ostella.service.*;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Score;
@@ -58,6 +54,16 @@ public class ReplayController {
         this.tokenManager = router.tokenManager;
         this.executor = router.executor;
         this.localScoreService = new LocalScoreService(tokenManager);
+    }
+
+    static JsonObject terminalStatusData(String jobId, String status, String error) {
+        JsonObject obj = new JsonObject();
+        obj.addProperty("status", status);
+        obj.addProperty("id", jobId);
+        if (error != null && !error.isBlank()) {
+            obj.addProperty("error", error);
+        }
+        return obj;
     }
 
     public void getReplayRenderStatus(@NotNull Context context) {
@@ -165,7 +171,7 @@ public class ReplayController {
     }
 
     private CompletionStage<Void> finalizeReplay(@NotNull Context context, Score score,
-                                                  ReplayService.QqUploadRequest qqUpload) {
+                                                 ReplayService.QqUploadRequest qqUpload) {
         final double start = optionalDouble(context, "start");
         final double end = optionalDouble(context, "end");
         final boolean obscured = optionalBoolean(context, "obscured", false);
@@ -254,24 +260,17 @@ public class ReplayController {
         context.status(200).result(new Response(true, message, obj).toString());
     }
 
-    static JsonObject terminalStatusData(String jobId, String status, String error) {
-        JsonObject obj = new JsonObject();
-        obj.addProperty("status", status);
-        obj.addProperty("id", jobId);
-        if (error != null && !error.isBlank()) {
-            obj.addProperty("error", error);
-        }
-        return obj;
-    }
-
     public void renderBeatmapPreview(@NotNull Context context) {
         if (replayService == null) return;
 
         final long beatmapId = requirePathLong(context, "beatmapId");
+        final double start = optionalDouble(context, "start");
+        final double end = optionalDouble(context, "end");
+
         final PreviewRequest request;
         final String mods;
         try {
-            request = context.body() == null || context.body().isBlank()
+            request = context.body().isBlank()
                     ? new PreviewRequest(null, null)
                     : GSON.fromJson(context.body(), PreviewRequest.class);
             mods = BeatmapPreviewService.normalizeMods(request == null ? null : request.mods());
@@ -297,16 +296,15 @@ public class ReplayController {
 
                     try {
                         OsuBeatmap parsed = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-                        BeatmapPreviewService.PreviewSegment segment =
-                                BeatmapPreviewService.selectSegment(parsed, mods);
+                        BeatmapPreviewService.PreviewSegment segment;
+                        if (Double.isNaN(start) || Double.isNaN(end)) {
+                            segment = BeatmapPreviewService.selectSegment(parsed, mods);
+                        } else {
+                            segment = new BeatmapPreviewService.PreviewSegment(start, end, null);
+                        }
                         Path beatmapset = CacheService.getBeatmapsetArchivePath(beatmapsetId);
                         ReplayService.QueuedJob queued = replayService.queueRenderPreview(
-                                beatmapId,
-                                beatmapsetId,
-                                beatmapset,
-                                segment.start(),
-                                segment.end(),
-                                mods,
+                                beatmapId, beatmapsetId, beatmapset, segment.start(), segment.end(), mods,
                                 request == null ? null : request.qqUpload()
                         );
 
@@ -361,8 +359,8 @@ public class ReplayController {
     }
 
     private CompletableFuture<Void> renderScoreForAsync(@NotNull Context context, Score score, Double start,
-                                                         Double end, boolean obscured,
-                                                         ReplayService.QqUploadRequest qqUpload) {
+                                                        Double end, boolean obscured,
+                                                        ReplayService.QqUploadRequest qqUpload) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (!CacheService.hasReplayCache(score.getId()) && !score.getHasReplay()) {
@@ -405,7 +403,7 @@ public class ReplayController {
     }
 
     private CompletableFuture<Void> renderShowcaseForAsync(@NotNull Context context, LinkedList<Score> scores,
-                                                            ReplayService.QqUploadRequest qqUpload) {
+                                                           ReplayService.QqUploadRequest qqUpload) {
         if (replayService == null) return CompletableFuture.completedFuture(null);
 
         if (scores.isEmpty()) {
@@ -559,11 +557,8 @@ public class ReplayController {
         return new UploadedReplay(local.id(), local.score());
     }
 
-    private record UploadedReplay(String id, Score score) {
-    }
-
     private ReplayService.QqUploadRequest parseQqUpload(Context context) {
-        if (context.body() == null || context.body().isBlank()) {
+        if (context.body().isBlank()) {
             return null;
         }
         try {
@@ -575,6 +570,9 @@ public class ReplayController {
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Invalid qqUpload request", e);
         }
+    }
+
+    private record UploadedReplay(String id, Score score) {
     }
 
     public record ShowcaseRequest(List<String> ids, ReplayService.QqUploadRequest qqUpload) {

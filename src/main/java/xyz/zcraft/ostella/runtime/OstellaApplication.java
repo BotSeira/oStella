@@ -2,9 +2,9 @@ package xyz.zcraft.ostella.runtime;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
+import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.console.JLineConsole;
 import xyz.zcraft.ostella.console.OstellaConsoleAccess;
 import xyz.zcraft.ostella.console.OstellaConsoleProcessor;
@@ -92,6 +92,11 @@ public final class OstellaApplication implements AutoCloseable, OstellaConsoleAc
     @Override
     public CacheControlResult controlCache(CacheControlRequest request) {
         return requireServer().controlCache(request);
+    }
+
+    @Override
+    public void setAutoCache(xyz.zcraft.ostella.service.AutoCacheService.Type type, boolean enabled) {
+        requireServer().setAutoCache(type, enabled);
     }
 
     @Override

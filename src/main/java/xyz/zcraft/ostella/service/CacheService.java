@@ -11,6 +11,8 @@ import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Score;
 
 import java.io.IOException;
@@ -43,8 +45,8 @@ public class CacheService {
 
     private static final Path JSON_CACHE = CACHE_PATH.resolve("json");
     private static final Path SCORE_JSON_CACHE = JSON_CACHE.resolve("score");
-//    private static final Path BEATMAP_JSON_CACHE = JSON_CACHE.resolve("beatmap");
-//    private static final Path BEATMAPSET_JSON_CACHE = JSON_CACHE.resolve("beatmapset");
+    private static final Path BEATMAP_JSON_CACHE = JSON_CACHE.resolve("beatmap");
+    private static final Path BEATMAPSET_JSON_CACHE = JSON_CACHE.resolve("beatmapset");
 
     private static final Path BEATMAPSET_CACHE = CACHE_PATH.resolve("beatmapset");
 
@@ -61,8 +63,8 @@ public class CacheService {
         Files.createDirectories(REPLAY_CACHE);
         Files.createDirectories(BEATMAPSET_CACHE);
         Files.createDirectories(SCORE_JSON_CACHE);
-//        Files.createDirectories(BEATMAP_JSON_CACHE);
-//        Files.createDirectories(BEATMAPSET_JSON_CACHE);
+        Files.createDirectories(BEATMAP_JSON_CACHE);
+        Files.createDirectories(BEATMAPSET_JSON_CACHE);
     }
 
     private static String bytesToHex(byte[] bytes) {
@@ -194,16 +196,31 @@ public class CacheService {
 
         Path beatmapsetPath = BEATMAPSET_CACHE.resolve(id + ".osz");
 
-        LOG.debug("Downloading beatmapset {} via Sayobot", id);
-        if (!downloadSayobot(id, beatmapsetPath)) {
-            LOG.warn("Switching to Nekoha");
-            if (!downloadNekoha(id, beatmapsetPath)) {
-                LOG.error("Failed to download beatmapset {} via both Sayobot and Nekoha!", id);
-                return false;
+        try {
+            Path temporary = Files.createTempFile(BEATMAPSET_CACHE, "prefetch-" + id + "-", ".tmp");
+            try {
+                LOG.debug("Downloading beatmapset {} via Sayobot", id);
+                if (!downloadSayobot(id, temporary)) {
+                    LOG.warn("Switching to Nekoha");
+                    if (!downloadNekoha(id, temporary)) {
+                        LOG.error("Failed to download beatmapset {} via both mirrors", id);
+                        return false;
+                    }
+                }
+                if (!Files.exists(beatmapsetPath)) {
+                    try {
+                        Files.move(temporary, beatmapsetPath);
+                    } catch (FileAlreadyExistsException ignored) {
+                        // A foreground request finished downloading the same archive.
+                    }
+                }
+                return true;
+            } finally {
+                Files.deleteIfExists(temporary);
             }
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
         }
-
-        return true;
     }
 
     public static void extractBeatmapset(long id, OutputStream out) throws IOException {
@@ -294,16 +311,21 @@ public class CacheService {
                     .GET()
                     .build();
 
+            xyz.zcraft.ostella.network.ApiActivity.checkBackground();
             HttpResponse<InputStream> fileResponse = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
             if (fileResponse.statusCode() == 200) {
-                Files.copy(fileResponse.body(), beatmapsetPath, StandardCopyOption.REPLACE_EXISTING);
+                try (InputStream body = fileResponse.body()) {
+                    Files.copy(body, beatmapsetPath, StandardCopyOption.REPLACE_EXISTING);
+                }
                 LOG.debug("Beatmapset {} cached via Nekoha", beatmapsetPath);
                 return true;
             } else {
+                fileResponse.body().close();
                 LOG.error("Failed to download beatmapset! Nekoha responded with status code: {}", fileResponse.statusCode());
             }
         } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             LOG.error("Failed to download beatmapset!", e);
         }
         return false;
@@ -318,6 +340,7 @@ public class CacheService {
                     .GET()
                     .build();
 
+            xyz.zcraft.ostella.network.ApiActivity.checkBackground();
             HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
 
             if (response.statusCode() == 301 || response.statusCode() == 302) {
@@ -332,20 +355,26 @@ public class CacheService {
 
                 HttpRequest actualDownloadRequest = HttpRequest.newBuilder()
                         .uri(URI.create(cleanLocation))
+                        .timeout(Duration.ofMinutes(3))
                         .GET()
                         .build();
 
+                xyz.zcraft.ostella.network.ApiActivity.checkBackground();
                 HttpResponse<InputStream> fileResponse = client.send(actualDownloadRequest, HttpResponse.BodyHandlers.ofInputStream());
 
                 if (fileResponse.statusCode() == 200) {
-                    Files.copy(fileResponse.body(), beatmapsetPath, StandardCopyOption.REPLACE_EXISTING);
+                    try (InputStream body = fileResponse.body()) {
+                        Files.copy(body, beatmapsetPath, StandardCopyOption.REPLACE_EXISTING);
+                    }
                     LOG.debug("Beatmapset {} cached via Sayobot", beatmapsetPath);
                     return true;
                 } else {
+                    fileResponse.body().close();
                     LOG.error("Failed to download beatmapset! Sayobot responded with status code: {}", fileResponse.statusCode());
                 }
             }
         } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             LOG.error("Failed to download beatmapset!", e);
         }
         return false;
@@ -372,6 +401,82 @@ public class CacheService {
         }
     }
 
+    public static void cacheScoreJson(Score score) throws IOException {
+        Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
+    }
+
+    public static Set<Long> cachedScoreUsers() {
+        return cachedScoreUsers(SCORE_JSON_CACHE);
+    }
+
+    static Set<Long> cachedScoreUsers(Path directory) {
+        Set<Long> users = new LinkedHashSet<>();
+        try (Stream<Path> files = Files.list(directory)) {
+            for (Path path : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
+                try {
+                    var score = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
+                    long id = score.has("user_id") && !score.get("user_id").isJsonNull()
+                            ? score.get("user_id").getAsLong()
+                            : score.getAsJsonObject("user").get("id").getAsLong();
+                    if (id > 0) users.add(id);
+                } catch (IOException | RuntimeException e) {
+                    LOG.debug("Skipping unreadable cached score {}", path, e);
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn("Unable to discover auto cache users", e);
+        }
+        return users;
+    }
+
+    static void prefetch(AutoCacheService.Type type, long id, TokenData token) {
+        try {
+            switch (type) {
+                case BEATMAPSET -> {
+                    if (!cacheBeatmapsetFile(id)) throw new IOException("Beatmapset download failed: " + id);
+                }
+                case BEATMAPSET_JSON -> {
+                    if (getBeatmapsetJsonCache(id).isEmpty()) {
+                        var value = OsuAPI.getBeatmapset(token, id);
+                        if (value != null) publishPrefetch(BEATMAPSET_JSON_CACHE.resolve(id + ".json"),
+                                GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+                    }
+                }
+                case BEATMAP_JSON -> {
+                    if (getBeatmapJsonCache(id).isEmpty()) {
+                        var value = OsuAPI.getBeatmap(token, id);
+                        if (value != null) publishPrefetch(BEATMAP_JSON_CACHE.resolve(id + ".json"),
+                                GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+                    }
+                }
+                case BEATMAP -> {
+                    Path path = beatmapCachePath(id);
+                    if (!Files.exists(path)) {
+                        byte[] bytes = OsuAPI.getBeatmapBytes(id);
+                        if (bytes != null) publishPrefetch(path, bytes);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
+    static void publishPrefetch(Path path, byte[] bytes) throws IOException {
+        // Publish complete files without replacing concurrent foreground results.
+        Path temporary = Files.createTempFile(path.getParent(), "prefetch-", ".tmp");
+        try {
+            Files.write(temporary, bytes);
+            try {
+                Files.move(temporary, path);
+            } catch (FileAlreadyExistsException ignored) {
+                // The foreground request won the race.
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
     public static Optional<Score> getScoreJsonCache(long id) throws IOException {
         if (!Files.exists(SCORE_JSON_CACHE.resolve(id + ".json"))) {
             return Optional.empty();
@@ -381,8 +486,55 @@ public class CacheService {
         return Optional.of(GSON.fromJson(jsonElement, Score.class));
     }
 
-    public static void cacheScoreJson(Score score) throws IOException {
-        Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
+    public static void cacheBeatmapsetJson(Beatmapset beatmapset) throws IOException {
+        Files.writeString(BEATMAPSET_JSON_CACHE.resolve(beatmapset.getId() + ".json"), GSON.toJson(beatmapset));
+    }
+
+    public static boolean tryCache(Object obj) {
+        try {
+            if (obj instanceof Beatmapset beatmapset) {
+                cacheBeatmapsetJson(beatmapset);
+            } else if (obj instanceof BeatmapExtended beatmap) {
+                cacheBeatmapJson(beatmap);
+            } else if (obj instanceof Score score) {
+                cacheScoreJson(score);
+            }
+            return true;
+        } catch (IOException e) {
+            LOG.error("Failed to cache object", e);
+            return false;
+        }
+    }
+
+    public static Optional<Beatmapset> getBeatmapsetJsonCache(long id) {
+        if (!Files.exists(BEATMAPSET_JSON_CACHE.resolve(id + ".json"))) {
+            return Optional.empty();
+        }
+
+        try {
+            final var json = JsonParser.parseString(Files.readString(BEATMAPSET_JSON_CACHE.resolve(id + ".json")));
+            return Optional.of(GSON.fromJson(json, Beatmapset.class));
+        } catch (IOException e) {
+            LOG.error("Failed to read beatmapset JSON cache", e);
+            return Optional.empty();
+        }
+    }
+
+    public static void cacheBeatmapJson(BeatmapExtended beatmap) throws IOException {
+        Files.writeString(BEATMAP_JSON_CACHE.resolve(beatmap.getId() + ".json"), GSON.toJson(beatmap));
+    }
+
+    public static Optional<BeatmapExtended> getBeatmapJsonCache(long id) {
+        if (!Files.exists(BEATMAP_JSON_CACHE.resolve(id + ".json"))) {
+            return Optional.empty();
+        }
+
+        try {
+            final var json = JsonParser.parseString(Files.readString(BEATMAP_JSON_CACHE.resolve(id + ".json")));
+            return Optional.of(GSON.fromJson(json, BeatmapExtended.class));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public static void transferReplay(Long id, byte[] bytes) throws IOException {
@@ -428,7 +580,8 @@ public class CacheService {
             AreaStats replays = areaStats(REPLAY_CACHE);
             AreaStats scoreJson = areaStats(SCORE_JSON_CACHE);
             AreaStats beatmapsets = areaStats(BEATMAPSET_CACHE);
-            return new CacheSummary(beatmaps, images, replays, scoreJson, beatmapsets);
+            return new CacheSummary(beatmaps, images, replays, scoreJson, beatmapsets,
+                    areaStats(BEATMAP_JSON_CACHE), areaStats(BEATMAPSET_JSON_CACHE));
         } catch (IOException e) {
             throw new IllegalStateException("Failed to inspect oStella cache", e);
         }
@@ -442,6 +595,8 @@ public class CacheService {
             if (area == CacheArea.REPLAYS || area == CacheArea.ALL) removed += clearChildren(REPLAY_CACHE);
             if (area == CacheArea.SCORE_JSON || area == CacheArea.ALL) removed += clearChildren(SCORE_JSON_CACHE);
             if (area == CacheArea.BEATMAPSETS || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_CACHE);
+            if (area == CacheArea.BEATMAP_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAP_JSON_CACHE);
+            if (area == CacheArea.BEATMAPSET_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_JSON_CACHE);
             return removed;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to clear oStella cache", e);
@@ -503,6 +658,8 @@ public class CacheService {
             }
             switch (type) {
                 case "SCORE" -> cacheScoreJson(OsuAPI.getScore(tokenData, request.id()));
+                case "BEATMAP-JSON" -> cacheBeatmapJson(OsuAPI.getBeatmap(tokenData, request.id()));
+                case "BEATMAPSET-JSON" -> cacheBeatmapsetJson(OsuAPI.getBeatmapset(tokenData, request.id()));
                 case "BEATMAP" -> getBeatmapPath(request.id(), true);
                 case "BEATMAPSET" -> getBeatmapsetArchivePath(request.id());
                 case "REPLAY" -> getReplayBlocking(tokenData, request.id());
@@ -534,6 +691,8 @@ public class CacheService {
     private static List<Path> cachePaths(String type, long id) throws IOException {
         return switch (type) {
             case "SCORE" -> List.of(SCORE_JSON_CACHE.resolve(id + ".json"));
+            case "BEATMAP-JSON" -> List.of(BEATMAP_JSON_CACHE.resolve(id + ".json"));
+            case "BEATMAPSET-JSON" -> List.of(BEATMAPSET_JSON_CACHE.resolve(id + ".json"));
             case "BEATMAP" -> List.of(beatmapCachePath(id));
             case "REPLAY" -> List.of(REPLAY_CACHE.resolve(id + ".osr"));
             case "BEATMAPSET" -> {
@@ -585,8 +744,8 @@ public class CacheService {
 
     private static String normalizeType(String value) {
         String normalized = value == null ? "" : value.toUpperCase(Locale.ROOT);
-        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY").contains(normalized))
-            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, or replay");
+        if (!List.of("SCORE", "BEATMAP", "BEATMAPSET", "REPLAY", "BEATMAP-JSON", "BEATMAPSET-JSON").contains(normalized))
+            throw new IllegalArgumentException("Cache type must be score, beatmap, beatmapset, replay, beatmap-json, or beatmapset-json");
         return normalized;
     }
 
@@ -627,6 +786,8 @@ public class CacheService {
         REPLAYS,
         SCORE_JSON,
         BEATMAPSETS,
+        BEATMAP_JSON,
+        BEATMAPSET_JSON,
         ALL
     }
 
@@ -638,14 +799,18 @@ public class CacheService {
             AreaStats images,
             AreaStats replays,
             AreaStats scoreJson,
-            AreaStats beatmapsets
+            AreaStats beatmapsets,
+            AreaStats beatmapJson,
+            AreaStats beatmapsetJson
     ) {
         public long totalFiles() {
-            return beatmaps.files + images.files + replays.files + scoreJson.files + beatmapsets.files;
+            return beatmaps.files + images.files + replays.files + scoreJson.files + beatmapsets.files
+                    + beatmapJson.files + beatmapsetJson.files;
         }
 
         public long totalBytes() {
-            return beatmaps.bytes + images.bytes + replays.bytes + scoreJson.bytes + beatmapsets.bytes;
+            return beatmaps.bytes + images.bytes + replays.bytes + scoreJson.bytes + beatmapsets.bytes
+                    + beatmapJson.bytes + beatmapsetJson.bytes;
         }
     }
 }

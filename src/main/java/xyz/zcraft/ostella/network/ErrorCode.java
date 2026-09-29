@@ -45,6 +45,33 @@ public enum ErrorCode {
     public JsonObject toJson() {
         final JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty("code", code);
+        jsonObject.addProperty("httpStatus", getHttpCode());
         return jsonObject;
+    }
+
+    public int getHttpCode() {
+        return switch (this) {
+            case ErrorCode.NO_BEATMAP_FOUND,
+                 ErrorCode.NO_BEATMAPSET_FOUND,
+                 ErrorCode.NO_SCORE_FOUND,
+                 ErrorCode.NO_ROOM_FOUND,
+                 ErrorCode.NO_USER_FOUND -> 404;
+
+            case ErrorCode.UNAUTHORIZED -> 401;
+
+            case ErrorCode.ILLEGAL_ARGUMENT,
+                 ErrorCode.REPLAY_UNAVAILABLE -> 400;
+
+            case ErrorCode.BEATMAP_FETCH_FAILED,
+                 ErrorCode.BEATMAPSET_FETCH_FAILED,
+                 ErrorCode.SCORE_FETCH_FAILED,
+                 ErrorCode.USER_FETCH_FAILED,
+                 ErrorCode.RENDER_QUEUE_FULL -> 429;
+
+            case ErrorCode.RENDERER_UNAVAILABLE,
+                 ErrorCode.PERFORMANCE_PLUS_UNAVAILABLE -> 502;
+
+            default -> 500;
+        };
     }
 }
