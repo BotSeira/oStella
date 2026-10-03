@@ -32,16 +32,27 @@ public final class MapPpCalculator {
             difficulty.lazer(isLazer);
             var attributes = difficulty.calculate(map);
             var osu = attributes.asOsu();
-            var hits = conditions.resolve(osu.n_circles + osu.n_sliders + osu.n_spinners, osu.max_combo);
+            conditions.validate(osu.n_circles + osu.n_sliders + osu.n_spinners, osu.max_combo);
             performance.mods(mods);
             performance.lazer(isLazer);
-            performance.n300(hits.great());
-            performance.n100(hits.ok());
-            performance.n50(hits.meh());
-            performance.misses(hits.misses());
-            performance.combo(hits.combo());
+            if (conditions.accuracy() != null) performance.accuracy(conditions.accuracy());
+            if (conditions.great() != null) performance.n300(conditions.great());
+            if (conditions.ok() != null) performance.n100(conditions.ok());
+            if (conditions.meh() != null) performance.n50(conditions.meh());
+            if (conditions.misses() != null) performance.misses(conditions.misses());
+            if (conditions.combo() != null) performance.combo(conditions.combo());
+            // FC is an explicit shorthand for zero misses and full combo.
+            if (conditions.fc()) {
+                performance.misses(0);
+                performance.combo(osu.max_combo);
+            }
             double pp = performance.calculate(attributes).asOsu().pp;
             if (!Double.isFinite(pp) || pp < 0) throw new IllegalStateException("谱面 PP 计算失败。");
+            var state = performance.generateState(attributes);
+            double accuracy = 100 * RosuFFI.calculateAccuracy(state, attributes,
+                    isLazer ? RosuFFI.OsuScoreOrigin.WithSliderAcc : RosuFFI.OsuScoreOrigin.Stable);
+            var hits = new MapConditions.Resolved(state.n300, state.n100, state.n50, state.misses,
+                    state.max_combo, accuracy);
             return new Result(pp, osu.stars, osu.max_combo, hits);
         }
     }

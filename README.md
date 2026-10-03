@@ -167,8 +167,9 @@ the player credential must not replace the oStella service header.
 `POST /users/{userId}/addpp` accepts `{"pp":200,"count":4,"conditions":[]}` or
 `{"beatmapId":1234567,"count":1,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
 It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgements.
-The bot estimates the new global rank from its shared `/whatif` model. Map calculations use stable/CL judgements;
-explicit constraints are checked and invalid/incomplete conditions return HTTP 400. Up to 200 BP are used,
+The bot estimates the new global rank from its shared `/whatif` model. Map calculations pass only supplied parameters to rosu-pp (lazer by default, stable with CL).
+Missing values are left to rosu-pp; actual accuracy and hit state are read back from it. Only duplicate,
+unsupported, obviously conflicting or out-of-bounds conditions return HTTP 400. Up to 200 BP are used,
 preserving the unobserved account PP remainder and excluding new bonus PP. No account data is changed.
 See `SeiraCore/docs/addpp.md` for the full command contract. Update both service packages together.
 
