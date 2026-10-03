@@ -162,6 +162,29 @@ the player credential must not replace the oStella service header.
 | GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n` (count)                        | PNG      |
 | GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1)        | PNG      |
 
+### Hypothetical PP updates
+
+`POST /users/{userId}/addpp` accepts `{"pp":200,"count":4,"conditions":[]}` or
+`{"beatmapId":1234567,"count":1,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
+It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgements.
+The bot estimates the new global rank from its shared `/whatif` model. Map calculations use stable/CL judgements;
+explicit constraints are checked and invalid/incomplete conditions return HTTP 400. Up to 200 BP are used,
+preserving the unobserved account PP remainder and excluding new bonus PP. No account data is changed.
+See `SeiraCore/docs/addpp.md` for the full command contract. Update both service packages together.
+
+### Group challenge inputs
+
+These JSON endpoints support Seira's configurable group challenges. Both services must be updated together.
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/challenges/beatmapsets/{beatmapsetId}` | Ranked/approved osu!standard difficulties in a set |
+| GET | `/challenges/beatmaps/{beatmapId}` | Resolve a specific map to the eligible difficulties in its set |
+| GET | `/challenges/users/{userId}/skill?exclude_set={beatmapsetId}` | Median effective star rating of up to 20 unique eligible best plays, excluding the challenge set; at least 5 samples required |
+| GET | `/challenges/scores/{scoreId}` | Standardised score, effective star rating with default mods, completion time and eligibility; assisted/custom-mod plays rejected |
+
+No replay download or image rendering is required. Responses use the regular `success`, `message`, `data` envelope.
+
 ### Replays (enabled when `replayRender.enabled` is true)
 
 For video jobs, oStella batch-checks osuRenderer's persistent asset cache using

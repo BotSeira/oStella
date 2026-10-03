@@ -3,10 +3,10 @@ package xyz.zcraft.ostella.network.controller;
 import com.google.gson.Gson;
 import io.javalin.http.Context;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.Placement;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -63,9 +63,6 @@ public class LeaderboardController {
                                 }))
                 .thenCompose(data -> ImageResponse.respond(context, data,
                         this::renderMapLeaderboard, renderer.getRenderExecutor())));
-    }
-
-    private record MapLeaderboardData(BeatmapExtended beatmap, List<Placement> placements) {
     }
 
     private byte[] renderMapLeaderboard(MapLeaderboardData data) {
@@ -155,6 +152,9 @@ public class LeaderboardController {
                         .thenCompose(users -> ImageResponse.respond(context, users,
                                 renderer::renderLeaderboard, renderer.getRenderExecutor()))
         );
+    }
+
+    private record MapLeaderboardData(BeatmapExtended beatmap, List<Placement> placements) {
     }
 
     public record LeaderboardRequest(List<Long> uids) {

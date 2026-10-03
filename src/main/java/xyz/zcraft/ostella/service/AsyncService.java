@@ -83,7 +83,9 @@ public class AsyncService {
         }
     }
 
-    /** One prefetch step, only when foreground work and the shared rate gate are idle. */
+    /**
+     * One prefetch step, only when foreground work and the shared rate gate are idle.
+     */
     public boolean tryBackground(java.util.function.BooleanSupplier allowed, Runnable action) {
         if (!ApiActivity.idle() || !allowed.getAsBoolean() || !requestRateGate.tryAcquire()) return false;
         ApiActivity.runBackground(allowed, action);

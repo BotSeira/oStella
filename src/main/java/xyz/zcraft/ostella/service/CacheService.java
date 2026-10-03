@@ -596,7 +596,8 @@ public class CacheService {
             if (area == CacheArea.SCORE_JSON || area == CacheArea.ALL) removed += clearChildren(SCORE_JSON_CACHE);
             if (area == CacheArea.BEATMAPSETS || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_CACHE);
             if (area == CacheArea.BEATMAP_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAP_JSON_CACHE);
-            if (area == CacheArea.BEATMAPSET_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_JSON_CACHE);
+            if (area == CacheArea.BEATMAPSET_JSON || area == CacheArea.ALL)
+                removed += clearChildren(BEATMAPSET_JSON_CACHE);
             return removed;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to clear oStella cache", e);

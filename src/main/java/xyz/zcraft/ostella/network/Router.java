@@ -5,7 +5,6 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
@@ -50,6 +49,8 @@ public class Router implements Closeable {
     final AnalyzeController analyzeController;
     final MultiplayerController multiplayerController;
     final UserController userController;
+    final ChallengeController challengeController;
+    final AddPpController addPpController;
 
     public Router(AppConfig conf, TokenManager tokenManager) throws IOException {
         this.conf = conf;
@@ -71,6 +72,8 @@ public class Router implements Closeable {
         this.analyzeController = new AnalyzeController(this);
         this.multiplayerController = new MultiplayerController(this);
         this.userController = new UserController(this);
+        this.challengeController = new ChallengeController(this);
+        this.addPpController = new AddPpController(this);
 
         this.replayService = new ReplayService(conf);
         this.replayController = new ReplayController(this);

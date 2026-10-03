@@ -4,23 +4,22 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import desu.life.RosuFFI;
 import io.javalin.http.Context;
-import xyz.zcraft.ostella.network.ImageResponse;
-import xyz.zcraft.ostella.data.ScoreAnalysisData;
-import xyz.zcraft.ostella.data.PerformanceGraphData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import xyz.zcraft.ostella.data.PerformanceGraphData;
+import xyz.zcraft.ostella.data.ScoreAnalysisData;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.PerfPlusApi;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.MissVisualizeService;
 import xyz.zcraft.ostella.service.RenderService;
+import xyz.zcraft.ostella.snapshot.SnapshotRenderer;
+import xyz.zcraft.ostella.snapshot.SnapshotRequest;
+import xyz.zcraft.ostella.snapshot.SnapshotScene;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
 import xyz.zcraft.osu.model.BeatmapExtended;
@@ -318,6 +317,38 @@ public class AnalyzeController {
                 .toList();
     }
 
+    private static java.awt.image.BufferedImage snapshotBackground(SnapshotScene scene) {
+        // Prefer the original extracted beatmap background; remote cover art is a fallback.
+        try {
+            var beatmap = scene.analyze().beatmap();
+            for (var event : beatmap.getBgAndVideoEvents()) {
+                if (!(event instanceof OsuBeatmap.Event.BackgroundEvent background)) continue;
+                String filename = background.getFileName().replace("\"", "");
+                Path directory = CacheService.getBeatmapPath(beatmap.getBeatmapId()).toAbsolutePath().getParent();
+                Path file = directory.resolve(filename).normalize();
+                if (file.startsWith(directory) && java.nio.file.Files.isRegularFile(file)) {
+                    return javax.imageio.ImageIO.read(file.toFile());
+                }
+                if (beatmap.getBeatmapSetId() != null && CacheService.existingCachePath("BEATMAPSET", beatmap.getBeatmapSetId()) != null) {
+                    var bytes = CacheService.extractFile(beatmap.getBeatmapSetId(), filename);
+                    if (bytes.isPresent())
+                        return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes.get()));
+                }
+            }
+            Long setId = beatmap.getBeatmapSetId();
+            if (setId != null && setId > 0) {
+                String cached = CacheService.getImageSrc("https://assets.ppy.sh/beatmaps/" + setId + "/covers/raw.jpg");
+                if (!cached.isBlank()) {
+                    Path file = Path.of(cached.substring("http://ostella-cache/".length()));
+                    return javax.imageio.ImageIO.read(file.toFile());
+                }
+            }
+        } catch (Exception e) {
+            LOG.debug("Snapshot background unavailable: {}", e.getMessage());
+        }
+        return null;
+    }
+
     public void getScoreAnalysisById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
@@ -530,12 +561,36 @@ public class AnalyzeController {
                         MissVisualizeService::renderMiss, Runnable::run)));
     }
 
+    public void snapshotReplay(@NotNull Context context) {
+        long scoreId = requirePathScoreId(context, "scoreId");
+        final SnapshotRequest request;
+        try {
+            request = SnapshotRequest.fromQuery(context.queryParam("time"), context.queryParam("object"),
+                    context.queryParam("miss"), context.queryParam("offset"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+        context.future(() -> router.getScore(scoreId)
+                .thenApply(score -> getReplayAnalyze(context, score))
+                .thenApply(analyze -> {
+                    try {
+                        return new SnapshotScene(analyze, request, true);
+                    } catch (IllegalArgumentException | ArithmeticException e) {
+                        throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+                    }
+                })
+                .thenCompose(scene -> {
+                    context.header("X-Snapshot-Time", Long.toString(scene.time()));
+                    return ImageResponse.respond(context, scene, SnapshotScene::responseData,
+                            data -> SnapshotRenderer.render(data, snapshotBackground(data)), renderer.getRasterExecutor());
+                }));
+    }
+
     public record PPLoss(
             double withoutMiss,
             double actual
     ) {
     }
-
 
 
 }

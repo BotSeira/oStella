@@ -6,7 +6,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
-import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.BeatmapAnalysisData;
 import xyz.zcraft.ostella.data.BeatmapData;
 import xyz.zcraft.ostella.data.ScoreType;

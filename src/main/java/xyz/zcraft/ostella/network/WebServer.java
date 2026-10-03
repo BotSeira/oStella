@@ -79,6 +79,7 @@ public class WebServer implements Closeable {
                     .get("/scores/{scoreId}/highlight", router.analyzeController::getScoreHighlight)
                     .get("/scores/{scoreId}/misses", router.analyzeController::getMisses)
                     .get("/scores/{scoreId}/misses/{missIndex}/visualize", router.analyzeController::visualizeMiss)
+                    .get("/scores/{scoreId}/snapshot", router.analyzeController::snapshotReplay)
 
                     .get("/multiplayer/rooms/current", router.multiplayerController::getCurrentRoom)
                     .get("/multiplayer/rooms/current/item", router.multiplayerController::getCurrentRoomItem)
@@ -94,11 +95,16 @@ public class WebServer implements Closeable {
                     .post("/users/scores/recent/batch", router.userController::getRecentScoresBatch)
                     .get("/users/{userId}", router.userController::getUserInfo)
                     .get("/users/{userId}/rank", router.userController::getUserRank)
+                    .post("/users/{userId}/addpp", router.addPpController::addPp)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
 
                     .get("/daily", router::getDaily)
+                    .get("/challenges/beatmapsets/{beatmapsetId}", router.challengeController::beatmapset)
+                    .get("/challenges/beatmaps/{beatmapId}", router.challengeController::beatmap)
+                    .get("/challenges/users/{userId}/skill", router.challengeController::skill)
+                    .get("/challenges/scores/{scoreId}", router.challengeController::score)
                     .get("/health", router::getServerStatus)
                     .post("/cache/control", router::controlCache)
 

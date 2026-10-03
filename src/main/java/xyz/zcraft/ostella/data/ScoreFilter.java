@@ -1,7 +1,10 @@
 package xyz.zcraft.ostella.data;
 
 import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Beatmapset;
+import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;

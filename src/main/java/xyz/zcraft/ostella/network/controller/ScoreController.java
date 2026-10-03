@@ -9,15 +9,11 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.OsuAPI;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
@@ -25,7 +21,10 @@ import xyz.zcraft.ostella.util.RequestUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
-import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.UserExtended;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
@@ -73,20 +72,6 @@ public class ScoreController {
         } catch (IllegalArgumentException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
         }
-    }
-
-    private List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        if (filters.isEmpty()) {
-            return scores;
-        }
-        return scores.stream()
-                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score, () -> {
-                    final Long id = score.getBeatmapset().getId();
-                    final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
-                    tryCache(beatmapset);
-                    return beatmapset;
-                })))
-                .toList();
     }
 
     static int scoreLookupFetchLimit(int index, List<ScoreFilter> filters) {
@@ -153,6 +138,20 @@ public class ScoreController {
         }
 
         return Math.pow((cs - 8.0) / 4.0, 1.25);
+    }
+
+    private List<Score> applyFilters(List<Score> scores, List<ScoreFilter> filters) {
+        if (filters.isEmpty()) {
+            return scores;
+        }
+        return scores.stream()
+                .filter(score -> filters.stream().allMatch(filter -> filter.matches(score, () -> {
+                    final Long id = score.getBeatmapset().getId();
+                    final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                    tryCache(beatmapset);
+                    return beatmapset;
+                })))
+                .toList();
     }
 
     public void lookupScore(@NotNull Context context) {

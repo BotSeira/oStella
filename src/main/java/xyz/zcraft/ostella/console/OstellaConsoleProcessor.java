@@ -208,7 +208,8 @@ public final class OstellaConsoleProcessor {
                     "replay status\nreplay job <uuid>\nreplay delete <uuid> confirm\nCommands contact configured osuRenderer workers.";
             case "cache" ->
                     "cache <query|delete|get|fetch> <score|beatmap|beatmapset|replay|beatmap-json|beatmapset-json> <id>\nQueries oStella followed by every configured osuRenderer worker (beatmap-json and beatmapset-json are local only). get includes metadata; fetch downloads into oStella and pushes beatmapsets/replays to workers; delete removes all reachable copies.\ncache status\ncache clear <beatmaps|images|replays|score-json|beatmapsets|beatmap-json|beatmapset-json|all> confirm";
-            case "autocache" -> "autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>\nEach type defaults to off. Prefetches missing files for cached-score users and their best 200 osu! scores, only while idle. Changes last until restart.";
+            case "autocache" ->
+                    "autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>\nEach type defaults to off. Prefetches missing files for cached-score users and their best 200 osu! scores, only while idle. Changes last until restart.";
             case "config" -> "config show\nconfig check\nSecrets are redacted. Runtime changes require restart.";
             case "log" -> "log show\nlog level <trace|debug|info|warn|error>";
             case "system" -> "system\nShows local runtime information and process uptime.";

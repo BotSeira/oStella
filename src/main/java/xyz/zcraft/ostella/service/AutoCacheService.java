@@ -10,32 +10,18 @@ import xyz.zcraft.osu.model.Score;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
-/** Bounded, resumable prefetch: at most one page or file per idle tick. */
+/**
+ * Bounded, resumable prefetch: at most one page or file per idle tick.
+ */
 public final class AutoCacheService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(AutoCacheService.class);
-    public enum Type {
-        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON;
-
-        public static Type parse(String text) {
-            try {
-                return valueOf(text.toUpperCase(Locale.ROOT).replace('-', '_'));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Auto cache type must be beatmapset, beatmapset-json, beatmap, or beatmap-json.");
-            }
-        }
-    }
-
-    interface Backend {
-        Set<Long> users();
-        List<Score> best(long user, int offset);
-        void cache(Type type, long id);
-    }
-
-    private record Target(Type type, long id) {}
     private final Set<Type> enabled = ConcurrentHashMap.newKeySet();
     private final AtomicLong revision = new AtomicLong();
     private final AsyncService executor;
@@ -50,19 +36,21 @@ public final class AutoCacheService implements AutoCloseable {
     private long nextScan;
     private int offset;
     private volatile boolean closed;
-
     public AutoCacheService(AsyncService executor, TokenManager tokens) {
         this(executor, tokens::isValid, new Backend() {
-            public Set<Long> users() { return CacheService.cachedScoreUsers(); }
+            public Set<Long> users() {
+                return CacheService.cachedScoreUsers();
+            }
+
             public List<Score> best(long user, int offset) {
                 return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 100, offset);
             }
+
             public void cache(Type type, long id) {
                 CacheService.prefetch(type, id, tokens.getTokenData());
             }
         });
     }
-
     AutoCacheService(AsyncService executor, BooleanSupplier ready, Backend backend) {
         this.executor = executor;
         this.ready = ready;
@@ -143,8 +131,32 @@ public final class AutoCacheService implements AutoCloseable {
         offset = 0;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         closed = true;
         worker.shutdownNow();
+    }
+
+    public enum Type {
+        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON;
+
+        public static Type parse(String text) {
+            try {
+                return valueOf(text.toUpperCase(Locale.ROOT).replace('-', '_'));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Auto cache type must be beatmapset, beatmapset-json, beatmap, or beatmap-json.");
+            }
+        }
+    }
+
+    interface Backend {
+        Set<Long> users();
+
+        List<Score> best(long user, int offset);
+
+        void cache(Type type, long id);
+    }
+
+    private record Target(Type type, long id) {
     }
 }

@@ -3,13 +3,16 @@ package xyz.zcraft.ostella.network;
 import java.time.Duration;
 import java.util.function.BooleanSupplier;
 
-/** Tracks queued work as well as direct API calls. Foreground work never waits for prefetch. */
+/**
+ * Tracks queued work as well as direct API calls. Foreground work never waits for prefetch.
+ */
 public final class ApiActivity {
+    private static final ThreadLocal<BooleanSupplier> BACKGROUND = new ThreadLocal<>();
     private static int foreground;
     private static long lastActivity = System.nanoTime();
-    private static final ThreadLocal<BooleanSupplier> BACKGROUND = new ThreadLocal<>();
 
-    private ApiActivity() {}
+    private ApiActivity() {
+    }
 
     public static synchronized void begin() {
         foreground++;
@@ -47,6 +50,8 @@ public final class ApiActivity {
     }
 
     public static final class Yield extends RuntimeException {
-        public Yield() { super(null, null, false, false); }
+        public Yield() {
+            super(null, null, false, false);
+        }
     }
 }

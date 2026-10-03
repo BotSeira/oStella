@@ -14,7 +14,6 @@ import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.data.ScoreAnalysisData;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.ostella.util.format.*;
@@ -42,6 +41,8 @@ public class RenderService implements AutoCloseable {
     private static final Path LOCAL_ASSETS_PATH = LOCAL_TEMPLATES_PATH.resolve("assets");
     @Getter
     private final ExecutorService renderExecutor;
+    @Getter
+    private final ExecutorService rasterExecutor;
     private final ThreadLocal<RenderWorkerState> workerStateLocal = new ThreadLocal<>();
     private final TemplateEngine templateEngine;
     private final TemplateEngine templateEngineLocal;
@@ -54,6 +55,8 @@ public class RenderService implements AutoCloseable {
         ThreadFactory threadFactory = getThreadFactory();
 
         this.renderExecutor = Executors.newFixedThreadPool(maxWorkers, threadFactory);
+        this.rasterExecutor = Executors.newFixedThreadPool(maxWorkers,
+                Thread.ofPlatform().name("ostella-raster-", 0).factory());
 
         LOG.info("Initializing template resolver");
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
@@ -371,9 +374,9 @@ public class RenderService implements AutoCloseable {
     }
 
     public Status status() {
-        if (renderExecutor instanceof ThreadPoolExecutor pool) {
-            return new Status(pool.getActiveCount(), pool.getMaximumPoolSize(), pool.getQueue().size(),
-                    pool.getCompletedTaskCount());
+        if (renderExecutor instanceof ThreadPoolExecutor pool && rasterExecutor instanceof ThreadPoolExecutor raster) {
+            return new Status(pool.getActiveCount() + raster.getActiveCount(), pool.getMaximumPoolSize() + raster.getMaximumPoolSize(),
+                    pool.getQueue().size() + raster.getQueue().size(), pool.getCompletedTaskCount() + raster.getCompletedTaskCount());
         }
         return new Status(0, 0, 0, 0);
     }
@@ -381,6 +384,7 @@ public class RenderService implements AutoCloseable {
     @Override
     public void close() {
         LOG.info("Shutting down RenderService executor");
+        rasterExecutor.close();
         renderExecutor.close();
     }
 
