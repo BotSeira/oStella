@@ -43,10 +43,11 @@ public record ReplayClip(SnapshotScene center, double before, double after) {
         try (var bytes = new ByteArrayOutputStream(); var output = new MemoryCacheImageOutputStream(bytes)) {
             writer.setOutput(output);
             writer.prepareWriteSequence(null);
-            for (int elapsed = 0; elapsed < duration; elapsed += 5) {
+            final int frameRateFactor = 10;
+            for (int elapsed = 0; elapsed < duration; elapsed += frameRateFactor) {
                 long time = Math.round(start() + elapsed * 10 * center.clockRate());
                 var scene = new SnapshotScene(center.analyze(), new SnapshotRequest(SnapshotRequest.Kind.TIME, time, 0), true);
-                var frame = SnapshotRenderer.renderFrame(scene, background, 960, 540);
+                var frame = SnapshotRenderer.renderFrame(scene, background, 720, 405);
                 var metadata = writer.getDefaultImageMetadata(ImageTypeSpecifier.createFromRenderedImage(frame), null);
                 String format = metadata.getNativeMetadataFormatName();
                 var tree = (IIOMetadataNode) metadata.getAsTree(format);
@@ -54,7 +55,7 @@ public record ReplayClip(SnapshotScene center, double before, double after) {
                 control.setAttribute("disposalMethod", "none");
                 control.setAttribute("userInputFlag", "FALSE");
                 control.setAttribute("transparentColorFlag", "FALSE");
-                control.setAttribute("delayTime", Integer.toString(Math.min(5, duration - elapsed)));
+                control.setAttribute("delayTime", Integer.toString(Math.min(frameRateFactor, duration - elapsed)));
                 control.setAttribute("transparentColorIndex", "0");
                 if (elapsed == 0) {
                     var extensions = new IIOMetadataNode("ApplicationExtensions");
