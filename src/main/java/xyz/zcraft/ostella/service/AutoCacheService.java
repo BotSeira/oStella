@@ -36,6 +36,7 @@ public final class AutoCacheService implements AutoCloseable {
     private long nextScan;
     private int offset;
     private volatile boolean closed;
+
     public AutoCacheService(AsyncService executor, TokenManager tokens) {
         this(executor, tokens::isValid, new Backend() {
             public Set<Long> users() {
@@ -51,6 +52,7 @@ public final class AutoCacheService implements AutoCloseable {
             }
         });
     }
+
     AutoCacheService(AsyncService executor, BooleanSupplier ready, Backend backend) {
         this.executor = executor;
         this.ready = ready;

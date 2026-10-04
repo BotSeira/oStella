@@ -561,8 +561,13 @@ public class AnalyzeController {
                         MissVisualizeService::renderMiss, Runnable::run)));
     }
 
-    public void snapshotReplay(@NotNull Context context) { replayImage(context, false); }
-    public void clipReplay(@NotNull Context context) { replayImage(context, true); }
+    public void snapshotReplay(@NotNull Context context) {
+        replayImage(context, false);
+    }
+
+    public void clipReplay(@NotNull Context context) {
+        replayImage(context, true);
+    }
 
     private void replayImage(Context context, boolean animated) {
         long scoreId = requirePathScoreId(context, "scoreId");
@@ -592,7 +597,7 @@ public class AnalyzeController {
                         context.header("X-Clip-Start", Double.toString(clip.start()));
                         context.header("X-Clip-End", Double.toString(clip.end()));
                         return java.util.concurrent.CompletableFuture.supplyAsync(
-                                () -> clip.render(snapshotBackground(scene)), renderer.getRasterExecutor())
+                                        () -> clip.render(snapshotBackground(scene)), renderer.getRasterExecutor())
                                 .thenAccept(bytes -> context.status(200).contentType("image/gif").result(bytes));
                     }
                     return ImageResponse.respond(context, scene, SnapshotScene::responseData,

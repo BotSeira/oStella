@@ -18,7 +18,6 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
@@ -54,6 +53,16 @@ public class BeatmapController {
         this.tokenManager = router.tokenManager;
         this.executor = router.executor;
         this.perfPlusApi = new PerfPlusApi(router.conf.performancePlus().endpoint());
+    }
+
+    static BeatmapExtended selectBeatmap(Beatmapset beatmapset, Long beatmapId) {
+        if (beatmapset == null)
+            throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
+        BeatmapExtended beatmap = beatmapset.getBeatmaps().stream()
+                .filter(candidate -> Objects.equals(candidate.getId(), beatmapId))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
+        return BeatmapData.withBeatmapset(beatmap, beatmapset);
     }
 
     public void lookupBeatmap(@NotNull Context context) {
@@ -198,16 +207,6 @@ public class BeatmapController {
                     if (beatmapset != null) tryCache(beatmapset);
                     return selectBeatmap(beatmapset, beatmapId);
                 });
-    }
-
-    static BeatmapExtended selectBeatmap(Beatmapset beatmapset, Long beatmapId) {
-        if (beatmapset == null)
-            throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-        BeatmapExtended beatmap = beatmapset.getBeatmaps().stream()
-                .filter(candidate -> Objects.equals(candidate.getId(), beatmapId))
-                .findFirst()
-                .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-        return BeatmapData.withBeatmapset(beatmap, beatmapset);
     }
 
     private byte[] renderBeatmap(BeatmapExtended beatmap, String mod) {

@@ -93,7 +93,9 @@ public record MapConditions(String mods, Double accuracy,
         return String.join("", mods);
     }
 
-    /** Check only explicit contradictions and obvious map bounds, without filling inputs. */
+    /**
+     * Check only explicit contradictions and obvious map bounds, without filling inputs.
+     */
     public void validate(int objects, int maxCombo) {
         if (objects <= 0 || objects > 1_000_000 || maxCombo <= 0)
             throw new IllegalArgumentException("谱面物件数量无效。");

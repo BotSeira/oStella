@@ -33,7 +33,9 @@ public final class SnapshotRenderer {
         try (var bytes = new ByteArrayOutputStream()) {
             ImageIO.write(renderFrame(scene, background, WIDTH, HEIGHT), "png", bytes);
             return bytes.toByteArray();
-        } catch (IOException e) { throw new IllegalStateException("Could not encode replay snapshot", e); }
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not encode replay snapshot", e);
+        }
     }
 
     public static BufferedImage renderFrame(SnapshotScene scene, BufferedImage background, int width, int height) {

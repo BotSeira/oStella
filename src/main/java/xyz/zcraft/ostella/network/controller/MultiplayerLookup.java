@@ -5,7 +5,8 @@ import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.osu.model.multiplayer.Room;
 
 final class MultiplayerLookup {
-    private MultiplayerLookup() { }
+    private MultiplayerLookup() {
+    }
 
     static Long roomId(String value) {
         if (value == null) return null;
@@ -14,7 +15,8 @@ final class MultiplayerLookup {
                 long id = Long.parseLong(value);
                 if (id > 0) return id;
             }
-        } catch (NumberFormatException ignored) { }
+        } catch (NumberFormatException ignored) {
+        }
         throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "room must be a positive integer");
     }
 

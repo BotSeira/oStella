@@ -11,30 +11,19 @@ import java.io.IOException;
 import java.math.BigDecimal;
 
 public record ReplayClip(SnapshotScene center, double before, double after) {
-    public record Window(double before, double after) {
-        public static Window parse(String before, String after) {
-            BigDecimal b = seconds(before == null ? "3" : before);
-            BigDecimal a = seconds(after == null ? "1" : after);
-            if (b.add(a).signum() <= 0 || b.add(a).compareTo(new BigDecimal("6")) > 0)
-                throw new IllegalArgumentException("GIF window must be greater than 0 and at most 6 seconds");
-            return new Window(b.doubleValue(), a.doubleValue());
-        }
-
-        private static BigDecimal seconds(String value) {
-            if (!value.matches("[0-9]+(?:\\.[0-9]+)?"))
-                throw new IllegalArgumentException("GIF window must contain non-negative seconds");
-            return new BigDecimal(value);
-        }
-    }
-
     public ReplayClip {
         if (!Double.isFinite(before) || !Double.isFinite(after) || before < 0 || after < 0
                 || before + after <= 0 || before + after > 6)
             throw new IllegalArgumentException("Invalid GIF window");
     }
 
-    public double start() { return Math.max(0, center.time() - before * 1000 * center.clockRate()); }
-    public double end() { return Math.min(center.maximumTime(), center.time() + after * 1000 * center.clockRate()); }
+    public double start() {
+        return Math.max(0, center.time() - before * 1000 * center.clockRate());
+    }
+
+    public double end() {
+        return Math.min(center.maximumTime(), center.time() + after * 1000 * center.clockRate());
+    }
 
     public byte[] render(BufferedImage background) {
         // Centisecond delays are native to GIF. Round down to keep the encoded duration <= 6s.
@@ -76,6 +65,22 @@ public record ReplayClip(SnapshotScene center, double before, double after) {
             throw new IllegalStateException("Could not encode replay GIF", e);
         } finally {
             writer.dispose();
+        }
+    }
+
+    public record Window(double before, double after) {
+        public static Window parse(String before, String after) {
+            BigDecimal b = seconds(before == null ? "3" : before);
+            BigDecimal a = seconds(after == null ? "1" : after);
+            if (b.add(a).signum() <= 0 || b.add(a).compareTo(new BigDecimal("6")) > 0)
+                throw new IllegalArgumentException("GIF window must be greater than 0 and at most 6 seconds");
+            return new Window(b.doubleValue(), a.doubleValue());
+        }
+
+        private static BigDecimal seconds(String value) {
+            if (!value.matches("[0-9]+(?:\\.[0-9]+)?"))
+                throw new IllegalArgumentException("GIF window must contain non-negative seconds");
+            return new BigDecimal(value);
         }
     }
 }

@@ -12,9 +12,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
-/** Lossless delta encoding for the full, opaque frames produced by ReplayClip. */
+/**
+ * Lossless delta encoding for the full, opaque frames produced by ReplayClip.
+ */
 final class GifOptimizer {
-    private GifOptimizer() {}
+    private GifOptimizer() {
+    }
 
     static byte[] compress(byte[] original) throws IOException {
         var reader = ImageIO.getImageReadersByFormatName("gif").next();

@@ -23,6 +23,7 @@ public final class SnapshotSkin {
     private final Map<String, Point2D.Double> judgementOrigins = new ConcurrentHashMap<>();
     private final Map<String, String> settings = new HashMap<>();
     private final List<Color> colours;
+
     public SnapshotSkin() {
         try (InputStream stream = getClass().getResourceAsStream(ROOT + "skin.ini")) {
             if (stream == null) throw new IOException("WhiteCat skin.ini is missing");

@@ -90,6 +90,20 @@ public class UserController {
         return filters.stream().map(ScoreFilter::displayText).toList();
     }
 
+    /**
+     * These callers fetched /users/{id}/osu; playmode is a preference, not the response ruleset.
+     */
+    static void putRankPpHeaders(Context context, UserExtended user) {
+        context.header("X-User-Id", String.valueOf(user.getId()));
+        var stats = user.getStatistics();
+        if (stats == null || stats.getGlobalRank() == null || stats.getGlobalRank() <= 0
+                || stats.getPp() == null || !Double.isFinite(stats.getPp()) || stats.getPp() <= 0) return;
+        context.header("X-Osu-Ruleset", "osu");
+        context.header("X-Osu-Global-Rank", String.valueOf(stats.getGlobalRank()));
+        context.header("X-Osu-Total-Pp", String.valueOf(stats.getPp()));
+        context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
+    }
+
     private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
         return applyFilters(scores, filters, 1);
     }
@@ -273,20 +287,6 @@ public class UserController {
                             });
                 })
                 .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
-    }
-
-    /**
-     * These callers fetched /users/{id}/osu; playmode is a preference, not the response ruleset.
-     */
-    static void putRankPpHeaders(Context context, UserExtended user) {
-        context.header("X-User-Id", String.valueOf(user.getId()));
-        var stats = user.getStatistics();
-        if (stats == null || stats.getGlobalRank() == null || stats.getGlobalRank() <= 0
-                || stats.getPp() == null || !Double.isFinite(stats.getPp()) || stats.getPp() <= 0) return;
-        context.header("X-Osu-Ruleset", "osu");
-        context.header("X-Osu-Global-Rank", String.valueOf(stats.getGlobalRank()));
-        context.header("X-Osu-Total-Pp", String.valueOf(stats.getPp()));
-        context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
     }
 
     public void getUserInfo(@NotNull Context context) {

@@ -30,6 +30,7 @@ public final class SnapshotScene {
     private double pp;
     private int completedObjects;
     private int largeTickHits, largeTicks, tailHits, tails;
+
     public SnapshotScene(ReplayAnalyze analyze, SnapshotRequest request, boolean calculatePp) {
         this.analyze = Objects.requireNonNull(analyze);
         if (analyze.replay().gameMode() != 0 || (analyze.beatmap().getMode() != null && analyze.beatmap().getMode() != 0)) {
