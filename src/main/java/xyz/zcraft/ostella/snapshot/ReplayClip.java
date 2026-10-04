@@ -1,14 +1,14 @@
 package xyz.zcraft.ostella.snapshot;
 
-import java.math.BigDecimal;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import javax.imageio.ImageIO;
 import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
 import javax.imageio.ImageTypeSpecifier;
 import javax.imageio.metadata.IIOMetadataNode;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.math.BigDecimal;
 
 public record ReplayClip(SnapshotScene center, double before, double after) {
     public record Window(double before, double after) {
@@ -71,7 +71,7 @@ public record ReplayClip(SnapshotScene center, double before, double after) {
             }
             writer.endWriteSequence();
             output.flush();
-            return bytes.toByteArray();
+            return GifOptimizer.compress(bytes.toByteArray());
         } catch (IOException e) {
             throw new IllegalStateException("Could not encode replay GIF", e);
         } finally {

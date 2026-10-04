@@ -283,6 +283,20 @@ public class UserController {
                 .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
+    /**
+     * These callers fetched /users/{id}/osu; playmode is a preference, not the response ruleset.
+     */
+    static void putRankPpHeaders(Context context, UserExtended user) {
+        context.header("X-User-Id", String.valueOf(user.getId()));
+        var stats = user.getStatistics();
+        if (stats == null || stats.getGlobalRank() == null || stats.getGlobalRank() <= 0
+                || stats.getPp() == null || !Double.isFinite(stats.getPp()) || stats.getPp() <= 0) return;
+        context.header("X-Osu-Ruleset", "osu");
+        context.header("X-Osu-Global-Rank", String.valueOf(stats.getGlobalRank()));
+        context.header("X-Osu-Total-Pp", String.valueOf(stats.getPp()));
+        context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
+    }
+
     public void getUserInfo(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
 
@@ -313,7 +327,7 @@ public class UserController {
                         router.ensurePp(score);
                     }
 
-                    context.header("X-User-Id", String.valueOf(data.user().getId()));
+                    putRankPpHeaders(context, data.user());
                     context.header(
                             "X-Score-Ids",
                             displayScores.stream()
@@ -324,15 +338,6 @@ public class UserController {
                     return renderer.renderUserInfo(data.user(), data.topScores());
                 }, renderer.getRenderExecutor())
                 .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes)));
-    }
-
-    private void getUserInfoJson(@NotNull Context context, long userId) {
-        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
-                .thenAccept(user -> {
-                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
-                    context.header("X-User-Id", String.valueOf(user.getId()));
-                    putResult(context, user);
-                }));
     }
 
     public void getUserRank(@NotNull Context context) {
@@ -427,9 +432,18 @@ public class UserController {
         );
     }
 
+    private void getUserInfoJson(@NotNull Context context, long userId) {
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenAccept(user -> {
+                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                    putRankPpHeaders(context, user);
+                    putResult(context, user);
+                }));
+    }
+
     private ScoreListData prepareScoreList(Context context, UserExtended user, FilteredScores scores,
                                            ScoreType type, List<String> filters, String title) {
-        context.header("X-User-Id", String.valueOf(user.getId()));
+        putRankPpHeaders(context, user);
         context.header("X-Score-Ids", scores.scores().stream().map(Score::getId)
                 .map(String::valueOf).collect(Collectors.joining(",")));
         return new ScoreListData(user, scores.scores(), type, filters, scores.originalPositions(), title);
