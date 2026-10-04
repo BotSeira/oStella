@@ -43,7 +43,7 @@ public record ReplayClip(SnapshotScene center, double before, double after) {
         try (var bytes = new ByteArrayOutputStream(); var output = new MemoryCacheImageOutputStream(bytes)) {
             writer.setOutput(output);
             writer.prepareWriteSequence(null);
-            final int frameRateFactor = 10;
+            final int frameRateFactor = 6;
             for (int elapsed = 0; elapsed < duration; elapsed += frameRateFactor) {
                 long time = Math.round(start() + elapsed * 10 * center.clockRate());
                 var scene = new SnapshotScene(center.analyze(), new SnapshotRequest(SnapshotRequest.Kind.TIME, time, 0), true);
