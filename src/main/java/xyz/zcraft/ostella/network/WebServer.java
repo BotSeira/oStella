@@ -80,6 +80,7 @@ public class WebServer implements Closeable {
                     .get("/scores/{scoreId}/misses", router.analyzeController::getMisses)
                     .get("/scores/{scoreId}/misses/{missIndex}/visualize", router.analyzeController::visualizeMiss)
                     .get("/scores/{scoreId}/snapshot", router.analyzeController::snapshotReplay)
+                    .get("/scores/{scoreId}/clip", router.analyzeController::clipReplay)
 
                     .get("/multiplayer/rooms/current", router.multiplayerController::getCurrentRoom)
                     .get("/multiplayer/rooms/current/item", router.multiplayerController::getCurrentRoomItem)

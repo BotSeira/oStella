@@ -341,6 +341,11 @@ public final class SnapshotScene {
         return List.copyOf(errors);
     }
 
+    public long maximumTime() {
+        long maximum = endTime + Math.round(1000 * clockRate);
+        return authoritativeResults ? maximum : Math.min(maximum, frames.getLast().time());
+    }
+
     public long time() {
         return time;
     }

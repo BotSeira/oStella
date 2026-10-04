@@ -30,9 +30,17 @@ public final class SnapshotRenderer {
     private static final double CURSOR_TRAIL_DURATION = 150;
 
     public static byte[] render(SnapshotScene scene, BufferedImage background) {
-        var canvas = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+        try (var bytes = new ByteArrayOutputStream()) {
+            ImageIO.write(renderFrame(scene, background, WIDTH, HEIGHT), "png", bytes);
+            return bytes.toByteArray();
+        } catch (IOException e) { throw new IllegalStateException("Could not encode replay snapshot", e); }
+    }
+
+    public static BufferedImage renderFrame(SnapshotScene scene, BufferedImage background, int width, int height) {
+        var canvas = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         var root = canvas.createGraphics();
         try {
+            root.scale((double) width / WIDTH, (double) height / HEIGHT);
             quality(root);
             root.setColor(Color.BLACK);
             root.fillRect(0, 0, WIDTH, HEIGHT);
@@ -70,12 +78,7 @@ public final class SnapshotRenderer {
         } finally {
             root.dispose();
         }
-        try (var bytes = new ByteArrayOutputStream()) {
-            ImageIO.write(canvas, "png", bytes);
-            return bytes.toByteArray();
-        } catch (IOException e) {
-            throw new IllegalStateException("Could not encode replay snapshot", e);
-        }
+        return canvas;
     }
 
     private static void circle(Graphics2D g, SnapshotScene scene, SnapshotScene.ObjectState object,

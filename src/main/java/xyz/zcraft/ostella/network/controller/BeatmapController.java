@@ -100,21 +100,22 @@ public class BeatmapController {
     private void lookupBeatmapFromSomeRoom(@NotNull Context context) {
         final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
-        if (auth == null) {
+        Long roomId = MultiplayerLookup.roomId(context.queryParam("room"));
+
+        if (roomId == null && auth == null) {
             throw new ApiException(ErrorCode.UNAUTHORIZED);
         }
 
         context.future(() -> executor
-                .enqueueAsync(() -> OsuAPI.getCurrentRoom(auth))
-                .thenApply(room -> {
-                    if (room == null)
-                        throw new ApiException(ErrorCode.NO_ROOM_FOUND, "No multiplayer room found");
-
-                    final Room.PlaylistItem currentPlaylistItem = room.getCurrentPlaylistItem();
-                    if (currentPlaylistItem == null || currentPlaylistItem.getBeatmap() == null)
-                        throw new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found for current multiplayer room");
-
-                    return currentPlaylistItem.getBeatmap();
+                .enqueueAsync(() -> roomId == null ? OsuAPI.getCurrentRoom(auth)
+                        : OsuAPI.getRoom(tokenManager.getTokenData(), roomId))
+                .thenApply(MultiplayerLookup::currentItem)
+                .thenCompose(item -> item.getBeatmap() != null
+                        ? java.util.concurrent.CompletableFuture.completedFuture(item.getBeatmap())
+                        : executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), item.getBeatmapId())))
+                .thenApply(beatmap -> {
+                    if (beatmap == null) throw new ApiException(ErrorCode.NO_BEATMAP_FOUND);
+                    return beatmap;
                 })
                 .thenAccept(beatmap -> context.status(200).result(
                         new Response(true, "Success", beatmapLookupData(beatmap)).toString()

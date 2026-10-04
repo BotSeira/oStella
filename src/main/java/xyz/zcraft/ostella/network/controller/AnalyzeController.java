@@ -561,12 +561,18 @@ public class AnalyzeController {
                         MissVisualizeService::renderMiss, Runnable::run)));
     }
 
-    public void snapshotReplay(@NotNull Context context) {
+    public void snapshotReplay(@NotNull Context context) { replayImage(context, false); }
+    public void clipReplay(@NotNull Context context) { replayImage(context, true); }
+
+    private void replayImage(Context context, boolean animated) {
         long scoreId = requirePathScoreId(context, "scoreId");
         final SnapshotRequest request;
+        final xyz.zcraft.ostella.snapshot.ReplayClip.Window window;
         try {
             request = SnapshotRequest.fromQuery(context.queryParam("time"), context.queryParam("object"),
                     context.queryParam("miss"), context.queryParam("offset"));
+            window = animated ? xyz.zcraft.ostella.snapshot.ReplayClip.Window.parse(
+                    context.queryParam("before"), context.queryParam("after")) : null;
         } catch (IllegalArgumentException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
         }
@@ -581,6 +587,14 @@ public class AnalyzeController {
                 })
                 .thenCompose(scene -> {
                     context.header("X-Snapshot-Time", Long.toString(scene.time()));
+                    if (animated) {
+                        var clip = new xyz.zcraft.ostella.snapshot.ReplayClip(scene, window.before(), window.after());
+                        context.header("X-Clip-Start", Double.toString(clip.start()));
+                        context.header("X-Clip-End", Double.toString(clip.end()));
+                        return java.util.concurrent.CompletableFuture.supplyAsync(
+                                () -> clip.render(snapshotBackground(scene)), renderer.getRasterExecutor())
+                                .thenAccept(bytes -> context.status(200).contentType("image/gif").result(bytes));
+                    }
                     return ImageResponse.respond(context, scene, SnapshotScene::responseData,
                             data -> SnapshotRenderer.render(data, snapshotBackground(data)), renderer.getRasterExecutor());
                 }));
