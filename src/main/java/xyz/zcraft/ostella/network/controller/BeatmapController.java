@@ -16,6 +16,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
@@ -34,6 +35,7 @@ import java.time.Duration;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 import static xyz.zcraft.ostella.service.CacheService.tryCache;
 import static xyz.zcraft.ostella.util.RequestUtil.*;
@@ -149,20 +151,8 @@ public class BeatmapController {
                     return executor
                             .enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), beatmapsetId))
                             .thenApply(beatmapset -> {
-                                if (beatmapset == null)
-                                    throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-
-                                tryCache(beatmapset);
-
-                                BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
-                                        .stream()
-                                        .filter(b -> Objects.equals(b.getId(), beatmapId))
-                                        .findFirst()
-                                        .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-
-                                beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
-
-                                return beatmapExtended;
+                                if (beatmapset != null) tryCache(beatmapset);
+                                return selectBeatmap(beatmapset, beatmapId);
                             });
                 })
                 .thenAccept(beatmap -> context.status(200).result(
@@ -180,23 +170,7 @@ public class BeatmapController {
     private void lookupBeatmapOfIdAsync(@NotNull Context context) {
         final long m = requireLong(context, "m");
 
-        context.future(() -> executor
-                .enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), m))
-                .thenApply(beatmapset -> {
-                    if (beatmapset == null)
-                        throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-
-                    tryCache(beatmapset);
-
-                    BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
-                            .stream()
-                            .filter(b -> Objects.equals(b.getId(), m))
-                            .findFirst()
-                            .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                    beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
-
-                    return beatmapExtended;
-                })
+        context.future(() -> loadBeatmap(m)
                 .thenAccept(beatmapExtended -> context.status(200).result(
                         new Response(true, "Success", beatmapLookupData(beatmapExtended)).toString()
                 )));
@@ -206,21 +180,8 @@ public class BeatmapController {
         final String mod = optionalString(context, "mod");
         final long m = requirePathLong(context, "beatmapId");
 
-        context.future(() -> executor
-                .enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), m))
-                .thenApply(beatmapset -> {
-                    if (beatmapset == null)
-                        throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-
-                    tryCache(beatmapset);
-
-                    BeatmapExtended beatmapExtended = beatmapset.getBeatmaps()
-                            .stream()
-                            .filter(b -> Objects.equals(b.getId(), m))
-                            .findFirst()
-                            .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                    beatmapExtended = BeatmapData.withBeatmapset(beatmapExtended, beatmapset);
-
+        context.future(() -> loadBeatmap(m)
+                .thenApply(beatmapExtended -> {
                     context.header("X-Beatmap-Id", String.valueOf(beatmapExtended.getId()));
                     context.header("X-Beatmapset-Id", String.valueOf(beatmapExtended.getBeatmapsetId()));
 
@@ -228,6 +189,25 @@ public class BeatmapController {
                 })
                 .thenCompose(beatmap -> ImageResponse.respond(context, beatmap,
                         data -> renderBeatmap(data, mod), renderer.getRenderExecutor())));
+    }
+
+    private CompletableFuture<BeatmapExtended> loadBeatmap(long beatmapId) {
+        return executor.enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), beatmapId))
+                .thenApply(beatmapset -> {
+                    // Preserve caching before selection, including the missing-map case.
+                    if (beatmapset != null) tryCache(beatmapset);
+                    return selectBeatmap(beatmapset, beatmapId);
+                });
+    }
+
+    static BeatmapExtended selectBeatmap(Beatmapset beatmapset, Long beatmapId) {
+        if (beatmapset == null)
+            throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
+        BeatmapExtended beatmap = beatmapset.getBeatmaps().stream()
+                .filter(candidate -> Objects.equals(candidate.getId(), beatmapId))
+                .findFirst()
+                .orElseThrow(() -> new ApiException(ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
+        return BeatmapData.withBeatmapset(beatmap, beatmapset);
     }
 
     private byte[] renderBeatmap(BeatmapExtended beatmap, String mod) {
@@ -266,14 +246,7 @@ public class BeatmapController {
         context.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), beatmapId))
                 .thenApply(beatmapset -> {
-                    if (beatmapset == null)
-                        throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND, "No beatmapset found");
-                    BeatmapExtended beatmap = beatmapset.getBeatmaps().stream()
-                            .filter(candidate -> Objects.equals(candidate.getId(), beatmapId))
-                            .findFirst()
-                            .orElseThrow(() -> new ApiException(
-                                    ErrorCode.NO_BEATMAP_FOUND, "No beatmap found"));
-                    beatmap = BeatmapData.withBeatmapset(beatmap, beatmapset);
+                    BeatmapExtended beatmap = selectBeatmap(beatmapset, beatmapId);
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
                     context.header("X-Beatmapset-Id", String.valueOf(beatmap.getBeatmapsetId()));
                     return beatmap;

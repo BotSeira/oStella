@@ -163,18 +163,11 @@ public class BeatmapsetController {
     }
 
     private void lookupBeatmapsetOfMapAsync(@NotNull Context context) {
-        lookupBeatmapsetOfMapAsync(context, requireLong(context, "m"));
-    }
-
-    private void lookupBeatmapsetOfMapAsync(@NotNull Context context, long m) {
+        final long m = requireLong(context, "m");
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), m))
                 .thenAccept(beatmapset -> context.status(200).result(
                         new Response(true, "Success", beatmapsetLookupData(beatmapset)).toString()
                 )));
-    }
-
-    private void lookupBeatmapsetOfIdAsync(@NotNull Context context) {
-        lookupBeatmapsetOfIdAsync(context, requireLong(context, "ms"));
     }
 
     public void getBeatmapsetById(@NotNull Context context) {
@@ -186,7 +179,8 @@ public class BeatmapsetController {
                         context, beatmapset, renderer::renderBeatmapset, renderer.getRenderExecutor())));
     }
 
-    private void lookupBeatmapsetOfIdAsync(@NotNull Context context, long ms) {
+    private void lookupBeatmapsetOfIdAsync(@NotNull Context context) {
+        final long ms = requireLong(context, "ms");
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
                 .thenAccept(beatmapset -> context.status(200).result(
                         new Response(true, "Success", beatmapsetLookupData(beatmapset)).toString()

@@ -5,11 +5,13 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import io.javalin.http.Context;
 import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -31,6 +33,14 @@ public class RequestUtil {
 
     public static void putResult(Context context, String key, String val) {
         putResult(context, Map.of(key, val));
+    }
+
+    public static List<ScoreFilter> requireScoreFilters(Context context) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"));
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
     }
 
     public static int requireInt(Context context, String param) throws ApiException {

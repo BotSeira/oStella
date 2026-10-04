@@ -66,14 +66,6 @@ public class ScoreController {
         this.tokenManager = router.tokenManager;
     }
 
-    private static List<ScoreFilter> requireScoreFilters(Context context) {
-        try {
-            return ScoreFilter.parseList(context.queryParam("filters"));
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
-        }
-    }
-
     static int scoreLookupFetchLimit(int index, List<ScoreFilter> filters) {
         return filters.isEmpty() ? index : OsuAPI.MAX_USER_SCORES_LIMIT;
     }
