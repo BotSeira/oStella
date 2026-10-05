@@ -370,7 +370,8 @@ public final class ScoreFilter {
                 diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
                 beatmapAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
             } catch (AnalyzeException | ParseException e) {
-                throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
+                // TODO Add some logs mb
+                // throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
             }
         } else {
             diffSpec = null;
@@ -385,8 +386,8 @@ public final class ScoreFilter {
             case ACCURACY -> score.getAccuracy() != null && compare(score.getAccuracy() * 100);
             case COMBO -> score.getMaxCombo() != null && compare(score.getMaxCombo());
             case PP -> score.getPp() != null && compare(score.getPp());
-            case LENGTH -> compare(diffSpec.getLength());
-            case STAR -> compare(diffSpec.getStar());
+            case LENGTH -> diffSpec != null && compare(diffSpec.getLength());
+            case STAR -> diffSpec != null && compare(diffSpec.getStar());
             case AR -> beatmap != null && beatmap.getAr() != null
                     && compare(difficultyAttribute.ar());
             case CS -> beatmap != null && beatmap.getCs() != null
@@ -418,7 +419,7 @@ public final class ScoreFilter {
             case FULL_COMBO -> compareBoolean(score.getIsPerfectCombo());
             case TAG -> beatmapset != null && beatmapset.getTags() != null
                     && compareText(beatmapset.getTags());
-            case TYPE -> compareType(beatmapAnalysis);
+            case TYPE -> beatmapAnalysis != null && compareType(beatmapAnalysis);
             case SOURCE -> beatmapset != null && compareText(beatmapset.getSource());
         };
     }
