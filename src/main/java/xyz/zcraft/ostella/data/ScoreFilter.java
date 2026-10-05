@@ -605,7 +605,7 @@ public final class ScoreFilter {
         boolean isMetadataText() {
             return this == ANY || this == TITLE || this == ARTIST
                     || this == MAPPER || this == GENRE || this == LANGUAGE
-                    || this == TAG || this == SOURCE;
+                    || this == TAG || this == TYPE || this == SOURCE;
         }
 
         boolean isBoolean() {
