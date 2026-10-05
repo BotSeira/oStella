@@ -592,6 +592,7 @@ public final class ScoreFilter {
                 case "language" -> LANGUAGE;
                 case "source" -> SOURCE;
                 case "tag" -> TAG;
+                case "type" -> TYPE;
                 case "nsfw" -> NSFW;
                 case "video" -> VIDEO;
                 case "storyboard" -> STORYBOARD;
