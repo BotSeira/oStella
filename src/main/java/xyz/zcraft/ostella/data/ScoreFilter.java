@@ -4,7 +4,9 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
@@ -22,7 +24,7 @@ import java.util.regex.Pattern;
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
-                    + "|any|title|artist|mapper|genre|language|tag|source|nsfw|video|storyboard|fullcombo|ar|od|cs|hp)"
+                    + "|any|title|artist|mapper|genre|language|tag|source|nsfw|video|storyboard|fullcombo|ar|od|cs|hp|type)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
     private static final Pattern DURATION_PATTERN = Pattern.compile("(?i)^(?:(\\d+)m)?(?:(\\d+(?:\\.\\d+)?)s)?$");
@@ -293,7 +295,7 @@ public final class ScoreFilter {
             case BPM -> formatNumber(value) + " BPM";
             case MISS -> formatNumber(value) + " miss";
             case SCORE, AR, CS, HP, OD -> formatNumber(value);
-            case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, TAG, SOURCE,
+            case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, TAG, TYPE, SOURCE,
                  NSFW, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
@@ -357,19 +359,22 @@ public final class ScoreFilter {
         Beatmapset beatmapset = score.getBeatmapset();
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(score);
         final DiffSpec diffSpec;
+        final BeatmapPatternAnalysis beatmapAnalysis;
 
-        if (field == Field.LENGTH || field == Field.STAR) {
+        if (field == Field.LENGTH || field == Field.STAR || field == Field.TYPE) {
             if (beatmap == null) {
                 throw new IllegalStateException("Beatmap has not been set");
             }
             try {
                 final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
                 diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
+                beatmapAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
             } catch (AnalyzeException | ParseException e) {
                 throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
             }
         } else {
             diffSpec = null;
+            beatmapAnalysis = null;
         }
 
         if (field == Field.TAG || field == Field.ANY) {
@@ -413,7 +418,26 @@ public final class ScoreFilter {
             case FULL_COMBO -> compareBoolean(score.getIsPerfectCombo());
             case TAG -> beatmapset != null && beatmapset.getTags() != null
                     && compareText(beatmapset.getTags());
+            case TYPE -> compareType(beatmapAnalysis);
             case SOURCE -> beatmapset != null && compareText(beatmapset.getSource());
+        };
+    }
+
+    private boolean compareType(BeatmapPatternAnalysis analysis) {
+        Objects.requireNonNull(analysis);
+        final String requiredType = textValues.stream().findFirst().orElseThrow();
+        return switch (operator) {
+            case EQUAL -> analysis.primaryType().type().name().equalsIgnoreCase(requiredType);
+            case NOT_EQUAL -> !analysis.primaryType().type().name().equalsIgnoreCase(requiredType);
+            case CONTAINS -> analysis.types()
+                    .stream()
+                    .filter(t -> t.percentage() > 10)
+                    .anyMatch(t -> t.type().name().equalsIgnoreCase(requiredType));
+            case NOT_CONTAINS -> analysis.types()
+                    .stream()
+                    .filter(t -> t.percentage() > 10)
+                    .noneMatch(t -> t.type().name().equalsIgnoreCase(requiredType));
+            default -> throw new IllegalStateException("Invalid operator for type filter");
         };
     }
 
@@ -530,6 +554,7 @@ public final class ScoreFilter {
         GENRE("Genre"),
         LANGUAGE("Language"),
         TAG("Tag"),
+        TYPE("Type"),
         SOURCE("Source"),
         NSFW("NSFW"),
         VIDEO("Video"),
