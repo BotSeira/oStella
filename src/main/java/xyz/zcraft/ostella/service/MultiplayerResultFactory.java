@@ -59,6 +59,8 @@ public final class MultiplayerResultFactory {
                 ));
 
         List<MultiplayerResultData.PlayerResult> players = new ArrayList<>(sorted.size());
+        List<Mod> commonMods = commonMods(sorted);
+        MultiplayerDifficultyCalculator difficulties = new MultiplayerDifficultyCalculator(client);
         int fallbackPosition = 1;
         Long previousScore = null;
         for (MultiplayerRoomScore roomScore : sorted) {
@@ -87,8 +89,8 @@ public final class MultiplayerResultFactory {
                     profileCoverUrl(user),
                     user == null ? null : user.getCountryCode(),
                     playerMap == null || playerMap.getVersion() == null ? "Unknown Diff" : playerMap.getVersion(),
-                    playerMap == null ? null : playerMap.getDifficultyRating(),
-                    modString(score.getMods()),
+                    difficulties.rating(score, playerMap, item.getBeatmapId()),
+                    individualMods(score.getMods(), commonMods),
                     score.getAccuracy(),
                     score.getMaxCombo(),
                     totalScore,
@@ -163,6 +165,7 @@ public final class MultiplayerResultFactory {
                 players,
                 teams,
                 unassignedPlayers,
+                commonMods,
                 customBo
         );
     }
@@ -281,7 +284,36 @@ public final class MultiplayerResultFactory {
         );
     }
 
-    private static String modString(List<Mod> mods) {
+    static List<Mod> commonMods(List<MultiplayerRoomScore> scores) {
+        List<Mod> common = null;
+        for (MultiplayerRoomScore entry : scores) {
+            if (entry.score() == null) continue;
+            List<Mod> mods = validMods(entry.score().getMods());
+            if (common == null) common = new ArrayList<>(mods);
+            else common.removeIf(mod -> mods.stream().noneMatch(other -> sameMod(mod, other)));
+        }
+        return common == null ? List.of() : List.copyOf(common);
+    }
+
+    private static boolean sameMod(Mod a, Mod b) {
+        return a.getAcronym().equals(b.getAcronym())
+                && Objects.equals(a.getSettings() == null ? Map.of() : a.getSettings(),
+                b.getSettings() == null ? Map.of() : b.getSettings());
+    }
+
+    static List<Mod> validMods(List<Mod> mods) {
+        return mods == null ? List.of() : mods.stream().filter(Objects::nonNull)
+                .filter(mod -> mod.getAcronym() != null && !mod.getAcronym().isBlank()
+                        && !"NM".equals(mod.getAcronym())).toList();
+    }
+
+    static String individualMods(List<Mod> mods, List<Mod> common) {
+        List<Mod> remaining = validMods(mods).stream()
+                .filter(mod -> common.stream().noneMatch(shared -> sameMod(mod, shared))).toList();
+        return remaining.isEmpty() && !common.isEmpty() ? "" : modString(remaining);
+    }
+
+    public static String modString(List<Mod> mods) {
         if (mods == null || mods.isEmpty()) {
             return "NM";
         }

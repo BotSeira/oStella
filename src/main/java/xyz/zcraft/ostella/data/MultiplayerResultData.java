@@ -1,15 +1,20 @@
 package xyz.zcraft.ostella.data;
 
+import xyz.zcraft.osu.model.Mod;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+
+import static xyz.zcraft.ostella.service.MultiplayerResultFactory.modString;
 
 public record MultiplayerResultData(long roomId, String roomName, long playlistItemId, String playedAt,
                                     String client, String scoringType, String teamType,
                                     long totalScore, long averageScore, double teamLeadPercent, String winningTeam,
                                     SeriesScore seriesScore,
                                     BeatmapInfo beatmap, UserInfo queuedBy, List<PlayerResult> players,
-                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, Integer customBo) {
+                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, List<Mod> commonMods, Integer customBo
+) {
     public MultiplayerResultData(
             long roomId,
             String roomName,
@@ -28,6 +33,7 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
             List<PlayerResult> players,
             List<TeamResult> teams,
             List<PlayerResult> unassignedPlayers,
+            List<Mod> commonMods,
             Integer customBo
     ) {
         this.roomId = roomId;
@@ -47,7 +53,12 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         this.players = List.copyOf(players);
         this.teams = List.copyOf(teams);
         this.unassignedPlayers = List.copyOf(unassignedPlayers);
+        this.commonMods = List.copyOf(commonMods);
         this.customBo = customBo;
+    }
+
+    public String getCommonModString() {
+        return modString(commonMods).equals("NM") ? "" : modString(commonMods);
     }
 
     private static int teamOrder(String team) {
