@@ -358,8 +358,8 @@ public final class ScoreFilter {
         BeatmapExtended beatmap = score.getBeatmap();
         Beatmapset beatmapset = score.getBeatmapset();
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(score);
-        final DiffSpec diffSpec;
-        final BeatmapPatternAnalysis beatmapAnalysis;
+        DiffSpec diffSpec = null;
+        BeatmapPatternAnalysis beatmapAnalysis = null;
 
         if (field == Field.LENGTH || field == Field.STAR || field == Field.TYPE) {
             if (beatmap == null) {
@@ -373,9 +373,6 @@ public final class ScoreFilter {
                 // TODO Add some logs mb
                 // throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
             }
-        } else {
-            diffSpec = null;
-            beatmapAnalysis = null;
         }
 
         if (field == Field.TAG || field == Field.ANY) {
