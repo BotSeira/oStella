@@ -1,6 +1,11 @@
 package xyz.zcraft.ostella.addpp;
 
-import java.util.*;
+import xyz.zcraft.osu.model.ModSettings;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -10,7 +15,7 @@ public record MapConditions(String mods, Double accuracy,
                             Integer great, Integer ok, Integer meh, Integer misses, Integer combo, boolean fc) {
     private static final Pattern ACC = Pattern.compile("(\\d+(?:\\.\\d+)?)%");
     private static final Pattern COUNT = Pattern.compile("(\\d+)(great|ok|meh|miss|misses|x|combo)");
-    private static final Set<String> MODS = Set.of("NF", "EZ", "HD", "HR", "SD", "DT", "NC", "HT", "FL", "SO", "PF", "CL", "MR");
+    private static final Set<String> MODS = Set.of("NF", "EZ", "HD", "HR", "SD", "DT", "NC", "HT", "FL", "SO", "PF", "CL", "MR", "DA", "DC");
 
     public static MapConditions parse(List<String> tokens) {
         if (tokens == null) tokens = List.of();
@@ -55,10 +60,10 @@ public record MapConditions(String mods, Double accuracy,
             } else if (token.equals("fc")) {
                 key = "FC";
                 fc = true;
-            } else if (token.matches("\\+?[a-z]+")) {
+            } else if (token.matches("\\+?[a-z].*")) {
                 key = "Mod";
                 if (hasMods) throw new IllegalArgumentException("Mod 重复，请合并为 HDDT 等一个条件。");
-                mods = parseMods(token);
+                mods = parseMods(raw);
                 hasMods = true;
             } else
                 throw new IllegalArgumentException("无法识别条件「" + raw + "」。支持 HDDT、97.41%、13miss、18ok、2meh、1200x、FC。");
@@ -76,21 +81,11 @@ public record MapConditions(String mods, Double accuracy,
     }
 
     private static String parseMods(String token) {
-        String value = token.replace("+", "").toUpperCase(Locale.ROOT);
-        if (value.equals("NM")) return "";
-        if (value.length() % 2 != 0) throw new IllegalArgumentException("无法识别 Mod「" + value + "」。");
-        Set<String> mods = new LinkedHashSet<>();
-        for (int i = 0; i < value.length(); i += 2) {
-            String mod = value.substring(i, i + 2);
-            if (!MODS.contains(mod))
-                throw new IllegalArgumentException("不支持 Mod「" + mod + "」；仅接受可获得 PP 的 osu!standard Mod 默认设置。");
-            if (!mods.add(mod)) throw new IllegalArgumentException("Mod「" + mod + "」重复。");
-        }
-        for (Set<String> conflict : List.of(Set.of("HR", "EZ"), Set.of("DT", "HT"), Set.of("NC", "HT"),
-                Set.of("NF", "SD"), Set.of("NF", "PF")))
-            if (mods.containsAll(conflict))
-                throw new IllegalArgumentException("Mod 冲突：" + String.join("/", conflict) + "。");
-        return String.join("", mods);
+        var parsed = ModSettings.parse(token);
+        for (var mod : parsed)
+            if (!MODS.contains(mod.getAcronym()))
+                throw new IllegalArgumentException("不支持计算 PP 的 Mod: " + mod.getAcronym());
+        return ModSettings.format(parsed);
     }
 
     /**

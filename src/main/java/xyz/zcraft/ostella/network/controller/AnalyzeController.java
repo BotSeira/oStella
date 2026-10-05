@@ -24,6 +24,7 @@ import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.PerformanceState;
@@ -85,19 +86,16 @@ public class AnalyzeController {
             final long windowEnd = windowStart + windowDurationMs;
             if (windowEnd > lastObjectTime) break;
 
-            windowDifficulties.add(calculatePerformancePoint(beatmap, windowStart, windowEnd));
+            windowDifficulties.add(calculatePerformancePoint(beatmap, windowStart, windowEnd, score.getMods()));
         }
 
         if (windowDifficulties.isEmpty()) {
             windowDifficulties.add(calculatePerformancePoint(beatmap, firstObjectTime,
-                    Math.max(firstObjectTime + 1, lastObjectTime)));
+                    Math.max(firstObjectTime + 1, lastObjectTime), score.getMods()));
         }
 
-        final String mods = score.getMods().stream()
-                .map(Mod::getAcronym)
-                .reduce("", String::concat);
         final List<double[]> realtimePp = calculateRealtimePp(
-                beatmap, analyze, mods, score.getMaxCombo());
+                beatmap, analyze, score.getMods(), score.getMaxCombo());
 
         final List<Long> misses = objectResultTimes(analyze.events(), HitEvent.HitResult.MISS);
         final List<Long> hit50s = objectResultTimes(analyze.events(), HitEvent.HitResult.MEH);
@@ -120,6 +118,12 @@ public class AnalyzeController {
     public static List<double[]> calculateRealtimePp(
             OsuBeatmap beatmap, ReplayAnalyze analyze, String mods, Long finalMaxCombo
     ) throws AnalyzeException {
+        return calculateRealtimePp(beatmap, analyze, ModSettings.parse(mods), finalMaxCombo);
+    }
+
+    public static List<double[]> calculateRealtimePp(
+            OsuBeatmap beatmap, ReplayAnalyze analyze, List<Mod> mods, Long finalMaxCombo
+    ) throws AnalyzeException {
         final List<HitEvent> events = analyze.events();
         final List<double[]> realtimePp = new ArrayList<>();
 
@@ -130,7 +134,7 @@ public class AnalyzeController {
         PerformanceState state = new PerformanceState();
 
         try (var rosuBeatmap = new RosuFFI.Beatmap(beatmap.toBeatmapString().getBytes());
-             var rosuMods = RosuFFI.Mods.fromAcronyms(mods, RosuFFI.Mode.Osu);
+             var rosuMods = OsuParser.toRosuMods(mods);
              var performance = new RosuFFI.Performance()) {
 
             performance.mods(rosuMods);
@@ -198,8 +202,8 @@ public class AnalyzeController {
         PerformanceState actual = calculateStateAtEvent(events, targetMiss, false);
         PerformanceState withoutMiss = calculateStateAtEvent(events, targetMiss, true);
 
-        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, passedObjects);
-        double withoutMissPp = ReplayAnalyzer.calculatePp(beatmap, modBits, withoutMiss, passedObjects);
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, passedObjects);
+        double withoutMissPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, withoutMiss, passedObjects);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
@@ -219,9 +223,9 @@ public class AnalyzeController {
         PerformanceState withoutTargetMiss = calculateFinalState(
                 events, objectCount, event -> isSameEvent(event, targetMiss));
 
-        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, objectCount);
         double withoutMissPp = ReplayAnalyzer.calculatePp(
-                beatmap, modBits, withoutTargetMiss, objectCount);
+                beatmap, analyze.replay(), modBits, withoutTargetMiss, objectCount);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
@@ -240,9 +244,9 @@ public class AnalyzeController {
                 event -> event.isObjectStart()
                         && event.hitResult() == HitEvent.HitResult.MISS);
 
-        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, objectCount);
         double withoutMissPp = ReplayAnalyzer.calculatePp(
-                beatmap, modBits, withoutMisses, objectCount);
+                beatmap, analyze.replay(), modBits, withoutMisses, objectCount);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
@@ -298,10 +302,10 @@ public class AnalyzeController {
         return event == targetEvent || event.equals(targetEvent);
     }
 
-    private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end)
+    private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end, List<Mod> mods)
             throws AnalyzeException {
         try {
-            final var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end);
+            final var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end, mods);
             return new double[]{start + (end - start) / 2.0, difficulty.getValue()};
         } catch (RuntimeException e) {
             throw new AnalyzeException("Failed to calculate window difficulty around " + start, e);
@@ -363,7 +367,7 @@ public class AnalyzeController {
                     final DiffSpec diffSpec;
                     try {
                         osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-                        diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+                        diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
 
                         router.ensurePp(score, osuBeatmap);
                     } catch (ParseException e) {

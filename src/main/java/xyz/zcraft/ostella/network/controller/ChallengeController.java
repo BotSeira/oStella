@@ -11,6 +11,7 @@ import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.Beatmap;
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
@@ -87,7 +88,7 @@ public final class ChallengeController {
     }
 
     private static String modString(Score score) {
-        return score.getMods() == null ? "" : score.getMods().stream().map(Mod::getAcronym).sorted().reduce("", String::concat);
+        return ModSettings.format(score.getMods());
     }
 
     private static boolean ranked(String status) {

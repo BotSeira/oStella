@@ -5,6 +5,7 @@ import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 
 public class ScoreFormatUtil {
@@ -87,7 +88,7 @@ public class ScoreFormatUtil {
 
         StringBuilder sb = new StringBuilder("[");
         for (Mod mod : score.getMods()) {
-            sb.append(mod.getAcronym());
+            sb.append(ModSettings.format(mod));
         }
         sb.append("]");
 

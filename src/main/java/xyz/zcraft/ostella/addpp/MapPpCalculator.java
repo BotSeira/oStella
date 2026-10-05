@@ -1,30 +1,21 @@
 package xyz.zcraft.ostella.addpp;
 
 import desu.life.RosuFFI;
+import xyz.zcraft.osu.model.ModSettings;
 
 import java.nio.file.Path;
-import java.util.HashSet;
-import java.util.Set;
 
 public final class MapPpCalculator {
     private MapPpCalculator() {
     }
 
     public static Result calculate(Path path, MapConditions conditions) {
-        String acronyms = conditions.mods();
-        Set<String> single = new HashSet<>();
-        boolean isLazer = true;
-        for (int i = 0; i < acronyms.length() / 2; i++) {
-            final String mod = acronyms.substring(i * 2, i * 2 + 2);
-            if ("CL".equals(mod)) {
-                isLazer = false;
-            } else {
-                single.add(mod);
-            }
-        }
+        var parsedMods = ModSettings.parse(conditions.mods());
+        boolean isLazer = parsedMods.stream().noneMatch(mod -> "CL".equals(mod.getAcronym())
+                && (mod.getSettings() == null || !Boolean.FALSE.equals(mod.getSettings().get("no_slider_head_accuracy"))));
 
         try (var map = new RosuFFI.Beatmap(path.toAbsolutePath().toString());
-             var mods = RosuFFI.Mods.fromAcronyms(String.join("", single), RosuFFI.Mode.Osu);
+             var mods = xyz.zcraft.osu.parser.OsuParser.toRosuMods(parsedMods);
              var difficulty = new RosuFFI.Difficulty();
              var performance = new RosuFFI.Performance()) {
             if (map.mode() != RosuFFI.Mode.Osu) throw new IllegalArgumentException("仅支持 osu!standard 原生谱面。");

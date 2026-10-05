@@ -13,7 +13,7 @@ import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
 import xyz.zcraft.osu.model.UserExtended;
@@ -498,7 +498,7 @@ public class UserController {
                     score.getAccuracy(),
                     score.getMaxCombo(),
                     score.getPp() != null ? score.getPp() : 0.0,
-                    score.getMods().stream().map(Mod::getAcronym).collect(Collectors.joining(""))
+                    ModSettings.format(score.getMods())
             );
         }
     }

@@ -13,7 +13,8 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
                                     long totalScore, long averageScore, double teamLeadPercent, String winningTeam,
                                     SeriesScore seriesScore,
                                     BeatmapInfo beatmap, UserInfo queuedBy, List<PlayerResult> players,
-                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, List<Mod> commonMods, Integer customBo
+                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, List<Mod> commonMods,
+                                    Integer customBo
 ) {
     public MultiplayerResultData(
             long roomId,
@@ -57,16 +58,16 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         this.customBo = customBo;
     }
 
-    public String getCommonModString() {
-        return modString(commonMods).equals("NM") ? "" : modString(commonMods);
-    }
-
     private static int teamOrder(String team) {
         return switch (team == null ? "" : team) {
             case "red" -> 0;
             case "blue" -> 1;
             default -> 2;
         };
+    }
+
+    public String getCommonModString() {
+        return modString(commonMods).equals("NM") ? "" : modString(commonMods);
     }
 
     public boolean isTeamVs() {

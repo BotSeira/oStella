@@ -1,10 +1,7 @@
 package xyz.zcraft.ostella.data;
 
 import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Beatmapset;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.OsuParser;
@@ -203,6 +200,7 @@ public final class ScoreFilter {
         List<String> tokens = new ArrayList<>();
         int start = 0;
         int bracketDepth = 0;
+        int parameterDepth = 0;
         boolean escaped = false;
         for (int index = 0; index < encodedFilters.length(); index++) {
             char character = encodedFilters.charAt(index);
@@ -219,7 +217,12 @@ public final class ScoreFilter {
                 }
             } else if (character == ']' && bracketDepth > 0) {
                 bracketDepth--;
-            } else if (character == ',' && bracketDepth == 0) {
+            } else if (character == '(' && bracketDepth == 0
+                    && (parameterDepth > 0 || encodedFilters.substring(start, index).trim().matches("(?i)^mods?(?:=|!=|~|!~).*"))) {
+                parameterDepth++;
+            } else if (character == ')' && bracketDepth == 0 && parameterDepth > 0) {
+                parameterDepth--;
+            } else if (character == ',' && bracketDepth == 0 && parameterDepth == 0) {
                 tokens.add(encodedFilters.substring(start, index));
                 start = index + 1;
             }
@@ -232,23 +235,7 @@ public final class ScoreFilter {
     }
 
     private static Set<String> parseMods(String value) {
-        String normalized = value.trim().toUpperCase(Locale.ROOT).replace("+", "").replace(" ", "");
-        if (normalized.equals("NM")) {
-            return Set.of();
-        }
-        if (normalized.isEmpty() || normalized.length() % 2 != 0) {
-            throw new IllegalArgumentException("Invalid mods: " + value);
-        }
-
-        Set<String> mods = new HashSet<>();
-        for (int i = 0; i < normalized.length(); i += 2) {
-            String acronym = normalized.substring(i, i + 2);
-            if (!MOD_PATTERN.matcher(acronym).matches()) {
-                throw new IllegalArgumentException("Invalid mods: " + value);
-            }
-            mods.add(acronym);
-        }
-        return Set.copyOf(mods);
+        return ModSettings.parse(value).stream().map(ModSettings::format).collect(java.util.stream.Collectors.toSet());
     }
 
     private static double parseNumber(String value, String token) {
@@ -364,6 +351,7 @@ public final class ScoreFilter {
         if (score == null) {
             return false;
         }
+        if (field == Field.MODS) return compareMods(score.getMods());
 
         BeatmapExtended beatmap = score.getBeatmap();
         Beatmapset beatmapset = score.getBeatmapset();
@@ -376,7 +364,7 @@ public final class ScoreFilter {
             }
             try {
                 final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-                diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+                diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
             } catch (AnalyzeException | ParseException e) {
                 throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
             }
@@ -403,7 +391,7 @@ public final class ScoreFilter {
             case OD -> beatmap != null && beatmap.getAccuracy() != null
                     && compare(difficultyAttribute.od());
             case BPM -> beatmap != null && beatmap.getBpm() != null
-                    && compare(beatmap.getBpm());
+                    && compare(beatmap.getBpm() * ModSettings.clockRate(score.getMods()));
             case MISS -> score.getStatistics() != null && compare(score.getStatistics().getOrDefault("miss", 0L));
             case SCORE -> score.getTotalScore() != null && compare(score.getTotalScore());
             case MODS -> compareMods(score.getMods());
@@ -443,24 +431,30 @@ public final class ScoreFilter {
     }
 
     private boolean compareMods(List<Mod> scoreMods) {
-        Set<String> actual = new HashSet<>();
-        if (scoreMods != null) {
-            scoreMods.stream()
-                    .map(Mod::getAcronym)
-                    .filter(value -> value != null && !value.isBlank())
-                    .map(value -> value.toUpperCase(Locale.ROOT))
-                    .forEach(actual::add);
-        }
-
-        Set<String> semanticActual = new HashSet<>(actual);
-        if (actual.contains("NC")) semanticActual.add("DT");
-        if (actual.contains("PF")) semanticActual.add("SD");
-
+        List<Mod> actual = scoreMods == null ? List.of() : scoreMods;
+        List<Mod> requested = textValues.stream().flatMap(value -> ModSettings.parse(value).stream()).toList();
+        boolean contains = requested.stream().allMatch(expected -> actual.stream().anyMatch(candidate -> {
+            boolean acronym = expected.getAcronym().equals(candidate.getAcronym())
+                    || ((operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS)
+                    && (("DT".equals(expected.getAcronym()) && "NC".equals(candidate.getAcronym()))
+                    || ("SD".equals(expected.getAcronym()) && "PF".equals(candidate.getAcronym()))));
+            if (!acronym) return false;
+            if (expected.getSettings() == null || expected.getSettings().isEmpty()) return true;
+            return expected.getSettings().entrySet().stream().allMatch(setting -> {
+                Object value = candidate.getSettings() == null ? null : candidate.getSettings().get(setting.getKey());
+                if (value == null && "speed_change".equals(setting.getKey()))
+                    value = ModSettings.clockRate(List.of(candidate));
+                if (value instanceof Number number && setting.getValue() instanceof Number wanted)
+                    return Double.compare(number.doubleValue(), wanted.doubleValue()) == 0;
+                return Objects.equals(value, setting.getValue());
+            });
+        }));
+        boolean exact = contains && actual.size() == requested.size();
         return switch (operator) {
-            case CONTAINS -> semanticActual.containsAll(textValues);
-            case NOT_CONTAINS -> !semanticActual.containsAll(textValues);
-            case EQUAL -> actual.equals(textValues);
-            case NOT_EQUAL -> !actual.equals(textValues);
+            case CONTAINS -> contains;
+            case NOT_CONTAINS -> !contains;
+            case EQUAL -> exact;
+            case NOT_EQUAL -> !exact;
             default -> throw new IllegalStateException("Numeric operator used for mods filter");
         };
     }

@@ -80,7 +80,7 @@ public class ScoreController {
 
         try {
             osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmap().getId()));
-            diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+            diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
         } catch (Exception e) {
             throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
         }
@@ -175,7 +175,7 @@ public class ScoreController {
         final BeatmapExtended beatmap = score.getBeatmap();
         try {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-            final DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+            final DiffSpec diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
 
             Double calPp = null;
             try {
@@ -577,7 +577,7 @@ public class ScoreController {
     private double getWeight(ScoreEntry entry) throws ParseException {
         final Long beatmapId = entry.score().getBeatmapId();
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, getModBits(entry.score().getMods()));
+        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, entry.score().getMods());
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
 
         double patternWeight = 0;

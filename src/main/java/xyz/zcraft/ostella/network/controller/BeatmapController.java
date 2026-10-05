@@ -17,6 +17,7 @@ import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
@@ -215,7 +216,7 @@ public class BeatmapController {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
             DiffSpec diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, mod);
 
-            final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) Math.max(3, (beatmap.getTotalLength() / 50.0))))
+            final List<Double> diff = BeatmapAnalyzer.getWindowDifficulties(osuBeatmap, Duration.ofSeconds((long) Math.max(3, (beatmap.getTotalLength() / 50.0))), diffSpec.getMods())
                     .stream()
                     .map(WindowDifficulty::pp)
                     .map(pp -> pp * pp)
@@ -230,9 +231,9 @@ public class BeatmapController {
     public void getBeatmapAnalysisById(@NotNull Context context) {
         final long beatmapId = requirePathLong(context, "beatmapId");
         final String requestedMods = optionalString(context, "mod");
-        final List<String> mods;
+        final String normalizedMods;
         try {
-            mods = PerfPlusApi.parseModAcronyms(requestedMods);
+            normalizedMods = ModSettings.format(ModSettings.parse(requestedMods));
         } catch (IllegalArgumentException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
         }
@@ -241,7 +242,6 @@ public class BeatmapController {
                     "performancePlus.endpoint is not configured");
         }
 
-        final String normalizedMods = String.join("", mods);
         context.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getBeatmapsetFromBeatmap(tokenManager.getTokenData(), beatmapId))
                 .thenApply(beatmapset -> {
@@ -273,7 +273,7 @@ public class BeatmapController {
                                 return new BeatmapAnalysisData(
                                         beatmap,
                                         diffSpec,
-                                        mods,
+                                        diffSpec.getMods().stream().map(ModSettings::format).toList(),
                                         performance,
                                         patterns);
                             })

@@ -56,17 +56,10 @@ public final class SnapshotScene {
             throw new IllegalArgumentException("Flashlight, Random and Mirror replay snapshots are not supported");
         }
         if (lazer && replay.replayInfo().mods() != null) {
-            Set<String> supported = Set.of("NM", "NF", "EZ", "TD", "HD", "HR", "SD", "DT", "RX", "HT", "NC", "AT", "AP", "SO", "PF", "CL", "V2");
+            Set<String> supported = Set.of("NM", "NF", "EZ", "TD", "HD", "HR", "SD", "DT", "RX", "HT", "NC", "AT", "AP", "SO", "PF", "CL", "V2", "DA", "DC");
             for (var mod : replay.replayInfo().mods()) {
                 if (!supported.contains(mod.getAcronym()))
                     throw new IllegalArgumentException("Unsupported snapshot mod: " + mod.getAcronym());
-                if (Set.of("DT", "NC", "HT").contains(mod.getAcronym()) && mod.getSettings() != null) {
-                    Object speed = mod.getSettings().get("speed_change");
-                    double expected = mod.getAcronym().equals("HT") ? .75 : 1.5;
-                    if (speed instanceof Number number && Math.abs(number.doubleValue() - expected) > 1e-6) {
-                        throw new IllegalArgumentException("Custom clock rates are not supported by the replay analyzer");
-                    }
-                }
             }
         }
         radius = analyze.calculatedDifficulty().getCircleRadiusInPixel();

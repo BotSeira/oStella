@@ -12,7 +12,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
-/** Request-local cache: never mutate the shared beatmap model with a player's stars. */
+/**
+ * Request-local cache: never mutate the shared beatmap model with a player's stars.
+ */
 final class MultiplayerDifficultyCalculator {
     private static final Logger LOG = LoggerFactory.getLogger(MultiplayerDifficultyCalculator.class);
     private static final Gson GSON = new Gson();
@@ -21,25 +23,6 @@ final class MultiplayerDifficultyCalculator {
 
     MultiplayerDifficultyCalculator(String client) {
         lazer = !"stable".equalsIgnoreCase(client);
-    }
-
-    Double rating(Score score, BeatmapExtended map, long fallbackId) {
-        long id = map != null && map.getId() != null ? map.getId()
-                : score.getBeatmapId() != null ? score.getBeatmapId() : fallbackId;
-        String mode = score.getRulesetId() != null ? score.getRulesetId().toString()
-                : map == null || map.getMode() == null ? "osu" : map.getMode();
-        var mods = MultiplayerResultFactory.validMods(score.getMods());
-        String json = GSON.toJson(mods.stream()
-                .sorted(java.util.Comparator.comparing(mod -> mod.getAcronym())).toList());
-        Key key = new Key(id, mode, json);
-        return ratings.computeIfAbsent(key, ignored -> {
-            try {
-                return Optional.of(calculate(CacheService.getBeatmapPath(id), mode, json, lazer));
-            } catch (Exception e) {
-                LOG.warn("Failed to calculate multiplayer difficulty for beatmap {} with {}", id, json, e);
-                return Optional.empty();
-            }
-        }).orElse(null);
     }
 
     static double calculate(Path path, String ruleset, String json, boolean lazer) {
@@ -70,5 +53,25 @@ final class MultiplayerDifficultyCalculator {
         }
     }
 
-    private record Key(long beatmapId, String ruleset, String mods) { }
+    Double rating(Score score, BeatmapExtended map, long fallbackId) {
+        long id = map != null && map.getId() != null ? map.getId()
+                : score.getBeatmapId() != null ? score.getBeatmapId() : fallbackId;
+        String mode = score.getRulesetId() != null ? score.getRulesetId().toString()
+                : map == null || map.getMode() == null ? "osu" : map.getMode();
+        var mods = MultiplayerResultFactory.validMods(score.getMods());
+        String json = GSON.toJson(mods.stream()
+                .sorted(java.util.Comparator.comparing(mod -> mod.getAcronym())).toList());
+        Key key = new Key(id, mode, json);
+        return ratings.computeIfAbsent(key, ignored -> {
+            try {
+                return Optional.of(calculate(CacheService.getBeatmapPath(id), mode, json, lazer));
+            } catch (Exception e) {
+                LOG.warn("Failed to calculate multiplayer difficulty for beatmap {} with {}", id, json, e);
+                return Optional.empty();
+            }
+        }).orElse(null);
+    }
+
+    private record Key(long beatmapId, String ruleset, String mods) {
+    }
 }

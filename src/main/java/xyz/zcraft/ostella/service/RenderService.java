@@ -234,6 +234,13 @@ public class RenderService implements AutoCloseable {
         Context ctx = createContext();
         ctx.setVariable("user", user);
         ctx.setVariable("scores", scores);
+        var lazerDifficulties = new MultiplayerDifficultyCalculator("lazer");
+        var stableDifficulties = new MultiplayerDifficultyCalculator("stable");
+        ctx.setVariable("scoreStars", scores.stream().map(score -> {
+            var calculator = score.getLegacyScoreId() != null && score.getLegacyScoreId() > 0
+                    ? stableDifficulties : lazerDifficulties;
+            return calculator.rating(score, score.getBeatmap(), 0);
+        }).toList());
         ctx.setVariable("scorePositions", List.copyOf(scorePositions));
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());

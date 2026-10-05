@@ -318,7 +318,7 @@ public final class MultiplayerResultFactory {
             return "NM";
         }
         String result = mods.stream()
-                .map(Mod::getAcronym)
+                .map(ModSettings::format)
                 .filter(value -> value != null && !value.isBlank())
                 .reduce("", String::concat);
         return result.isEmpty() ? "NM" : result;

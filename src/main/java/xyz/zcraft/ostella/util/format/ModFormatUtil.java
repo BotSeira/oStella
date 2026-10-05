@@ -2,14 +2,23 @@ package xyz.zcraft.ostella.util.format;
 
 import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 
 public class ModFormatUtil {
+    public static String getSettingsText(Mod mod) {
+        return ModSettings.settingsText(mod);
+    }
+
+    public static String getSettingsText(String mod) {
+        return ModSettings.parse(mod).stream().map(ModSettings::settingsText).collect(java.util.stream.Collectors.joining(" "));
+    }
+
     public static String getColorHex(Mod mod) {
         return Colors.getModColor(mod.getAcronym());
     }
 
     public static String getColorHex(String acronym) {
-        return Colors.getModColor(acronym);
+        return Colors.getModColor(acronym.contains("(") ? acronym.substring(0, acronym.indexOf('(')) : acronym);
     }
 
     public static String getTextColorHex(Mod mod) {
@@ -21,7 +30,7 @@ public class ModFormatUtil {
     }
 
     public static String getModIcon(String acronym) {
-        //https://osu.ppy.sh/assets/images/mod-icon.dacd6669.svg
+        if (acronym.contains("(")) acronym = acronym.substring(0, acronym.indexOf('('));
         return switch (acronym) {
             case "EZ" -> "https://osu.ppy.sh/assets/images/mod-easy.92150de2.svg";
             case "NF" -> "https://osu.ppy.sh/assets/images/mod-no-fail.325de5a8.svg";

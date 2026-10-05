@@ -210,10 +210,24 @@ public class OsuAPI {
     public static Score getUserScore(TokenData tokenData, long uid, long beatmapId, String mods) {
         LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
         try {
+            var requestedMods = ModSettings.parse(mods);
+            if (requestedMods.stream().anyMatch(mod -> mod.getSettings() != null && !mod.getSettings().isEmpty())) {
+                var filter = xyz.zcraft.ostella.data.ScoreFilter.parse("mod=" + ModSettings.format(requestedMods));
+                var request = newRequestBuilder(tokenData,
+                        "/beatmaps/%s/scores/users/%s/all?ruleset=osu&legacy_only=0".formatted(beatmapId, uid)).GET().build();
+                var response = JsonParser.parseString(send(request, HttpResponse.BodyHandlers.ofString()).body()).getAsJsonObject();
+                if (!response.has("scores")) return null;
+                Score matched = response.getAsJsonArray("scores").asList().stream()
+                        .map(value -> GSON.fromJson(value, Score.class))
+                        .filter(score -> filter.matches(score, () -> null))
+                        .max(java.util.Comparator.comparingLong(score -> score.getTotalScore() == null ? 0 : score.getTotalScore()))
+                        .orElse(null);
+                return matched != null && matched.getBeatmap() == null ? getScore(tokenData, matched.getId()) : matched;
+            }
             String url = "/beatmaps/%s/scores/users/%s?mode=osu";
 
             if (mods != null && !mods.isBlank()) {
-                url += "&mods=" + mods;
+                url += "&mods=" + URLEncoder.encode(requestedMods.isEmpty() ? "NM" : ModSettings.format(requestedMods), StandardCharsets.UTF_8);
             }
 
             final var request = newRequestBuilder(tokenData, String.format(url, beatmapId, uid))
