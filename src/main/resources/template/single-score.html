@@ -467,15 +467,20 @@
              style="font-size: 2.2em; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
              th:text="${score.getBeatmapset().getTitle()}">This Is An Example Song Title</div>
         <span style="font-size: 1.1em; font-family: serif; align-self: end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
-              th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+              th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset()) && !Beatmapsets.shouldWarpSubtitle(score.getBeatmapset())}"
               th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
     </div>
 
 
     <div class="meta-row">
-        <div  style="display: flex; padding-top: 8px;">
+        <div style="display: flex; padding-top: 8px;">
             <div class="song-artist">
-                <span th:text="${score.getBeatmapset().getArtist()}"> Example Artist</span>
+                <span style="font-size: 1.1em; font-family: serif; align-self: end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"
+                      th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset()) && Beatmapsets.shouldWarpSubtitle(score.getBeatmapset())}"
+                      th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+                <span style="color: #a0a0b8; margin: 0 8px;"
+                      th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset()) && Beatmapsets.shouldWarpSubtitle(score.getBeatmapset())}">//</span>
+                <span th:text="${score.getBeatmapset().getArtist()}">Example Artist</span>
                 <span style="color: #a0a0b8; margin: 0 8px;"
                       th:if="${Beatmapsets.hasArtistUnicode(score.getBeatmapset())}">//</span>
                 <span style="font-family: serif;"
@@ -657,7 +662,7 @@
     <div style="display: flex; color: #a0a0b8; font-size: 0.85em; letter-spacing: 1px; padding: 6px 24px;">
         <span style=" " th:text="${'Ended at ' + score.getEndedAt()}">Ended at 2026-04-19T16:19:16Z</span>
         <div style="margin-left: auto;"
-             th:text="${'MS' + score.getBeatmapset().getId() + ' / M' + score.getBeatmap().getId() + ' / U' + score.getUser().getId() + ' / S' + Scores.getDisplayScoreId(score)}">
+             th:text="${'MS' + score.getBeatmapset().getId() + ' / M' + score.getBeatmap().getId() + ' / U' + score.getUser().getId() + ' / ' + Scores.getDisplayScoreId(score)}">
             MS1234567 / M1234567 / U123456789 / S1234567890
         </div>
     </div>

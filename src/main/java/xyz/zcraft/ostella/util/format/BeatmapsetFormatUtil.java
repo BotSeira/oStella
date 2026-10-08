@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.util.format;
 
+import xyz.zcraft.osu.model.Beatmap;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
 
@@ -79,5 +80,19 @@ public class BeatmapsetFormatUtil {
                 .mapToDouble(BeatmapExtended::getDifficultyRating)
                 .min()
                 .orElse(0);
+    }
+
+    public static boolean shouldWarpSubtitle(Beatmapset set) {
+        if (!hasTitleUnicode(set)) {
+            return false;
+        }
+
+        final boolean subArtistPresent = hasArtistUnicode(set);
+
+        if (!subArtistPresent) {
+            return set.getTitle().length() + set.getTitleUnicode().length() > 40;
+        } else {
+            return set.getTitleUnicode().length() + set.getArtist().length() + set.getArtistUnicode().length() < 50;
+        }
     }
 }
