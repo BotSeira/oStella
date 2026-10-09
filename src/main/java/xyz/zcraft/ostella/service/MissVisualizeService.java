@@ -62,8 +62,14 @@ public class MissVisualizeService {
         final var realtimePpLoss = AnalyzeController.calculateRealtimePpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
         final var finalPpLoss = AnalyzeController.calculateFinalPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
         final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods);
-        final var nearbyHitEvents = extractNearbyHitEvents(replayAnalyze.events(), targetMiss);
-        final var nearbyKeyFrames = extractNearbyKeyFrames(keyFrames, targetMiss.analysisTime());
+        boolean sliderTick = targetMiss.eventType() == HitEvent.EventType.SLIDER_TICK;
+        final var nearbyHitEvents = sliderTick ? replayAnalyze.events().stream()
+                .filter(e -> e.objectIndex() == targetMiss.objectIndex()).toList()
+                : extractNearbyHitEvents(replayAnalyze.events(), targetMiss);
+        final var nearbyKeyFrames = sliderTick
+                ? sliderKeyFrames(keyFrames, targetMiss.hitObject().getTime(), Math.round(
+                        targetMiss.hitObject().getTime() + ReplayAnalyzer.sliderDuration(replayAnalyze.beatmap(), targetMiss.hitObject())))
+                : extractNearbyKeyFrames(keyFrames, targetMiss.analysisTime());
 
         return new MissVisualizationData(
                 missIndex, targetMiss, nearbyHitEvents, nearbyKeyFrames,
@@ -73,8 +79,17 @@ public class MissVisualizeService {
     }
 
     public static byte[] renderMiss(MissVisualizationData data) {
+        if (data.target().eventType() == HitEvent.EventType.SLIDER_TICK) return SliderBreakRenderer.render(data);
         return ImageHelper.drawMiss(data.index(), data.target(), data.keyFrames(), data.beatmap(),
                 data.difficulty(), data.hardRock(), data.realtimePpLoss(), data.finalPpLoss(), data.totalMissPpLoss());
+    }
+
+    private static List<OsuReplay.TimedKeyFrame> sliderKeyFrames(List<OsuReplay.TimedKeyFrame> frames, long start, long end) {
+        if (frames == null || frames.isEmpty()) throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Replay contains no keyframes");
+        int left = 0, right = frames.size() - 1;
+        while (left + 1 < frames.size() && frames.get(left + 1).time() <= start) left++;
+        while (right > left && frames.get(right - 1).time() >= end) right--;
+        return frames.subList(left, right + 1);
     }
 
     static HitObject focusObject(HitEvent event, OsuBeatmap beatmap, boolean hardRock) {

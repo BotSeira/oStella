@@ -251,7 +251,7 @@ public final class SnapshotScene {
             if (judgedAt(event) > time) continue;
             if (ReplayAnalyzer.isComboEvent(event) && !(sliderHeadAccuracy && event.eventType() == HitEvent.EventType.SLIDER_END)) {
                 if (event.wasHit()) performance.maxCombo = Math.max(performance.maxCombo, ++performance.currentCombo);
-                else performance.currentCombo = 0;
+                else if (event.eventType() != HitEvent.EventType.SLIDER_END) performance.currentCombo = 0;
             }
             if (event.eventType() == HitEvent.EventType.SLIDER_TICK
                     || (lazer && !sliderHeadAccuracy && event.eventType() == HitEvent.EventType.SLIDER_HEAD)) {
