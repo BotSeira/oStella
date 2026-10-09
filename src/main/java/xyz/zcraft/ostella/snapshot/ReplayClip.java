@@ -72,8 +72,8 @@ public record ReplayClip(SnapshotScene center, double before, double after) {
         public static Window parse(String before, String after) {
             BigDecimal b = seconds(before == null ? "3" : before);
             BigDecimal a = seconds(after == null ? "1" : after);
-            if (b.add(a).signum() <= 0 || b.add(a).compareTo(new BigDecimal("6")) > 0)
-                throw new IllegalArgumentException("GIF window must be greater than 0 and at most 6 seconds");
+            if (b.add(a).signum() <= 0 || b.add(a).compareTo(new BigDecimal("20")) > 0)
+                throw new IllegalArgumentException("GIF window must be greater than 0 and at most 20 seconds");
             return new Window(b.doubleValue(), a.doubleValue());
         }
 
