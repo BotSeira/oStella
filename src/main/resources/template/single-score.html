@@ -600,6 +600,11 @@
                       th:text="${#numbers.formatInteger(score.getTotalScore(), 1, 'COMMA')}">
                     1,234,567
                 </span>
+                <span style="margin-left: 2px;"
+                      th:if="${score.getRankGlobal() != null}"
+                      th:text="${'(#' + #numbers.formatInteger(score.getRankGlobal(), 1, 'COMMA') + ')'}">
+                    (#114,514)
+                </span>
             </div>
         </div>
 
