@@ -166,8 +166,8 @@ the player credential must not replace the oStella service header.
 
 `POST /users/{userId}/addpp` accepts `{"pp":200,"count":4,"conditions":[]}` or
 `{"beatmapId":1234567,"count":1,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
-It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgements.
-The bot estimates the new global rank from its shared `/whatif` model. Map calculations pass only supplied parameters to rosu-pp (lazer by default, stable with CL).
+It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgments.
+oStella returns `rankProjection` (rank, status, updatedAt, stale) from its shared `/whatif` model; the bot only formats the response. Map calculations pass only supplied parameters to rosu-pp (lazer by default, stable with CL).
 Missing values are left to rosu-pp; actual accuracy and hit state are read back from it. Only duplicate,
 unsupported, obviously conflicting or out-of-bounds conditions return HTTP 400. Up to 200 BP are used,
 preserving the unobserved account PP remainder and excluding new bonus PP. No account data is changed.
@@ -177,12 +177,12 @@ See `SeiraCore/docs/addpp.md` for the full command contract. Update both service
 
 These JSON endpoints support Seira's configurable group challenges. Both services must be updated together.
 
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/challenges/beatmapsets/{beatmapsetId}` | Ranked/approved osu!standard difficulties in a set |
-| GET | `/challenges/beatmaps/{beatmapId}` | Resolve a specific map to the eligible difficulties in its set |
-| GET | `/challenges/users/{userId}/skill?exclude_set={beatmapsetId}` | Median effective star rating of up to 20 unique eligible best plays, excluding the challenge set; at least 5 samples required |
-| GET | `/challenges/scores/{scoreId}` | Standardised score, effective star rating with default mods, completion time and eligibility; assisted/custom-mod plays rejected |
+| Method | Endpoint                                                      | Purpose                                                                                                                          |
+|--------|---------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| GET    | `/challenges/beatmapsets/{beatmapsetId}`                      | Ranked/approved osu!standard difficulties in a set                                                                               |
+| GET    | `/challenges/beatmaps/{beatmapId}`                            | Resolve a specific map to the eligible difficulties in its set                                                                   |
+| GET    | `/challenges/users/{userId}/skill?exclude_set={beatmapsetId}` | Median effective star rating of up to 20 unique eligible best plays, excluding the challenge set; at least 5 samples required    |
+| GET    | `/challenges/scores/{scoreId}`                                | Standardised score, effective star rating with default mods, completion time and eligibility; assisted/custom-mod plays rejected |
 
 No replay download or image rendering is required. Responses use the regular `success`, `message`, `data` envelope.
 
@@ -379,3 +379,17 @@ Log files are written to `logs/`:
 ## License
 
 MIT. See `LICENSE`.
+
+
+## PP / global rank estimates
+
+`GET /whatif?pp=12345` converts osu!standard account total PP to global rank.
+`GET /whatif?rank=12345` converts global rank to total PP. Supply exactly one positive finite PP value or positive integer rank; malformed, repeated or combined parameters return HTTP 400. The existing service Bearer token applies.
+
+The standard `{success, message, data}` response contains `mode`, `status`, `pp`, `rank`, `updatedAt` (UTC ISO timestamp), `stale`, `sampleCount`, `minRank`, `maxRank`, `minPp`, and `maxPp`. `COVERED` means interpolation; `HIGH_PP`, `LOW_PP`, `LOW_RANK`, and `HIGH_RANK` mean the converted value is the corresponding coverage boundary, not an extrapolation. Rank may be fractional until displayed. `/users/{userId}/addpp` also returns `rankProjection`, using this same backend model and preserving the actual rank for zero gain (`UNCHANGED`).
+
+The backend bundles the 197-sample snapshot supplied in `SeiraCore/whatif-osu-snapshot.json`, captured at 2026-10-09 02:38 Beijing time; its monotone curve retains 196 points and covers #1–#2,875,798. Runtime cache: `data/whatif-osu-snapshot.json`, relative to oStella's working directory. Existing SeiraCore runtime snapshots use the same format and can be copied there before startup; startup prefers a validated cache at least as recent as the bundled snapshot. The supplied source file is left untouched.
+
+Maintenance starts and stops with the HTTP server and works without SeiraCore or a `/whatif` request. Every minute it merges complete standard-mode user statistics observed directly from successful osu! profile, lookup, self and batch requests. This reuses existing responses and never samples hypothetical score PP. Each sample has its own timestamp, bounded pending data and a maximum of 1024 retained users; individual updates do not reset the full snapshot's age.
+
+After five minutes without authenticated non-health requests, snapshots older than 24 hours are refreshed; estimates also request an overdue refresh in the background. Requests immediately use the existing immutable snapshot. Background sampling shares oStella's API rate gate, yields to foreground traffic, requests at most 50 users per batch, spaces batches by one second and bounds each HTTP request to 30 seconds. Admission waits at most 30 seconds per batch; deferred work is retried on a later minute. OAuth readiness is checked before fetching. Network failures back off for 30 minutes; invalid or incomplete coverage retains the old model. Atomic cache-write failures retain both the old state and pending samples for retry. Data older than 48 hours is flagged stale. These remain sample-based estimates, not exact live rankings.

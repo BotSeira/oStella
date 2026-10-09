@@ -51,6 +51,9 @@ public class Router implements Closeable {
     final UserController userController;
     final ChallengeController challengeController;
     final AddPpController addPpController;
+    public final xyz.zcraft.ostella.whatif.WhatIfService whatIf;
+    final WhatIfController whatIfController;
+    private final Runnable detachWhatIfObserver;
 
     public Router(AppConfig conf, TokenManager tokenManager) throws IOException {
         this.conf = conf;
@@ -78,6 +81,9 @@ public class Router implements Closeable {
         this.replayService = new ReplayService(conf);
         this.replayController = new ReplayController(this);
 
+        this.whatIf = xyz.zcraft.ostella.whatif.WhatIfService.create(tokenManager, executor);
+        this.whatIfController = new WhatIfController(whatIf);
+        this.detachWhatIfObserver = OsuAPI.observeWhatIf(whatIf::observe);
         LOG.info("Router created");
     }
 
@@ -181,6 +187,8 @@ public class Router implements Closeable {
 
     @Override
     public void close() {
+        detachWhatIfObserver.run();
+        whatIf.close();
         autoCache.close();
         executor.close();
         renderer.close();

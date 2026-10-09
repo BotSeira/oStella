@@ -33,6 +33,25 @@ public class OsuAPI {
     private static final String BASE_URL = "https://osu.ppy.sh/api/v2";
     private static final Gson GSON = new Gson();
     private static final int USER_SCORES_PAGE_LIMIT = 100;
+    private static final java.util.concurrent.CopyOnWriteArrayList<java.util.function.Consumer<xyz.zcraft.ostella.whatif.RankPpModel.Sample>>
+            WHATIF_OBSERVERS = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public static Runnable observeWhatIf(java.util.function.Consumer<xyz.zcraft.ostella.whatif.RankPpModel.Sample> observer) {
+        WHATIF_OBSERVERS.add(observer);
+        return () -> WHATIF_OBSERVERS.remove(observer);
+    }
+
+    private static void observeUser(JsonObject user, boolean standard, long requestedAt) {
+        // Full background refreshes are committed as one validated snapshot, never as partial observations.
+        if (ApiActivity.isBackground() || WHATIF_OBSERVERS.isEmpty()) return;
+        var sample = xyz.zcraft.ostella.whatif.WhatIfObservations.fromUser(user, standard);
+        if (sample == null) return;
+        var timed = new xyz.zcraft.ostella.whatif.RankPpModel.Sample(sample.userId(), sample.rank(), sample.pp(), requestedAt);
+        for (var observer : WHATIF_OBSERVERS) {
+            try { observer.accept(timed); }
+            catch (RuntimeException e) { LOG.warn("Unable to collect whatif sample", e); }
+        }
+    }
 
     private static <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler)
             throws IOException, InterruptedException {
@@ -295,6 +314,7 @@ public class OsuAPI {
 
     public static UserExtended getUser(TokenData tokenData, long uid) {
         LOG.debug("Fetching user with id {}", uid);
+        long requestedAt = System.currentTimeMillis();
         try {
             final var request = newRequestBuilder(tokenData, "/users/" + uid + "/osu")
                     .GET()
@@ -313,7 +333,9 @@ public class OsuAPI {
                 );
             }
 
-            return GSON.fromJson(response.body(), UserExtended.class);
+            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            observeUser(json, true, requestedAt);
+            return GSON.fromJson(json, UserExtended.class);
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user id " + uid, e);
         }
@@ -321,6 +343,7 @@ public class OsuAPI {
 
     public static UserExtended getUser(TokenData tokenData, String username) {
         LOG.debug("Fetching user with username {}", username);
+        long requestedAt = System.currentTimeMillis();
         try {
             final var request = newRequestBuilder(tokenData, "/users/@" + URLEncoder.encode(username.replace(" ", "_"), StandardCharsets.UTF_8))
                     .GET()
@@ -339,7 +362,9 @@ public class OsuAPI {
                 );
             }
 
-            return GSON.fromJson(response.body(), UserExtended.class);
+            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+            observeUser(json, false, requestedAt);
+            return GSON.fromJson(json, UserExtended.class);
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user @" + username, e);
         }
@@ -351,6 +376,7 @@ public class OsuAPI {
         for (Long id : uids) {
             sb.append("ids[]=").append(id).append("&");
         }
+        long requestedAt = System.currentTimeMillis();
         try {
             final var request = newRequestBuilder(tokenData, "/users" + sb)
                     .GET()
@@ -373,7 +399,10 @@ public class OsuAPI {
 
             final JsonArray users = JsonParser.parseString(body).getAsJsonObject().get("users").getAsJsonArray();
             final LinkedList<User> userList = new LinkedList<>();
-            users.forEach(u -> userList.add(GSON.fromJson(u, User.class)));
+            users.forEach(u -> {
+                userList.add(GSON.fromJson(u, User.class));
+                if (u.isJsonObject()) observeUser(u.getAsJsonObject(), false, requestedAt);
+            });
             return userList;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Failed to get users with ids " + uids, e);
@@ -949,6 +978,7 @@ public class OsuAPI {
 
     public static User getSelf(String auth) {
         LOG.debug("Fetching self");
+        long requestedAt = System.currentTimeMillis();
         try {
             final var request = newRequestBuilder(auth, "/me")
                     .GET()
@@ -968,6 +998,7 @@ public class OsuAPI {
             }
 
             final var json = JsonParser.parseString(response.body()).getAsJsonObject();
+            observeUser(json, false, requestedAt);
             return GSON.fromJson(json, User.class);
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get self data", e);

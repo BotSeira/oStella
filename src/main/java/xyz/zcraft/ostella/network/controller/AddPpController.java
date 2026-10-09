@@ -65,7 +65,9 @@ public final class AddPpController {
                                 request.beatmapId(), OsuAPI.MAX_USER_SCORES_LIMIT);
                         return new Result(profile.getUsername(), uid, profile.getStatistics().getGlobalRank(),
                                 projected.before(), projected.after(), projected.change(), calculated.pp(), count, plays.size(),
-                                projected.positions(), projected.replaced(), calculated.map());
+                                projected.positions(), projected.replaced(), calculated.map(),
+                                xyz.zcraft.ostella.whatif.WhatIfEstimates.project(router.whatIf.current(),
+                                        projected.before(), projected.after(), profile.getStatistics().getGlobalRank(), java.time.Instant.now()));
                     });
                 }).thenAccept(result -> ctx.contentType("application/json")
                         .result(new Response(true, "Success", gson.toJsonTree(result)).toString()))
@@ -118,7 +120,7 @@ public final class AddPpController {
 
     public record Result(String username, long userId, Long rank, double beforePp, double afterPp, double change,
                          double scorePp, int count, int sampled, List<Integer> positions, boolean replaced,
-                         MapResult map) {
+                         MapResult map, xyz.zcraft.ostella.whatif.WhatIfEstimates.RankProjection rankProjection) {
     }
 
     private record Calculated(double pp, MapResult map) {

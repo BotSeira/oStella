@@ -48,6 +48,7 @@ public class WebServer implements Closeable {
                         throw new UnauthorizedResponse();
                     }
                 }
+                if (!"/health".equals(ctx.path())) router.whatIf.recordActivity();
             });
 
             cfg.routes.before(ctx -> {
@@ -101,6 +102,7 @@ public class WebServer implements Closeable {
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
 
+                    .get("/whatif", router.whatIfController::estimate)
                     .get("/daily", router::getDaily)
                     .get("/challenges/beatmapsets/{beatmapsetId}", router.challengeController::beatmapset)
                     .get("/challenges/beatmaps/{beatmapId}", router.challengeController::beatmap)
@@ -163,6 +165,7 @@ public class WebServer implements Closeable {
         app.start(conf.webserver().port());
         running.set(true);
         router.autoCache.start();
+        router.whatIf.start();
         LOG.info("Started web server on port {}", conf.webserver().port());
     }
 
