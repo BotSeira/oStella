@@ -91,7 +91,7 @@ public class BeatmapsetFormatUtil {
         if (!subArtistPresent) {
             return set.getTitle().length() + set.getTitleUnicode().length() > 40;
         } else if (set.getTitle().length() + set.getTitleUnicode().length() < 40) {
-            return true;
+            return false;
         } else {
             return set.getTitleUnicode().length() + set.getArtist().length() + set.getArtistUnicode().length() < 50;
         }
