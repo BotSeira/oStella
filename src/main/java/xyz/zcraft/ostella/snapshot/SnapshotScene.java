@@ -113,8 +113,7 @@ public final class SnapshotScene {
                 throw new IllegalArgumentException("Object index is out of range");
             selected = analyze.beatmap().getHitObjects().get((int) request.value() - 1).getTime();
         } else {
-            var misses = analyze.events().stream().filter(e -> !e.wasHit())
-                    .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD).toList();
+            var misses = analyze.misses();
             if (request.value() > misses.size())
                 throw new IllegalArgumentException("Miss index is out of range (1–" + misses.size() + ")");
             selected = (long) Math.ceil(judgedAt(misses.get((int) request.value() - 1)) + 1);
@@ -124,7 +123,7 @@ public final class SnapshotScene {
 
     public double judgedAt(HitEvent event) {
         if (event.eventType() == HitEvent.EventType.SPINNER) return event.hitObject().getEndTime();
-        if (event.wasHit() && event.hitTime() >= 0) return event.hitTime();
+        if ((event.wasHit() || !event.isObjectStart()) && event.hitTime() >= 0) return event.hitTime();
         if (event.eventType() == HitEvent.EventType.HIT_CIRCLE || event.eventType() == HitEvent.EventType.SLIDER_HEAD) {
             return event.hitObject().getTime() + Math.floor(analyze.calculatedDifficulty().getMehWindow() * clockRate);
         }

@@ -231,7 +231,7 @@ public class AnalyzeController {
     }
 
     /**
-     * Calculates the final PP lost to all object-start misses while preserving 100s and 50s.
+     * Calculates the final PP lost to misses and slider breaks while preserving 100s and 50s.
      */
     public static PPLoss calculateTotalMissPpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits
@@ -241,8 +241,8 @@ public class AnalyzeController {
 
         PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
         PerformanceState withoutMisses = calculateFinalState(events, objectCount,
-                event -> event.isObjectStart()
-                        && event.hitResult() == HitEvent.HitResult.MISS);
+                event -> event.isAnalysisMiss() || (event.isObjectStart()
+                        && event.hitResult() == HitEvent.HitResult.MISS));
 
         double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, objectCount);
         double withoutMissPp = ReplayAnalyzer.calculatePp(
@@ -288,7 +288,7 @@ public class AnalyzeController {
             OsuBeatmap beatmap, List<HitEvent> events, HitEvent targetMiss
     ) {
         int passedObjects = targetMiss.objectIndex() + 1;
-        if (!targetMiss.isObjectStart() || targetMiss.hitResult() != HitEvent.HitResult.MISS
+        if (!targetMiss.isAnalysisMiss()
                 || passedObjects <= 0 || passedObjects > beatmap.getHitObjects().size()) {
             throw new IllegalArgumentException("Target event is not a valid miss");
         }
@@ -489,10 +489,7 @@ public class AnalyzeController {
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> {
-                    var misses = analyze.events().stream()
-                            .filter(hitEvent -> !hitEvent.wasHit())
-                            .filter(e -> e.eventType() == HitEvent.EventType.SLIDER_HEAD || e.eventType() == HitEvent.EventType.HIT_CIRCLE)
-                            .toList();
+                    var misses = analyze.misses();
                     return getMissArr(misses);
                 })
                 .thenAccept(arr -> context.status(200).result(new Response(true, "Success", arr).toString())));
@@ -503,8 +500,9 @@ public class AnalyzeController {
         for (int i = 0; i < misses.size(); i++) {
             JsonObject object = new JsonObject();
             object.addProperty("index", i + 1);
-            object.addProperty("time", misses.get(i).hitObject().getTime());
-            object.addProperty("type", misses.get(i).hitObject().getObjectType().name());
+            object.addProperty("time", misses.get(i).analysisTime());
+            object.addProperty("type", misses.get(i).isObjectStart()
+                    ? misses.get(i).hitObject().getObjectType().name() : "SLIDER_BREAK");
             arr.add(object);
         }
         return arr;

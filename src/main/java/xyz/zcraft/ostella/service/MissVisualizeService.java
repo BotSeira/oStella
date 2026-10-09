@@ -48,11 +48,7 @@ public class MissVisualizeService {
     }
 
     public static MissVisualizationData prepareMiss(ReplayAnalyze replayAnalyze, int missIndex) {
-        final List<HitEvent> missEvents = replayAnalyze.events().stream()
-                .filter(hitEvent -> !hitEvent.wasHit())
-                .filter(hitEvent -> hitEvent.hitObject().getObjectType() != HitObject.ObjectType.SPINNER)
-                .filter(e -> e.eventType() == HitEvent.EventType.HIT_CIRCLE || e.eventType() == HitEvent.EventType.SLIDER_HEAD)
-                .toList();
+        final List<HitEvent> missEvents = replayAnalyze.misses();
 
         if (missIndex <= 0 || missIndex > missEvents.size()) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid miss index: " + missIndex + ", should be 1-" + missEvents.size());
@@ -67,7 +63,7 @@ public class MissVisualizeService {
         final var finalPpLoss = AnalyzeController.calculateFinalPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods, targetMiss);
         final var totalMissPpLoss = AnalyzeController.calculateTotalMissPpLoss(replayAnalyze.beatmap(), replayAnalyze, mods);
         final var nearbyHitEvents = extractNearbyHitEvents(replayAnalyze.events(), targetMiss);
-        final var nearbyKeyFrames = extractNearbyKeyFrames(keyFrames, targetMiss.hitObject());
+        final var nearbyKeyFrames = extractNearbyKeyFrames(keyFrames, targetMiss.analysisTime());
 
         return new MissVisualizationData(
                 missIndex, targetMiss, nearbyHitEvents, nearbyKeyFrames,
@@ -81,11 +77,33 @@ public class MissVisualizeService {
                 data.difficulty(), data.hardRock(), data.realtimePpLoss(), data.finalPpLoss(), data.totalMissPpLoss());
     }
 
+    static HitObject focusObject(HitEvent event, OsuBeatmap beatmap, boolean hardRock) {
+        if (event.isObjectStart()) return event.hitObject();
+        // Aim bias is measured from the actual (stacked and modded) slider position.
+        double x, y;
+        if (event.aimBias() != null) {
+            x = event.cursorX() - Math.cos(event.aimBias().theta()) * event.aimBias().distance();
+            y = event.cursorY() - Math.sin(event.aimBias().theta()) * event.aimBias().distance();
+        } else {
+            var point = new ReplayAnalyzer.SliderPath(event.hitObject(), 0, hardRock).positionAt(
+                    ReplayAnalyzer.sliderProgress(event.hitObject(),
+                            ReplayAnalyzer.sliderDuration(beatmap, event.hitObject()), event.analysisTime()));
+            x = point.x();
+            y = point.y();
+        }
+        HitObject focus = new HitObject();
+        focus.setObjectType(HitObject.ObjectType.HIT_CIRCLE);
+        focus.setTime(event.analysisTime());
+        focus.setX((int) Math.round(x));
+        focus.setY((int) Math.round(hardRock ? 384 - y : y));
+        return focus;
+    }
+
     private static List<HitEvent> extractNearbyHitEvents(List<HitEvent> events, HitEvent target) {
         int index = -1;
 
         for (int i = 0; i < events.size(); i++) {
-            if (events.get(i).eventTime() == target.eventTime()) {
+            if (events.get(i).equals(target)) {
                 index = i;
                 break;
             }
@@ -98,26 +116,26 @@ public class MissVisualizeService {
         return events.subList(Math.max(0, index - 5), Math.min(events.size(), index + 5));
     }
 
-    private static List<OsuReplay.TimedKeyFrame> extractNearbyKeyFrames(List<OsuReplay.TimedKeyFrame> keyFrames, HitObject hitObject) {
+    private static List<OsuReplay.TimedKeyFrame> extractNearbyKeyFrames(List<OsuReplay.TimedKeyFrame> keyFrames, long time) {
         if (keyFrames == null || keyFrames.isEmpty()) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Replay contains no keyframes");
         }
 
         int firstAfter = 0;
         while (firstAfter < keyFrames.size()
-                && keyFrames.get(firstAfter).time() <= hitObject.getTime()) {
+                && keyFrames.get(firstAfter).time() <= time) {
             firstAfter++;
         }
 
         int leftIndex = Math.min(firstAfter, keyFrames.size() - 1);
         while (leftIndex > 0
-                && keyFrames.get(leftIndex - 1).time() >= hitObject.getTime() - WINDOW_MILLIS) {
+                && keyFrames.get(leftIndex - 1).time() >= time - WINDOW_MILLIS) {
             leftIndex--;
         }
 
         int rightIndex = Math.min(firstAfter, keyFrames.size() - 1);
         while (rightIndex + 1 < keyFrames.size()
-                && keyFrames.get(rightIndex + 1).time() <= hitObject.getTime() + WINDOW_MILLIS) {
+                && keyFrames.get(rightIndex + 1).time() <= time + WINDOW_MILLIS) {
             rightIndex++;
         }
 
@@ -233,7 +251,7 @@ public class MissVisualizeService {
                 AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
                 AnalyzeController.PPLoss totalMissPpLoss
         ) {
-            final HitObject hitObject = targetMiss.hitObject();
+            final HitObject hitObject = focusObject(targetMiss, beatmap, hr);
             final double circleRadius = diff.getCircleRadiusInPixel();
 
             final LinkedList<Long> hitTimes = new LinkedList<>();
@@ -248,6 +266,10 @@ public class MissVisualizeService {
             g2d.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
             drawNearbyObjects(hitObject, beatmap, circleRadius, hr, g2d);
+
+            if (!targetMiss.isObjectStart()) {
+                drawSlider(targetMiss.hitObject(), hitObject, circleRadius, hr, g2d);
+            }
 
             drawTargetObject(hitObject, circleRadius, hr, g2d);
 
@@ -347,7 +369,7 @@ public class MissVisualizeService {
         ) {
             g2d.setColor(Color.BLACK);
 
-            final Duration duration = Duration.of(targetMiss.hitObject().getTime(), ChronoUnit.MILLIS);
+            final Duration duration = Duration.of(targetMiss.analysisTime(), ChronoUnit.MILLIS);
             String missInfo = "#" + missIndex + " Miss: " + targetMiss.eventType() + " @" +
                     String.format("%02d:%02d.%03d", duration.toMinutesPart(), duration.toSecondsPart(), duration.toMillisPart());
 

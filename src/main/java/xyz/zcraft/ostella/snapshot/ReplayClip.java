@@ -13,7 +13,7 @@ import java.math.BigDecimal;
 public record ReplayClip(SnapshotScene center, double before, double after) {
     public ReplayClip {
         if (!Double.isFinite(before) || !Double.isFinite(after) || before < 0 || after < 0
-                || before + after <= 0 || before + after > 6)
+                || before + after <= 0 || before + after > 20)
             throw new IllegalArgumentException("Invalid GIF window");
     }
 
