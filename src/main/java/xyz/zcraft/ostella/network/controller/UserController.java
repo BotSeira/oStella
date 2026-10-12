@@ -203,7 +203,7 @@ public class UserController {
         final int n = requireScoreListLimit(context);
         final int start = requireScoreListStart(context, n);
         final boolean fail = requireBoolean(context, "fail", false);
-        final List<ScoreFilter> filters = requireScoreFilters(context);
+        final List<ScoreFilter> filters = requireScoreFilters(context, tokenManager::getTokenData);
 
         final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
@@ -270,7 +270,7 @@ public class UserController {
         final long u = requirePathLong(context, "userId");
         final int n = requireScoreListLimit(context);
         final int start = requireScoreListStart(context, n);
-        final List<ScoreFilter> filters = requireScoreFilters(context);
+        final List<ScoreFilter> filters = requireScoreFilters(context, tokenManager::getTokenData);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
                         tokenManager.getTokenData(), u, ScoreType.BEST, n - start + 1, start - 1
                 ))

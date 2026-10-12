@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import io.javalin.http.Context;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
@@ -14,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public class RequestUtil {
     private final static Gson GSON = new GsonBuilder().serializeSpecialFloatingPointValues().create();
@@ -35,9 +37,9 @@ public class RequestUtil {
         putResult(context, Map.of(key, val));
     }
 
-    public static List<ScoreFilter> requireScoreFilters(Context context) {
+    public static List<ScoreFilter> requireScoreFilters(Context context, Supplier<TokenData> tokenSupplier) {
         try {
-            return ScoreFilter.parseList(context.queryParam("filters"));
+            return ScoreFilter.parseList(context.queryParam("filters"), tokenSupplier);
         } catch (IllegalArgumentException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
         }

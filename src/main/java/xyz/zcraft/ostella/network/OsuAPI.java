@@ -233,7 +233,7 @@ public class OsuAPI {
         try {
             var requestedMods = ModSettings.parse(mods);
             if (requestedMods.stream().anyMatch(mod -> mod.getSettings() != null && !mod.getSettings().isEmpty())) {
-                var filter = xyz.zcraft.ostella.data.ScoreFilter.parse("mod=" + ModSettings.format(requestedMods));
+                var filter = xyz.zcraft.ostella.data.ScoreFilter.parse("mod=" + ModSettings.format(requestedMods), () -> tokenData);
                 final String url = "/beatmaps/%s/scores/users/%s/all?ruleset=osu&legacy_only=0";
                 var request = newRequestBuilder(tokenData, url.formatted(beatmapId, uid)).GET().build();
                 var response = JsonParser.parseString(send(request, HttpResponse.BodyHandlers.ofString()).body()).getAsJsonObject();
