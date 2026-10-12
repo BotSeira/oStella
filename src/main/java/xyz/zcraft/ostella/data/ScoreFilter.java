@@ -179,6 +179,16 @@ public final class ScoreFilter {
                 throw new IllegalArgumentException("Invalid regular expression: " + e.getDescription(), e);
             }
         }
+        // Plain text defaults to containment; regex syntax keeps its existing semantics.
+        if (regex == null) {
+            operator = switch (operator) {
+                case EQUAL -> Operator.CONTAINS;
+                case NOT_EQUAL -> Operator.NOT_CONTAINS;
+                case CONTAINS -> Operator.EQUAL;
+                case NOT_CONTAINS -> Operator.NOT_EQUAL;
+                default -> throw new IllegalStateException("Invalid text operator");
+            };
+        }
         return new ScoreFilter(
                 field, operator, Double.NaN, Set.of(value.toLowerCase(Locale.ROOT)), regex,
                 field.label + " " + operator.display + " " + value, tokenProvider
@@ -525,8 +535,7 @@ public final class ScoreFilter {
             String normalized = actual.toLowerCase(Locale.ROOT);
             if (regexValue != null) {
                 matches |= regexValue.matcher(actual).find();
-            } else if (field == Field.ANY || field == Field.TAG
-                    || operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS) {
+            } else if (operator == Operator.CONTAINS || operator == Operator.NOT_CONTAINS) {
                 matches |= normalized.contains(expected);
             } else {
                 matches |= normalized.equals(expected);
