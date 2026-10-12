@@ -789,13 +789,13 @@
 <body>
 <main class="profile-sheet">
     <section class="hero">
-        <img class="hero-cover" alt="" th:if="${user.coverUrl != null}"
+        <img alt="" class="hero-cover" th:if="${user.coverUrl != null}"
              th:src="${cache.getImageSrc(user.coverUrl)}">
         <div class="cover-veil"></div>
 
         <div class="identity">
             <div class="avatar-wrap">
-                <img class="avatar" alt="Player avatar"
+                <img alt="Player avatar" class="avatar"
                      src="https://a.ppy.sh/2"
                      th:src="${cache.getImageSrc(user.avatarUrl)}">
                 <span class="online" th:if="${user.isOnline}" title="Online"></span>
@@ -803,7 +803,7 @@
             <div class="identity-copy">
                 <div class="eyebrow">Player</div>
                 <div class="name-row">
-                    <img class="flag" alt="Country flag"
+                    <img alt="Country flag" class="flag"
                          src="https://assets.ppy.sh/old-flags/AU.png"
                          th:src="${cache.getImageSrc(Users.getFlagUrl(user))}">
                     <h1 th:text="${user.username}">Example Player</h1>
@@ -823,11 +823,14 @@
         <aside class="headline-rank">
             <div class="rank-label">Global rank</div>
             <div class="rank-value"
-                 th:text="${Users.formatRank(((user.statistics != null) ? user.statistics.globalRank : null))}">#1,234,567</div>
+                 th:text="${Users.formatRank(((user.statistics != null) ? user.statistics.globalRank : null))}">
+                #1,234,567
+            </div>
             <div class="rank-secondary">
                 <div>
                     <span>Country</span>
-                    <strong th:text="${user.countryCode + ' ' + Users.formatRank((user.statistics != null and user.statistics.rank != null ? user.statistics.rank.country : null))}">AU #120</strong>
+                    <strong th:text="${user.countryCode + ' ' + Users.formatRank((user.statistics != null and user.statistics.rank != null ? user.statistics.rank.country : null))}">AU
+                        #120</strong>
                 </div>
                 <div>
                     <span>Peak</span>
@@ -841,23 +844,29 @@
         <div class="metric">
             <div class="metric-label">Performance</div>
             <div class="metric-value">
-                <span th:text="${Users.formatPp((user.statistics != null ? user.statistics.pp : null))}">12,345</span><span class="unit">pp</span>
+                <span th:text="${Users.formatPp((user.statistics != null ? user.statistics.pp : null))}">12,345</span><span
+                    class="unit">pp</span>
             </div>
         </div>
         <div class="metric">
             <div class="metric-label">Accuracy</div>
             <div class="metric-value"
-                 th:text="${Users.formatAccuracy((user.statistics != null ? user.statistics.hitAccuracy : null))}">98.76%</div>
+                 th:text="${Users.formatAccuracy((user.statistics != null ? user.statistics.hitAccuracy : null))}">
+                98.76%
+            </div>
         </div>
         <div class="metric">
             <div class="metric-label">Play time</div>
             <div class="metric-value"
-                 th:text="${Users.formatPlayTime((user.statistics != null ? user.statistics.playTime : null))}">1,234 hrs</div>
+                 th:text="${Users.formatPlayTime((user.statistics != null ? user.statistics.playTime : null))}">1,234
+                hrs
+            </div>
         </div>
         <div class="metric">
             <div class="metric-label">Play count</div>
             <div class="metric-value"
-                 th:text="${Users.formatInteger((user.statistics != null ? user.statistics.playCount : null))}">45,678</div>
+                 th:text="${Users.formatInteger((user.statistics != null ? user.statistics.playCount : null))}">45,678
+            </div>
         </div>
     </section>
 
@@ -867,11 +876,11 @@
             <div class="section-label">History</div>
             <h2>Rank trend</h2>
             <div class="chart-shell" th:if="${Users.hasRankHistory(user)}">
-                <svg class="rank-chart" viewBox="0 0 620 132" preserveAspectRatio="none"
-                     role="img" aria-label="Rank history">
-                    <line class="chart-grid" x1="0" y1="24" x2="620" y2="24"></line>
-                    <line class="chart-grid" x1="0" y1="66" x2="620" y2="66"></line>
-                    <line class="chart-grid" x1="0" y1="108" x2="620" y2="108"></line>
+                <svg aria-label="Rank history" class="rank-chart" preserveAspectRatio="none"
+                     role="img" viewBox="0 0 620 132">
+                    <line class="chart-grid" x1="0" x2="620" y1="24" y2="24"></line>
+                    <line class="chart-grid" x1="0" x2="620" y1="66" y2="66"></line>
+                    <line class="chart-grid" x1="0" x2="620" y1="108" y2="108"></line>
                     <polyline class="chart-area"
                               th:attr="points=${Users.getRankHistoryAreaPoints(user)}"></polyline>
                     <polyline class="chart-line"
@@ -884,25 +893,29 @@
                     <div class="change-period">1D</div>
                     <div class="change-value"
                          th:classappend="${change.hasData[3] ? ' ' + change.getSubfix(3) : ''}"
-                         th:text="${change.hasData[3] ? change.getText(3) : '--'}">▲ 42</div>
+                         th:text="${change.hasData[3] ? change.getText(3) : '--'}">▲ 42
+                    </div>
                 </div>
                 <div class="change-item">
                     <div class="change-period">1W</div>
                     <div class="change-value"
                          th:classappend="${change.hasData[2] ? ' ' + change.getSubfix(2) : ''}"
-                         th:text="${change.hasData[2] ? change.getText(2) : '--'}">▲ 120</div>
+                         th:text="${change.hasData[2] ? change.getText(2) : '--'}">▲ 120
+                    </div>
                 </div>
                 <div class="change-item">
                     <div class="change-period">1M</div>
                     <div class="change-value"
                          th:classappend="${change.hasData[1] ? ' ' + change.getSubfix(1) : ''}"
-                         th:text="${change.hasData[1] ? change.getText(1) : '--'}">▼ 18</div>
+                         th:text="${change.hasData[1] ? change.getText(1) : '--'}">▼ 18
+                    </div>
                 </div>
                 <div class="change-item">
                     <div class="change-period">3M</div>
                     <div class="change-value"
                          th:classappend="${change.hasData[0] ? ' ' + change.getSubfix(0) : ''}"
-                         th:text="${change.hasData[0] ? change.getText(0) : '--'}">▲ 412</div>
+                         th:text="${change.hasData[0] ? change.getText(0) : '--'}">▲ 412
+                    </div>
                 </div>
             </div>
             <div class="monthly-activity" th:if="${!activity.isEmpty()}">
@@ -935,27 +948,37 @@
                 <div class="stat">
                     <div class="stat-label">Max combo</div>
                     <div class="stat-value"
-                         th:text="${Users.formatInteger((user.statistics != null ? user.statistics.maximumCombo : null)) + 'x'}">3,456x</div>
+                         th:text="${Users.formatInteger((user.statistics != null ? user.statistics.maximumCombo : null)) + 'x'}">
+                        3,456x
+                    </div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">Total hits</div>
                     <div class="stat-value"
-                         th:text="${Users.formatCompactInteger((user.statistics != null ? user.statistics.totalHits : null))}">12.3M</div>
+                         th:text="${Users.formatCompactInteger((user.statistics != null ? user.statistics.totalHits : null))}">
+                        12.3M
+                    </div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">Ranked score</div>
                     <div class="stat-value"
-                         th:text="${Users.formatCompactInteger((user.statistics != null ? user.statistics.rankedScore : null))}">98.8M</div>
+                         th:text="${Users.formatCompactInteger((user.statistics != null ? user.statistics.rankedScore : null))}">
+                        98.8M
+                    </div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">Total score</div>
                     <div class="stat-value"
-                         th:text="${Users.formatCompactInteger((user.statistics != null ? user.statistics.totalScore : null))}">1.2B</div>
+                         th:text="${Users.formatCompactInteger((user.statistics != null ? user.statistics.totalScore : null))}">
+                        1.2B
+                    </div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">Replays watched</div>
                     <div class="stat-value"
-                         th:text="${Users.formatInteger((user.statistics != null ? user.statistics.replaysWatchedByOthers : null))}">12,345</div>
+                         th:text="${Users.formatInteger((user.statistics != null ? user.statistics.replaysWatchedByOthers : null))}">
+                        12,345
+                    </div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">Followers</div>
@@ -968,7 +991,9 @@
                 <div class="stat">
                     <div class="stat-label">Medals</div>
                     <div class="stat-value"
-                         th:text="${Users.formatInteger((user.userAchievements != null ? user.userAchievements.size() : null))}">128</div>
+                         th:text="${Users.formatInteger((user.userAchievements != null ? user.userAchievements.size() : null))}">
+                        128
+                    </div>
                 </div>
             </div>
             <div class="sample-heading">
@@ -978,32 +1003,40 @@
                 <div class="performance-stat">
                     <div class="stat-label">Avg PP</div>
                     <div class="performance-value"
-                         th:text="${Users.formatPp(performance.averagePp) + 'pp'}">234pp</div>
+                         th:text="${Users.formatPp(performance.averagePp) + 'pp'}">234pp
+                    </div>
                 </div>
                 <div class="performance-stat">
                     <div class="stat-label">Avg accuracy</div>
                     <div class="performance-value"
-                         th:text="${performance.averageAccuracy != null ? Osu.formatAccuracy(performance.averageAccuracy) : '--'}">98.42%</div>
+                         th:text="${performance.averageAccuracy != null ? Osu.formatAccuracy(performance.averageAccuracy) : '--'}">
+                        98.42%
+                    </div>
                 </div>
                 <div class="performance-stat">
                     <div class="stat-label">Avg stars</div>
                     <div class="performance-value"
-                         th:text="${performance.averageStarRating != null ? Osu.formatStarRating(performance.averageStarRating) + '★' : '--'}">6.24★</div>
+                         th:text="${performance.averageStarRating != null ? Osu.formatStarRating(performance.averageStarRating) + '★' : '--'}">
+                        6.24★
+                    </div>
                 </div>
                 <div class="performance-stat">
                     <div class="stat-label">BP floor</div>
                     <div class="performance-value"
-                         th:text="${Users.formatPp(performance.floorPp) + 'pp'}">156pp</div>
+                         th:text="${Users.formatPp(performance.floorPp) + 'pp'}">156pp
+                    </div>
                 </div>
                 <div class="performance-stat">
                     <div class="stat-label">Weighted PP</div>
                     <div class="performance-value"
-                         th:text="${Users.formatPp(performance.weightedPp) + 'pp'}">4,210pp</div>
+                         th:text="${Users.formatPp(performance.weightedPp) + 'pp'}">4,210pp
+                    </div>
                 </div>
                 <div class="performance-stat">
                     <div class="stat-label">Bonus PP</div>
                     <div class="performance-value"
-                         th:text="${Users.formatPp(performance.bonusPp) + 'pp'}">391pp</div>
+                         th:text="${Users.formatPp(performance.bonusPp) + 'pp'}">391pp
+                    </div>
                 </div>
             </div>
             <div class="sample-note">
@@ -1011,11 +1044,26 @@
                 <strong th:text="${performance.favoriteMods}">[HDHR]</strong>
             </div>
             <div class="grades">
-                <div class="grade"><div class="grade-name">XH</div><div class="grade-count" th:text="${Users.formatGradeCount(user, 'ssh')}">12</div></div>
-                <div class="grade"><div class="grade-name">X</div><div class="grade-count" th:text="${Users.formatGradeCount(user, 'ss')}">34</div></div>
-                <div class="grade"><div class="grade-name">SH</div><div class="grade-count" th:text="${Users.formatGradeCount(user, 'sh')}">56</div></div>
-                <div class="grade"><div class="grade-name">S</div><div class="grade-count" th:text="${Users.formatGradeCount(user, 's')}">789</div></div>
-                <div class="grade"><div class="grade-name">A</div><div class="grade-count" th:text="${Users.formatGradeCount(user, 'a')}">1,234</div></div>
+                <div class="grade">
+                    <div class="grade-name">XH</div>
+                    <div class="grade-count" th:text="${Users.formatGradeCount(user, 'ssh')}">12</div>
+                </div>
+                <div class="grade">
+                    <div class="grade-name">X</div>
+                    <div class="grade-count" th:text="${Users.formatGradeCount(user, 'ss')}">34</div>
+                </div>
+                <div class="grade">
+                    <div class="grade-name">SH</div>
+                    <div class="grade-count" th:text="${Users.formatGradeCount(user, 'sh')}">56</div>
+                </div>
+                <div class="grade">
+                    <div class="grade-name">S</div>
+                    <div class="grade-count" th:text="${Users.formatGradeCount(user, 's')}">789</div>
+                </div>
+                <div class="grade">
+                    <div class="grade-name">A</div>
+                    <div class="grade-count" th:text="${Users.formatGradeCount(user, 'a')}">1,234</div>
+                </div>
             </div>
         </article>
     </section>
@@ -1026,13 +1074,14 @@
         <h2>Top plays</h2>
 
         <div class="featured-score" th:if="${!scores.isEmpty()}" th:with="score=${scores.get(0)}">
-            <img class="score-backdrop" alt=""
+            <img alt="" class="score-backdrop"
                  src="https://assets.ppy.sh/beatmaps/320118/covers/slimcover.jpg"
                  th:src="${cache.getImageSrc(score.beatmapset.covers.slimcover)}">
             <div class="featured-index">01</div>
             <div class="featured-copy">
                 <div class="featured-title"
-                     th:text="${score.beatmapset.artist + ' — ' + score.beatmapset.title}">Artist — Song Title</div>
+                     th:text="${score.beatmapset.artist + ' — ' + score.beatmapset.title}">Artist — Song Title
+                </div>
                 <div class="score-detail">
                     <span th:text="${score.beatmap.version + ' · ' + Osu.formatStarRating(score.beatmap.difficultyRating) + '★'}">Insane · 6.42★</span>
                     <span class="mods" th:text="${Scores.getModString(score)}">[HDDT]</span>
@@ -1047,13 +1096,14 @@
 
         <div class="score-grid" th:if="${scores.size() > 1}">
             <div class="score-row" th:each="score, iter : ${scores}" th:if="${iter.index > 0}">
-                <img class="score-backdrop" alt=""
+                <img alt="" class="score-backdrop"
                      src="https://assets.ppy.sh/beatmaps/320118/covers/slimcover.jpg"
                      th:src="${cache.getImageSrc(score.beatmapset.covers.slimcover)}">
                 <div class="score-index" th:text="${#numbers.formatInteger(iter.count, 2)}">02</div>
                 <div class="score-copy">
                     <div class="score-title"
-                         th:text="${score.beatmapset.artist + ' — ' + score.beatmapset.title}">Artist — Song Title</div>
+                         th:text="${score.beatmapset.artist + ' — ' + score.beatmapset.title}">Artist — Song Title
+                    </div>
                     <div class="score-detail">
                         <span th:text="${score.beatmap.version + ' · ' + Osu.formatStarRating(score.beatmap.difficultyRating) + '★'}">Insane · 6.42★</span>
                         <span class="mods" th:text="${Scores.getModString(score)}">[HDDT]</span>
@@ -1070,7 +1120,8 @@
 
     <footer class="footer">
         <span th:text="${'Joined ' + Users.getFormattedJoinDate(user) + ' · Last seen ' + (user.lastVisit != null ? user.lastVisit : 'unknown')}">Joined May 2000 · Last seen recently</span>
-        <span><strong>oStella</strong> · <span th:text="${'Data collected ' + time}">Data collected 2026-08-19T12:00:00Z</span></span>
+        <span><strong>oStella</strong> · <span
+                th:text="${'Data collected ' + time}">Data collected 2026-08-19T12:00:00Z</span></span>
     </footer>
 </main>
 </body>

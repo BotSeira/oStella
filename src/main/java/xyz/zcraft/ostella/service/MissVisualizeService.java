@@ -68,7 +68,7 @@ public class MissVisualizeService {
                 : extractNearbyHitEvents(replayAnalyze.events(), targetMiss);
         final var nearbyKeyFrames = sliderTick
                 ? sliderKeyFrames(keyFrames, targetMiss.hitObject().getTime(), Math.round(
-                        targetMiss.hitObject().getTime() + ReplayAnalyzer.sliderDuration(replayAnalyze.beatmap(), targetMiss.hitObject())))
+                targetMiss.hitObject().getTime() + ReplayAnalyzer.sliderDuration(replayAnalyze.beatmap(), targetMiss.hitObject())))
                 : extractNearbyKeyFrames(keyFrames, targetMiss.analysisTime());
 
         return new MissVisualizationData(
@@ -85,7 +85,8 @@ public class MissVisualizeService {
     }
 
     private static List<OsuReplay.TimedKeyFrame> sliderKeyFrames(List<OsuReplay.TimedKeyFrame> frames, long start, long end) {
-        if (frames == null || frames.isEmpty()) throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Replay contains no keyframes");
+        if (frames == null || frames.isEmpty())
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Replay contains no keyframes");
         int left = 0, right = frames.size() - 1;
         while (left + 1 < frames.size() && frames.get(left + 1).time() <= start) left++;
         while (right > left && frames.get(right - 1).time() >= end) right--;

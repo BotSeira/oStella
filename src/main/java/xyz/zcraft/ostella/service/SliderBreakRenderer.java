@@ -15,66 +15,14 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-/** Whole-slider inspection: geometry, cursor travel, spatial error and node outcomes. */
+/**
+ * Whole-slider inspection: geometry, cursor travel, spatial error and node outcomes.
+ */
 final class SliderBreakRenderer {
     private static final Color INK = new Color(35, 42, 52), MUTED = new Color(99, 110, 125);
     private static final Color RED = new Color(202, 53, 62);
     private static final Color BLUE = new Color(40, 105, 177), GRID = new Color(222, 228, 235);
     private static final int WIDTH = 1200;
-
-    record Sample(double time, double x, double y, int keys) {}
-
-    static final class Model {
-        final MissVisualizeService.MissVisualizationData data;
-        final double start, end, radius, followRadius;
-        final ReplayAnalyzer.SliderPath path;
-        final List<HitEvent> ticks;
-        final List<Sample> samples;
-
-        Model(MissVisualizeService.MissVisualizationData data) {
-            this.data = data;
-            var slider = data.target().hitObject();
-            start = slider.getTime();
-            end = start + ReplayAnalyzer.sliderDuration(data.beatmap(), slider);
-            radius = data.difficulty().getCircleRadiusInPixel();
-            followRadius = radius * 2.4 + Math.clamp(37 - radius, 0, 5);
-            double ar = data.difficulty().ar();
-            double preempt = (ar < 5 ? 1800 - ar * 120 : 1200 - (ar - 5) * 150) * data.difficulty().clockRate();
-            double mapAr = preempt < 1200 ? 5 + (1200 - preempt) / 150 : (1800 - preempt) / 120;
-            int[] stacks = ReplayAnalyzer.calculateStackHeights(data.beatmap(), mapAr);
-            double stackUnit = (1 - .7 * (data.difficulty().cs() - 5) / 5) / 2 * 6.4;
-            path = new ReplayAnalyzer.SliderPath(slider, stacks[data.target().objectIndex()] * stackUnit, data.hardRock());
-            ticks = data.nearbyHitEvents().stream().filter(e -> e.eventType() == HitEvent.EventType.SLIDER_TICK)
-                    .sorted(Comparator.comparingLong(HitEvent::analysisTime)).toList();
-            var frames = data.keyFrames().stream().filter(f -> Float.isFinite(f.cursorX()) && Float.isFinite(f.cursorY()))
-                    .sorted(Comparator.comparingLong(OsuReplay.TimedKeyFrame::time)).toList();
-            if (frames.isEmpty()) throw new IllegalArgumentException("Replay contains no finite cursor samples");
-            // Include the moving ball between replay frames, especially across repeats.
-            // Connecting only recorded cursor samples would hide the ball's return trip.
-            var times = new java.util.TreeSet<Double>();
-            times.add(start);
-            times.add(end);
-            for (var f : frames) if (f.time() > start && f.time() < end) times.add((double) f.time());
-            for (var tick : ticks) if (tick.analysisTime() >= start && tick.analysisTime() <= end)
-                times.add((double) tick.analysisTime());
-            double step = Math.max(8, (end - start) / 4096);
-            for (double at = start + step; at < end; at += step) times.add(at);
-            samples = times.stream().map(at -> interpolate(frames, at)).toList();
-        }
-
-        Point2D point(HitEvent event) {
-            if (event.aimBias() != null) return new Point2D.Double(
-                    event.cursorX() - Math.cos(event.aimBias().theta()) * event.aimBias().distance(),
-                    event.cursorY() - Math.sin(event.aimBias().theta()) * event.aimBias().distance());
-            return ball(event.analysisTime());
-        }
-
-        Point2D ball(double time) {
-            var p = path.positionAt(ReplayAnalyzer.sliderProgress(data.target().hitObject(), end - start, time));
-            return new Point2D.Double(p.x(), p.y());
-        }
-
-    }
 
     private static Sample interpolate(List<OsuReplay.TimedKeyFrame> frames, double time) {
         int low = 0, high = frames.size();
@@ -108,11 +56,15 @@ final class SliderBreakRenderer {
                     + " [" + data.beatmap().getVersion() + "]", 32, 72, 1136);
             geometry(g, model);
             timeline(g, model);
-        } finally { g.dispose(); }
+        } finally {
+            g.dispose();
+        }
         try (var bytes = new ByteArrayOutputStream()) {
             ImageIO.write(canvas, "png", bytes);
             return bytes.toByteArray();
-        } catch (IOException e) { throw new IllegalStateException("Could not render slider break", e); }
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not render slider break", e);
+        }
     }
 
     private static void geometry(Graphics2D g, Model m) {
@@ -123,12 +75,16 @@ final class SliderBreakRenderer {
         for (int i = 0; i <= 512; i++) {
             var p = m.path.positionAt(i / 512.0);
             curve.add(new Point2D.Double(p.x(), p.y()));
-            minX = Math.min(minX, p.x() - m.radius); maxX = Math.max(maxX, p.x() + m.radius);
-            minY = Math.min(minY, p.y() - m.radius); maxY = Math.max(maxY, p.y() + m.radius);
+            minX = Math.min(minX, p.x() - m.radius);
+            maxX = Math.max(maxX, p.x() + m.radius);
+            minY = Math.min(minY, p.y() - m.radius);
+            maxY = Math.max(maxY, p.y() + m.radius);
         }
         for (var s : m.samples) {
-            minX = Math.min(minX, s.x()); maxX = Math.max(maxX, s.x());
-            minY = Math.min(minY, s.y()); maxY = Math.max(maxY, s.y());
+            minX = Math.min(minX, s.x());
+            maxX = Math.max(maxX, s.x());
+            minY = Math.min(minY, s.y());
+            maxY = Math.max(maxY, s.y());
         }
         double scale = Math.min(1060 / Math.max(1, maxX - minX), 360 / Math.max(1, maxY - minY));
         var transform = new AffineTransform();
@@ -140,7 +96,8 @@ final class SliderBreakRenderer {
         var line = new Path2D.Double();
         for (int i = 0; i < curve.size(); i++) {
             var p = transform.transform(curve.get(i), null);
-            if (i == 0) line.moveTo(p.getX(), p.getY()); else line.lineTo(p.getX(), p.getY());
+            if (i == 0) line.moveTo(p.getX(), p.getY());
+            else line.lineTo(p.getX(), p.getY());
         }
         field.setColor(GRID);
         field.setStroke(new BasicStroke((float) (2 * m.radius * scale + 3), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
@@ -159,7 +116,8 @@ final class SliderBreakRenderer {
         var trail = new Path2D.Double();
         boolean previousHeld = (m.samples.getFirst().keys() & 15) != 0;
         for (int i = 1; i < m.samples.size(); i++) {
-            var a = m.samples.get(i - 1); var b = m.samples.get(i);
+            var a = m.samples.get(i - 1);
+            var b = m.samples.get(i);
             var p = transform.transform(new Point2D.Double(a.x(), a.y()), null);
             var q = transform.transform(new Point2D.Double(b.x(), b.y()), null);
             boolean held = (a.keys() & 15) != 0;
@@ -189,7 +147,8 @@ final class SliderBreakRenderer {
                     (int) p.getX() + 12, (int) p.getY() - 12, 18, RED);
         }
         var cursor = transform.transform(new Point2D.Double(m.data.target().cursorX(), m.data.target().cursorY()), null);
-        field.setColor(RED); field.setStroke(new BasicStroke(2));
+        field.setColor(RED);
+        field.setStroke(new BasicStroke(2));
         field.draw(new Line2D.Double(t, cursor));
         field.draw(new Line2D.Double(cursor.getX() - 7, cursor.getY() - 7, cursor.getX() + 7, cursor.getY() + 7));
         field.draw(new Line2D.Double(cursor.getX() - 7, cursor.getY() + 7, cursor.getX() + 7, cursor.getY() - 7));
@@ -251,20 +210,89 @@ final class SliderBreakRenderer {
         if (released) return "Key released";
         return distance > m.radius ? "Outside acquire range" : "Missed tick";
     }
-    private static Ellipse2D circle(Point2D p, double r) { return new Ellipse2D.Double(p.getX() - r, p.getY() - r, r * 2, r * 2); }
+
+    private static Ellipse2D circle(Point2D p, double r) {
+        return new Ellipse2D.Double(p.getX() - r, p.getY() - r, r * 2, r * 2);
+    }
+
     private static void drawTrail(Graphics2D g, Path2D path, boolean held) {
         g.setColor(held ? BLUE : MUTED);
         g.setStroke(held ? new BasicStroke(2.5f)
                 : new BasicStroke(2, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{4, 4}, 0));
         g.draw(path);
     }
-    private static String time(double ms) { long t = Math.round(ms); return String.format(Locale.ROOT, "%02d:%02d.%03d", t / 60000, t / 1000 % 60, t % 1000); }
-    private static void text(Graphics2D g, String value, int x, int y, int size, Color color) {
-        g.setColor(color); g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, size)); g.drawString(value, x, y);
+
+    private static String time(double ms) {
+        long t = Math.round(ms);
+        return String.format(Locale.ROOT, "%02d:%02d.%03d", t / 60000, t / 1000 % 60, t % 1000);
     }
+
+    private static void text(Graphics2D g, String value, int x, int y, int size, Color color) {
+        g.setColor(color);
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, size));
+        g.drawString(value, x, y);
+    }
+
     private static void clippedText(Graphics2D g, String value, int x, int y, int width) {
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 18));
-        while (value.length() > 1 && g.getFontMetrics().stringWidth(value) > width) value = value.substring(0, value.length() - 2) + "…";
+        while (value.length() > 1 && g.getFontMetrics().stringWidth(value) > width)
+            value = value.substring(0, value.length() - 2) + "…";
         text(g, value, x, y, 18, MUTED);
+    }
+
+    record Sample(double time, double x, double y, int keys) {
+    }
+
+    static final class Model {
+        final MissVisualizeService.MissVisualizationData data;
+        final double start, end, radius, followRadius;
+        final ReplayAnalyzer.SliderPath path;
+        final List<HitEvent> ticks;
+        final List<Sample> samples;
+
+        Model(MissVisualizeService.MissVisualizationData data) {
+            this.data = data;
+            var slider = data.target().hitObject();
+            start = slider.getTime();
+            end = start + ReplayAnalyzer.sliderDuration(data.beatmap(), slider);
+            radius = data.difficulty().getCircleRadiusInPixel();
+            followRadius = radius * 2.4 + Math.clamp(37 - radius, 0, 5);
+            double ar = data.difficulty().ar();
+            double preempt = (ar < 5 ? 1800 - ar * 120 : 1200 - (ar - 5) * 150) * data.difficulty().clockRate();
+            double mapAr = preempt < 1200 ? 5 + (1200 - preempt) / 150 : (1800 - preempt) / 120;
+            int[] stacks = ReplayAnalyzer.calculateStackHeights(data.beatmap(), mapAr);
+            double stackUnit = (1 - .7 * (data.difficulty().cs() - 5) / 5) / 2 * 6.4;
+            path = new ReplayAnalyzer.SliderPath(slider, stacks[data.target().objectIndex()] * stackUnit, data.hardRock());
+            ticks = data.nearbyHitEvents().stream().filter(e -> e.eventType() == HitEvent.EventType.SLIDER_TICK)
+                    .sorted(Comparator.comparingLong(HitEvent::analysisTime)).toList();
+            var frames = data.keyFrames().stream().filter(f -> Float.isFinite(f.cursorX()) && Float.isFinite(f.cursorY()))
+                    .sorted(Comparator.comparingLong(OsuReplay.TimedKeyFrame::time)).toList();
+            if (frames.isEmpty()) throw new IllegalArgumentException("Replay contains no finite cursor samples");
+            // Include the moving ball between replay frames, especially across repeats.
+            // Connecting only recorded cursor samples would hide the ball's return trip.
+            var times = new java.util.TreeSet<Double>();
+            times.add(start);
+            times.add(end);
+            for (var f : frames) if (f.time() > start && f.time() < end) times.add((double) f.time());
+            for (var tick : ticks)
+                if (tick.analysisTime() >= start && tick.analysisTime() <= end)
+                    times.add((double) tick.analysisTime());
+            double step = Math.max(8, (end - start) / 4096);
+            for (double at = start + step; at < end; at += step) times.add(at);
+            samples = times.stream().map(at -> interpolate(frames, at)).toList();
+        }
+
+        Point2D point(HitEvent event) {
+            if (event.aimBias() != null) return new Point2D.Double(
+                    event.cursorX() - Math.cos(event.aimBias().theta()) * event.aimBias().distance(),
+                    event.cursorY() - Math.sin(event.aimBias().theta()) * event.aimBias().distance());
+            return ball(event.analysisTime());
+        }
+
+        Point2D ball(double time) {
+            var p = path.positionAt(ReplayAnalyzer.sliderProgress(data.target().hitObject(), end - start, time));
+            return new Point2D.Double(p.x(), p.y());
+        }
+
     }
 }

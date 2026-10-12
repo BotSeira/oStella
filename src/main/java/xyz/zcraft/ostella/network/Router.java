@@ -42,6 +42,7 @@ public class Router implements Closeable {
     public final AppConfig conf;
     public final ReplayController replayController;
     public final ScoreController scoreController;
+    public final xyz.zcraft.ostella.whatif.WhatIfService whatIf;
     final Gson GSON = new Gson();
     final BeatmapController beatmapController;
     final BeatmapsetController beatmapsetController;
@@ -51,7 +52,6 @@ public class Router implements Closeable {
     final UserController userController;
     final ChallengeController challengeController;
     final AddPpController addPpController;
-    public final xyz.zcraft.ostella.whatif.WhatIfService whatIf;
     final WhatIfController whatIfController;
     private final Runnable detachWhatIfObserver;
 

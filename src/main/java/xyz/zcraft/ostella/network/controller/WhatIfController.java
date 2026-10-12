@@ -5,13 +5,16 @@ import io.javalin.http.Context;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
+
 import java.time.Instant;
 
 public final class WhatIfController {
     private static final Gson GSON = new Gson();
     private final WhatIfService service;
 
-    public WhatIfController(WhatIfService service) { this.service = service; }
+    public WhatIfController(WhatIfService service) {
+        this.service = service;
+    }
 
     public void estimate(Context ctx) {
         try {

@@ -369,6 +369,7 @@
             color: #77778f;
             font-size: 0.82em;
         }
+
         .mod-extra {
             min-height: 30px;
             grid-area: 1 / 2;
@@ -403,7 +404,8 @@
                          th:style="'color: ' + ${Mods.getColorHex(amod)}"
                          th:text="${Mods.getSettingsText(amod)}"></div>
                     <img alt="mod" class="mod-icon"
-                         height="50" src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg" th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="50">
+                         height="50" src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="50">
                 </div>
             </div>
             <div class="song-title" th:text="${beatmap.getBeatmapset().getTitle()}">Example Song Title</div>
@@ -509,7 +511,7 @@
         <div class="section">
             <div class="section-header">
                 <div class="section-title">Potential Map Type</div>
-<!--                <div class="section-note">hit-object timing · placement · sliders · map properties</div>-->
+                <!--                <div class="section-note">hit-object timing · placement · sliders · map properties</div>-->
             </div>
             <div class="types-grid">
                 <div class="type-card" th:each="type : ${types}" th:if="${type.percentage() > 10}">
@@ -519,9 +521,9 @@
                         <span class="type-share"
                               th:text="${#numbers.formatDecimal(type.percentage(),1,1) + '%'}">19.8%</span>
                     </div>
-<!--                    <div class="type-description" th:text="${type.description()}">-->
-<!--                        Sustained tapping supported by continuous flow aim-->
-<!--                    </div>-->
+                    <!--                    <div class="type-description" th:text="${type.description()}">-->
+                    <!--                        Sustained tapping supported by continuous flow aim-->
+                    <!--                    </div>-->
                     <div class="bar-track">
                         <div class="type-fill"
                              th:style="${'width:' + type.percentage() + '%;background:' + type.color() + ';'}"></div>
@@ -540,7 +542,7 @@
     <div class="section" th:if="${Beatmaps.doShowAimBreakdown(analysis)}">
         <div class="section-header">
             <div class="section-title">Potential Aim Types</div>
-<!--            <div class="section-note">relative evidence within detected aim patterns</div>-->
+            <!--            <div class="section-note">relative evidence within detected aim patterns</div>-->
         </div>
         <div class="aim-grid">
             <div class="aim-card" th:each="aimType : ${aimTypes}" th:if="${aimType.percentage() > 20}">

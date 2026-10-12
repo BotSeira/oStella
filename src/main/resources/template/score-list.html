@@ -233,6 +233,7 @@
         .change-num-same {
             color: #9ca3af;
         }
+
         .mod-extra {
             min-height: 30px;
             grid-area: 1 / 2;
@@ -598,8 +599,9 @@
                 <div style="max-width: 700px; margin-top: 15px; margin-left: auto;">
                     <div class="chart-wrapper" style="width: 700px; height: 80px; ">
                         <canvas id="historyChart"></canvas>
-                        <div id="historyText"
-                             style="position: absolute; top: 50%; left: 50%; font-size: 1.5em; color: #9ca3af;" class="hidden">
+                        <div class="hidden"
+                             id="historyText"
+                             style="position: absolute; top: 50%; left: 50%; font-size: 1.5em; color: #9ca3af;">
                             Rank history is currently not available...
                         </div>
                     </div>
@@ -654,7 +656,8 @@
                          th:style="'color: ' + ${Mods.getColorHex(amod)}"
                          th:text="${Mods.getSettingsText(amod)}"></div>
                     <img alt="mod" class="mod-icon"
-                         height="40" src="https://osu.ppy.sh/assets/images/mod-hidden.823bd26e.svg" th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
+                         height="40" src="https://osu.ppy.sh/assets/images/mod-hidden.823bd26e.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
                 </div>
             </div>
             <img alt="jacket" class="jacket"
@@ -671,8 +674,8 @@
             <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
         </div>
         <div class="diff">
-            <div class="diff-badge" th:with="stars=${scoreStars[iterstat.index]}"
-                 th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'">
+            <div class="diff-badge" th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
+                 th:with="stars=${scoreStars[iterstat.index]}">
                 <div class="diff-rating"
                      th:style="'color: ' + ${stars == null ? '#000000' : Colors.getBeatmapDiffTextColor(stars)} + ';'"
                      th:text="${stars == null ? '★—' : '★' + Osu.formatStarRating(stars)}">
@@ -718,7 +721,7 @@
 <!--suppress ThymeleafObsoleteInlineAttributeInspection -->
 <script th:inline="javascript">
     const historyChart = document.getElementById('historyChart');
-    const rankHistory = /*[[${user.rankHistory}]]*/ {data:[12345, 56789, 67890]};
+    const rankHistory = /*[[${user.rankHistory}]]*/ {data: [12345, 56789, 67890]};
     // noinspection PointlessBooleanExpressionJS
     if (historyChart && rankHistory != null) {
         const historyData = rankHistory.data;
