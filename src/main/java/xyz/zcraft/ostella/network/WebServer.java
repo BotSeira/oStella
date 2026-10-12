@@ -48,7 +48,6 @@ public class WebServer implements Closeable {
                         throw new UnauthorizedResponse();
                     }
                 }
-                if (!"/health".equals(ctx.path())) router.whatIf.recordActivity();
             });
 
             cfg.routes.before(ctx -> {

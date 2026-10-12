@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.config;
 
 public record OstellaConfig(
+        String sqlitePath,
         String token,
         int requestPerSecond,
         int replayRequestIntervalMillis,
@@ -10,6 +11,7 @@ public record OstellaConfig(
         boolean safeFlags
 ) {
     public OstellaConfig {
+        sqlitePath = sqlitePath == null || sqlitePath.isBlank() ? "data/ostella.db" : sqlitePath;
         requestPerSecond = Math.max(1, requestPerSecond);
         replayRequestIntervalMillis = replayRequestIntervalMillis > 0
                 ? replayRequestIntervalMillis

@@ -21,7 +21,7 @@ public final class WhatIfController {
             Double requestedPp = pp == null ? null : Double.valueOf(pp);
             Long requestedRank = rank == null ? null : Long.valueOf(rank);
             WhatIfEstimates.validate(requestedPp, requestedRank);
-            var result = WhatIfEstimates.estimate(service.current(), requestedPp, requestedRank, Instant.now());
+            var result = WhatIfEstimates.estimate(service.getModelAround(requestedPp, requestedRank), requestedPp, requestedRank, Instant.now());
             ctx.contentType("application/json").result(new Response(true, "Success", GSON.toJsonTree(result)).toString());
         } catch (IllegalArgumentException e) {
             ctx.status(400).contentType("application/json").result(new Response(false,

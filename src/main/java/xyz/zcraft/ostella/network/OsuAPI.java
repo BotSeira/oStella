@@ -7,6 +7,7 @@ import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.db.data.UserStatRecord;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
@@ -25,6 +26,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 public class OsuAPI {
     public static final int MAX_USER_SCORES_LIMIT = 200;
@@ -33,23 +36,22 @@ public class OsuAPI {
     private static final String BASE_URL = "https://osu.ppy.sh/api/v2";
     private static final Gson GSON = new Gson();
     private static final int USER_SCORES_PAGE_LIMIT = 100;
-    private static final java.util.concurrent.CopyOnWriteArrayList<java.util.function.Consumer<xyz.zcraft.ostella.whatif.RankPpModel.Sample>>
-            WHATIF_OBSERVERS = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private static final CopyOnWriteArrayList<Consumer<UserStatRecord>> USER_STAT_OBSERVERS = new CopyOnWriteArrayList<>();
 
-    public static Runnable observeWhatIf(java.util.function.Consumer<xyz.zcraft.ostella.whatif.RankPpModel.Sample> observer) {
-        WHATIF_OBSERVERS.add(observer);
-        return () -> WHATIF_OBSERVERS.remove(observer);
+    public static Runnable addUserStatObserver(Consumer<UserStatRecord> observer) {
+        USER_STAT_OBSERVERS.add(observer);
+        return () -> USER_STAT_OBSERVERS.remove(observer);
     }
 
-    private static void observeUser(JsonObject user, boolean standard, long requestedAt) {
-        // Full background refreshes are committed as one validated snapshot, never as partial observations.
-        if (ApiActivity.isBackground() || WHATIF_OBSERVERS.isEmpty()) return;
-        var sample = xyz.zcraft.ostella.whatif.WhatIfObservations.fromUser(user, standard);
-        if (sample == null) return;
-        var timed = new xyz.zcraft.ostella.whatif.RankPpModel.Sample(sample.userId(), sample.rank(), sample.pp(), requestedAt);
-        for (var observer : WHATIF_OBSERVERS) {
-            try { observer.accept(timed); }
-            catch (RuntimeException e) { LOG.warn("Unable to collect whatif sample", e); }
+    private static void observeUser(User user) {
+        if (ApiActivity.isBackground() || USER_STAT_OBSERVERS.isEmpty()) return;
+        final var sample = UserStatRecord.from(user);
+        for (var observer : USER_STAT_OBSERVERS) {
+            try {
+                observer.accept(sample);
+            } catch (RuntimeException e) {
+                LOG.warn("Unable to collect whatif sample", e);
+            }
         }
     }
 
@@ -232,8 +234,8 @@ public class OsuAPI {
             var requestedMods = ModSettings.parse(mods);
             if (requestedMods.stream().anyMatch(mod -> mod.getSettings() != null && !mod.getSettings().isEmpty())) {
                 var filter = xyz.zcraft.ostella.data.ScoreFilter.parse("mod=" + ModSettings.format(requestedMods));
-                var request = newRequestBuilder(tokenData,
-                        "/beatmaps/%s/scores/users/%s/all?ruleset=osu&legacy_only=0".formatted(beatmapId, uid)).GET().build();
+                final String url = "/beatmaps/%s/scores/users/%s/all?ruleset=osu&legacy_only=0";
+                var request = newRequestBuilder(tokenData, url.formatted(beatmapId, uid)).GET().build();
                 var response = JsonParser.parseString(send(request, HttpResponse.BodyHandlers.ofString()).body()).getAsJsonObject();
                 if (!response.has("scores")) return null;
                 Score matched = response.getAsJsonArray("scores").asList().stream()
@@ -334,8 +336,9 @@ public class OsuAPI {
             }
 
             JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-            observeUser(json, true, requestedAt);
-            return GSON.fromJson(json, UserExtended.class);
+            final UserExtended userExtended = GSON.fromJson(json, UserExtended.class);
+            observeUser(userExtended);
+            return userExtended;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user id " + uid, e);
         }
@@ -363,8 +366,9 @@ public class OsuAPI {
             }
 
             JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
-            observeUser(json, false, requestedAt);
-            return GSON.fromJson(json, UserExtended.class);
+            final UserExtended userExtended = GSON.fromJson(json, UserExtended.class);
+            observeUser(userExtended);
+            return userExtended;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get user @" + username, e);
         }
@@ -399,10 +403,8 @@ public class OsuAPI {
 
             final JsonArray users = JsonParser.parseString(body).getAsJsonObject().get("users").getAsJsonArray();
             final LinkedList<User> userList = new LinkedList<>();
-            users.forEach(u -> {
-                userList.add(GSON.fromJson(u, User.class));
-                if (u.isJsonObject()) observeUser(u.getAsJsonObject(), false, requestedAt);
-            });
+            users.forEach(u -> userList.add(GSON.fromJson(u, User.class)));
+            userList.forEach(OsuAPI::observeUser);
             return userList;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Failed to get users with ids " + uids, e);
@@ -866,8 +868,8 @@ public class OsuAPI {
         }
     }
 
-    private static HttpRequest.Builder newRequestBuilder(TokenData tokenData, String endpoint) {
-        return newRequestBuilder("Bearer " + tokenData.token(), endpoint);
+    private static HttpRequest.Builder newRequestBuilder(TokenData tokenData, String path) {
+        return newRequestBuilder("Bearer " + tokenData.token(), path);
     }
 
     private static HttpRequest.Builder newRequestBuilder(String auth, String endpoint) {
@@ -998,8 +1000,9 @@ public class OsuAPI {
             }
 
             final var json = JsonParser.parseString(response.body()).getAsJsonObject();
-            observeUser(json, false, requestedAt);
-            return GSON.fromJson(json, User.class);
+            final User user = GSON.fromJson(json, User.class);
+            observeUser(user);
+            return user;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get self data", e);
         }

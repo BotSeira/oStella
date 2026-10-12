@@ -1,29 +1,29 @@
 package xyz.zcraft.ostella.whatif;
 
+import xyz.zcraft.ostella.db.data.UserStatRecord;
+
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * Monotone piecewise linear fit in log(rank), log(pp), with the same inverse.
- */
-public final class RankPpModel {
-    private final List<Sample> samples;
-
-    public RankPpModel(List<Sample> input) {
+public record RankPpModel(List<UserStatRecord> samples) {
+    public static RankPpModel from(Collection<UserStatRecord> input) {
         if (input == null) throw new IllegalArgumentException("缺少排名样本。");
-        var sorted = input.stream().filter(s -> s != null && s.valid())
-                .sorted(Comparator.comparingLong(Sample::rank).thenComparing(Comparator.comparingDouble(Sample::pp).reversed()))
+        var sorted = input.stream()
+                .filter(s -> s != null && s.valid())
+                .sorted(Comparator.comparingLong(UserStatRecord::globalRank)
+                        .thenComparing(Comparator.comparingDouble(UserStatRecord::pp).reversed()))
                 .toList();
-        var monotone = new ArrayList<Sample>();
-        for (Sample sample : sorted) {
-            if (monotone.isEmpty() || (sample.rank() > monotone.getLast().rank()
+        var monotone = new ArrayList<UserStatRecord>();
+        for (UserStatRecord sample : sorted) {
+            if (monotone.isEmpty() || (sample.globalRank() > monotone.getLast().globalRank()
                     && sample.pp() < monotone.getLast().pp())) {
                 monotone.add(sample);
             }
         }
         if (monotone.size() < 2) throw new IllegalArgumentException("有效排名样本不足。");
-        this.samples = List.copyOf(monotone);
+        return new RankPpModel(List.copyOf(monotone));
     }
 
     private static double interpolate(double x, double x1, double x2, double y1, double y2) {
@@ -33,30 +33,26 @@ public final class RankPpModel {
         return Math.exp(Math.log(y1) + weight * (Math.log(y2) - Math.log(y1)));
     }
 
-    public List<Sample> samples() {
-        return samples;
-    }
-
-    public Sample first() {
+    public UserStatRecord first() {
         return samples.getFirst();
     }
 
-    public Sample last() {
+    public UserStatRecord last() {
         return samples.getLast();
     }
 
     public double ppAtRank(long rank) {
-        if (rank < first().rank() || rank > last().rank()) {
+        if (rank < first().globalRank() || rank > last().globalRank()) {
             throw new IllegalArgumentException("排名超出样本范围。");
         }
         int low = 1, high = samples.size() - 1;
         while (low < high) {
             int mid = (low + high) >>> 1;
-            if (samples.get(mid).rank() < rank) low = mid + 1;
+            if (samples.get(mid).globalRank() < rank) low = mid + 1;
             else high = mid;
         }
-        Sample a = samples.get(low - 1), b = samples.get(low);
-        return interpolate(rank, a.rank(), b.rank(), a.pp(), b.pp());
+        UserStatRecord a = samples.get(low - 1), b = samples.get(low);
+        return interpolate(rank, a.globalRank(), b.globalRank(), a.pp(), b.pp());
     }
 
     public double rankAtPp(double pp) {
@@ -69,17 +65,7 @@ public final class RankPpModel {
             if (samples.get(mid).pp() > pp) low = mid + 1;
             else high = mid;
         }
-        Sample a = samples.get(low - 1), b = samples.get(low);
-        return interpolate(pp, a.pp(), b.pp(), a.rank(), b.rank());
-    }
-
-    public record Sample(long userId, long rank, double pp, long observedAt) {
-        public Sample(long userId, long rank, double pp) {
-            this(userId, rank, pp, 0);
-        }
-
-        public boolean valid() {
-            return userId > 0 && rank > 0 && Double.isFinite(pp) && pp > 0;
-        }
+        UserStatRecord a = samples.get(low - 1), b = samples.get(low);
+        return interpolate(pp, a.pp(), b.pp(), a.globalRank(), b.globalRank());
     }
 }

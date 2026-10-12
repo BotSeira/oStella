@@ -13,14 +13,15 @@ import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.service.CacheService;
+import xyz.zcraft.ostella.whatif.RankPpModel;
+import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.osu.model.BeatmapExtended;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
-/**
- * Read-only hypothetical BP update. Does not submit scores or change account data.
- */
 public final class AddPpController {
     private final Router router;
     private final Gson gson = new Gson();
@@ -44,9 +45,11 @@ public final class AddPpController {
             badRequest(ctx, e.getMessage());
             return;
         }
-        var calculation = request.beatmapId() == null ? java.util.concurrent.CompletableFuture.completedFuture(
-                new Calculated(request.pp(), null)) : router.executor.enqueueAsync(() -> calculateMap(request.beatmapId(), conditions));
-        // Invalid map conditions are resolved before fetching the user's profile and BP window.
+
+        var calculation = request.beatmapId() == null
+                ? CompletableFuture.completedFuture(new Calculated(request.pp(), null))
+                : router.executor.enqueueAsync(() -> calculateMap(request.beatmapId(), conditions));
+
         ctx.future(() -> calculation.thenCompose(calculated -> {
                     var user = router.executor.enqueueAsync(() -> OsuAPI.getUser(router.tokenManager.getTokenData(), uid));
                     var scores = router.executor.enqueueAsync(() -> OsuAPI.getUserScores(router.tokenManager.getTokenData(), uid,
@@ -63,11 +66,20 @@ public final class AddPpController {
                         int count = request.count() == null ? 1 : request.count();
                         var projected = BpProjection.project(profile.getStatistics().getPp(), plays, calculated.pp(), count,
                                 request.beatmapId(), OsuAPI.MAX_USER_SCORES_LIMIT);
-                        return new Result(profile.getUsername(), uid, profile.getStatistics().getGlobalRank(),
+                        var rankSamples = new HashSet<>(router.whatIf.getModelAround(projected.after(), null).samples());
+                        if (projected.before() > 0)
+                            rankSamples.addAll(router.whatIf.getModelAround(projected.before(), null).samples());
+                        return new Result(
+                                profile.getUsername(), uid, profile.getStatistics().getGlobalRank(),
                                 projected.before(), projected.after(), projected.change(), calculated.pp(), count, plays.size(),
                                 projected.positions(), projected.replaced(), calculated.map(),
-                                xyz.zcraft.ostella.whatif.WhatIfEstimates.project(router.whatIf.current(),
-                                        projected.before(), projected.after(), profile.getStatistics().getGlobalRank(), java.time.Instant.now()));
+                                WhatIfEstimates.project(
+                                        RankPpModel.from(rankSamples),
+                                        projected.before(),
+                                        projected.after(),
+                                        profile.getStatistics().getGlobalRank()
+                                )
+                        );
                     });
                 }).thenAccept(result -> ctx.contentType("application/json")
                         .result(new Response(true, "Success", gson.toJsonTree(result)).toString()))
@@ -120,7 +132,7 @@ public final class AddPpController {
 
     public record Result(String username, long userId, Long rank, double beforePp, double afterPp, double change,
                          double scorePp, int count, int sampled, List<Integer> positions, boolean replaced,
-                         MapResult map, xyz.zcraft.ostella.whatif.WhatIfEstimates.RankProjection rankProjection) {
+                         MapResult map, WhatIfEstimates.RankProjection rankProjection) {
     }
 
     private record Calculated(double pp, MapResult map) {

@@ -83,7 +83,7 @@ public class Router implements Closeable {
 
         this.whatIf = xyz.zcraft.ostella.whatif.WhatIfService.create(tokenManager, executor);
         this.whatIfController = new WhatIfController(whatIf);
-        this.detachWhatIfObserver = OsuAPI.observeWhatIf(whatIf::observe);
+        this.detachWhatIfObserver = OsuAPI.addUserStatObserver(whatIf::observe);
         LOG.info("Router created");
     }
 

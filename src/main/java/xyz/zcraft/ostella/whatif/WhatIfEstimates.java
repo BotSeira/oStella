@@ -1,31 +1,45 @@
 package xyz.zcraft.ostella.whatif;
 
+import xyz.zcraft.ostella.db.data.UserStatRecord;
+
 import java.time.Duration;
 import java.time.Instant;
 
-/** Both standalone conversion and BP projections use one immutable backend snapshot. */
 public final class WhatIfEstimates {
-    private WhatIfEstimates() {}
-
-    public static Result estimate(WhatIfService.State state, Double pp, Long rank, Instant now) {
+    public static Result estimate(RankPpModel model, Double pp, Long rank, Instant now) {
         validate(pp, rank);
-        var model = state.model();
         String status;
         double resultPp;
         double resultRank;
         if (pp != null) {
             resultPp = pp;
-            if (pp > model.first().pp()) { status = "HIGH_PP"; resultRank = model.first().rank(); }
-            else if (pp < model.last().pp()) { status = "LOW_PP"; resultRank = model.last().rank(); }
-            else { status = "COVERED"; resultRank = model.rankAtPp(pp); }
+            if (pp > model.first().pp()) {
+                status = "HIGH_PP";
+                resultRank = model.first().globalRank();
+            } else if (pp < model.last().pp()) {
+                status = "LOW_PP";
+                resultRank = model.last().globalRank();
+            } else {
+                status = "COVERED";
+                resultRank = model.rankAtPp(pp);
+            }
         } else {
             resultRank = rank;
-            if (rank < model.first().rank()) { status = "LOW_RANK"; resultPp = model.first().pp(); }
-            else if (rank > model.last().rank()) { status = "HIGH_RANK"; resultPp = model.last().pp(); }
-            else { status = "COVERED"; resultPp = model.ppAtRank(rank); }
+            if (rank < model.first().globalRank()) {
+                status = "LOW_RANK";
+                resultPp = model.first().pp();
+            } else if (rank > model.last().globalRank()) {
+                status = "HIGH_RANK";
+                resultPp = model.last().pp();
+            } else {
+                status = "COVERED";
+                resultPp = model.ppAtRank(rank);
+            }
         }
-        return new Result("osu", status, resultPp, resultRank, state.snapshot().updatedAt().toString(),
-                stale(state, now), model.samples().size(), model.first().rank(), model.last().rank(),
+        Instant updatedAt = Instant.ofEpochMilli(model.samples().stream().mapToLong(UserStatRecord::updatedAt).min().orElse(0));
+        return new Result("osu", status, resultPp, resultRank, updatedAt.toString(),
+                Duration.between(updatedAt, now).compareTo(Duration.ofHours(48)) >= 0, model.samples().size(),
+                model.first().globalRank(), model.last().globalRank(),
                 model.last().pp(), model.first().pp());
     }
 
@@ -36,15 +50,19 @@ public final class WhatIfEstimates {
         }
     }
 
-    public static RankProjection project(WhatIfService.State state, double before, double after,
-                                         Long actualRank, Instant now) {
-        var model = state.model();
+    public static RankProjection project(RankPpModel model, double before, double after, Long actualRank) {
         Long rank;
         String status;
-        if (Math.abs(after - before) < 1e-9) { rank = actualRank; status = "UNCHANGED"; }
-        else if (after > model.first().pp()) { rank = model.first().rank(); status = "HIGH_PP"; }
-        else if (after < model.last().pp()) { rank = model.last().rank(); status = "LOW_PP"; }
-        else {
+        if (Math.abs(after - before) < 1e-9) {
+            rank = actualRank;
+            status = "UNCHANGED";
+        } else if (after > model.first().pp()) {
+            rank = model.first().globalRank();
+            status = "HIGH_PP";
+        } else if (after < model.last().pp()) {
+            rank = model.last().globalRank();
+            status = "LOW_PP";
+        } else {
             double predicted = model.rankAtPp(after);
             if (actualRank != null && actualRank > 0) {
                 if (before >= model.last().pp() && before <= model.first().pp())
@@ -54,14 +72,14 @@ public final class WhatIfEstimates {
             rank = Math.max(1, Math.round(predicted));
             status = "COVERED";
         }
-        return new RankProjection(rank, status, state.snapshot().updatedAt().toString(), stale(state, now));
+        return new RankProjection(rank, status);
     }
 
-    private static boolean stale(WhatIfService.State state, Instant now) {
-        return Duration.between(state.snapshot().updatedAt(), now).compareTo(Duration.ofHours(48)) >= 0;
+    public record Result(String mode, String status, double pp, double rank, String updatedAt, boolean stale,
+                         int sampleCount,
+                         long minRank, long maxRank, double minPp, double maxPp) {
     }
 
-    public record Result(String mode, String status, double pp, double rank, String updatedAt,
-                         boolean stale, int sampleCount, long minRank, long maxRank, double minPp, double maxPp) {}
-    public record RankProjection(Long rank, String status, String updatedAt, boolean stale) {}
+    public record RankProjection(Long rank, String status) {
+    }
 }
