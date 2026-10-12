@@ -2,17 +2,17 @@ package xyz.zcraft.ostella.data;
 
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
-import xyz.zcraft.osu.parser.BeatmapAnalyzer;
-import xyz.zcraft.osu.parser.BeatmapParser;
-import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
-import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.data.replay.OsuReplay;
+import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -24,11 +24,10 @@ import java.util.regex.Pattern;
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
-                    + "|any|title|artist|mapper|genre|language|tag|source|nsfw|video|storyboard|fullcombo|ar|od|cs|hp|type)"
+                    + "|any|title|artist|mapper|genre|language|tag|source|nsfw|video|storyboard|fullcombo|ar|od|cs|hp|type|ur)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
     private static final Pattern DURATION_PATTERN = Pattern.compile("(?i)^(?:(\\d+)m)?(?:(\\d+(?:\\.\\d+)?)s)?$");
-    private static final Pattern MOD_PATTERN = Pattern.compile("[A-Z]{2}");
     private static final Pattern REGEX_FILTER_PREFIX_PATTERN = Pattern.compile(
             "(?i)^(?:any|title|artist|mapper|genre|language)(?:=|!=)$"
     );
@@ -39,9 +38,12 @@ public final class ScoreFilter {
     private final Set<String> textValues;
     private final Pattern regexValue;
     private final String displayText;
+    private final Supplier<TokenData> tokenProvider;
 
     private ScoreFilter(
-            Field field, Operator operator, double numericValue, Set<String> textValues, Pattern regexValue, String displayText
+            Field field, Operator operator, double numericValue,
+            Set<String> textValues, Pattern regexValue, String displayText,
+            Supplier<TokenData> tokenProvider
     ) {
         this.field = field;
         this.operator = operator;
@@ -49,9 +51,10 @@ public final class ScoreFilter {
         this.textValues = textValues;
         this.regexValue = regexValue;
         this.displayText = displayText;
+        this.tokenProvider = tokenProvider;
     }
 
-    public static List<ScoreFilter> parseList(String encodedFilters) {
+    public static List<ScoreFilter> parseList(String encodedFilters, Supplier<TokenData> tokenProvider) {
         if (encodedFilters == null || encodedFilters.isBlank()) {
             return List.of();
         }
@@ -61,12 +64,12 @@ public final class ScoreFilter {
             if (token.isBlank()) {
                 throw new IllegalArgumentException("Filter cannot be empty");
             }
-            filters.add(parse(token));
+            filters.add(parse(token, tokenProvider));
         }
         return List.copyOf(filters);
     }
 
-    public static ScoreFilter parse(String token) {
+    public static ScoreFilter parse(String token, Supplier<TokenData> tokenProvider) {
         Matcher matcher = FILTER_PATTERN.matcher(token.trim());
         if (!matcher.matches()) {
             throw new IllegalArgumentException("Invalid score filter: " + token);
@@ -77,16 +80,16 @@ public final class ScoreFilter {
         String value = matcher.group(3).trim();
 
         if (field == Field.MODS) {
-            return parseMods(field, operator, value);
+            return parseMods(field, operator, value, tokenProvider);
         }
         if (field == Field.RANK) {
-            return parseRank(field, operator, value);
+            return parseRank(field, operator, value, tokenProvider);
         }
         if (field.isMetadataText()) {
-            return parseMetadataText(field, operator, value);
+            return parseMetadataText(field, operator, value, tokenProvider);
         }
         if (field.isBoolean()) {
-            return parseBoolean(field, operator, value);
+            return parseBoolean(field, operator, value, tokenProvider);
         }
         if (!operator.isNumeric()) {
             throw new IllegalArgumentException("Filter " + field.label + " does not support operator " + operator.symbol);
@@ -96,11 +99,11 @@ public final class ScoreFilter {
         validateRange(field, numericValue);
         return new ScoreFilter(
                 field, operator, numericValue, Set.of(), null,
-                field.label + " " + operator.display + " " + formatValue(field, numericValue)
+                field.label + " " + operator.display + " " + formatValue(field, numericValue), tokenProvider
         );
     }
 
-    private static ScoreFilter parseMods(Field field, Operator operator, String value) {
+    private static ScoreFilter parseMods(Field field, Operator operator, String value, Supplier<TokenData> tokenProvider) {
         if (!operator.isText()) {
             throw new IllegalArgumentException("Mods only supports ~, !~, = and !=");
         }
@@ -109,11 +112,11 @@ public final class ScoreFilter {
         String displayValue = mods.isEmpty() ? "NM" : String.join("", mods.stream().sorted().toList());
         return new ScoreFilter(
                 field, operator, Double.NaN, mods, null,
-                field.label + " " + operator.display + " " + displayValue
+                field.label + " " + operator.display + " " + displayValue, tokenProvider
         );
     }
 
-    private static ScoreFilter parseRank(Field field, Operator operator, String value) {
+    private static ScoreFilter parseRank(Field field, Operator operator, String value, Supplier<TokenData> tokenProvider) {
         if (!operator.isNumeric()) {
             throw new IllegalArgumentException("Rank only supports >, >=, <, <=, = and !=");
         }
@@ -123,7 +126,7 @@ public final class ScoreFilter {
             throw new IllegalArgumentException("Invalid rank: " + value);
         }
         return new ScoreFilter(field, operator, rankValue, Set.of(rank), null,
-                field.label + " " + operator.display + " " + rank);
+                field.label + " " + operator.display + " " + rank, tokenProvider);
     }
 
     private static String normalizeRank(String rank) {
@@ -149,7 +152,9 @@ public final class ScoreFilter {
         };
     }
 
-    private static ScoreFilter parseMetadataText(Field field, Operator operator, String value) {
+    private static ScoreFilter parseMetadataText(
+            Field field, Operator operator, String value, Supplier<TokenData> tokenProvider
+    ) {
         if (!operator.isText()) {
             throw new IllegalArgumentException(field.label + " only supports ~, !~, = and !=");
         }
@@ -176,11 +181,11 @@ public final class ScoreFilter {
         }
         return new ScoreFilter(
                 field, operator, Double.NaN, Set.of(value.toLowerCase(Locale.ROOT)), regex,
-                field.label + " " + operator.display + " " + value
+                field.label + " " + operator.display + " " + value, tokenProvider
         );
     }
 
-    private static ScoreFilter parseBoolean(Field field, Operator operator, String value) {
+    private static ScoreFilter parseBoolean(Field field, Operator operator, String value, Supplier<TokenData> tokenProvider) {
         if (operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
             throw new IllegalArgumentException(field.label + " only supports = and !=");
         }
@@ -190,7 +195,8 @@ public final class ScoreFilter {
         }
         return new ScoreFilter(
                 field, operator, Double.NaN, Set.of(normalized), null,
-                field.label + " " + operator.display + " " + normalized
+                field.label + " " + operator.display + " " + normalized,
+                tokenProvider
         );
     }
 
@@ -295,6 +301,7 @@ public final class ScoreFilter {
             case BPM -> formatNumber(value) + " BPM";
             case MISS -> formatNumber(value) + " miss";
             case SCORE, AR, CS, HP, OD -> formatNumber(value);
+            case UR -> formatNumber(value, 2);
             case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, TAG, TYPE, SOURCE,
                  NSFW, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
                     throw new IllegalStateException("Text filter has no numeric value");
@@ -306,6 +313,11 @@ public final class ScoreFilter {
             return String.format(Locale.ROOT, "%.0f", value);
         }
         return String.format(Locale.ROOT, "%s", value);
+    }
+
+    private static String formatNumber(double value, int digits) {
+        final String format = "%." + digits + "f";
+        return String.format(Locale.ROOT, format, value);
     }
 
     private static String formatDuration(double value) {
@@ -354,14 +366,16 @@ public final class ScoreFilter {
             return false;
         }
         if (field == Field.MODS) return compareMods(score.getMods());
+        if (field == Field.UR && !score.getHasReplay()) return false;
 
         BeatmapExtended beatmap = score.getBeatmap();
         Beatmapset beatmapset = score.getBeatmapset();
         final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(score);
         DiffSpec diffSpec = null;
         BeatmapPatternAnalysis beatmapAnalysis = null;
+        ReplayAnalyze analyze = null;
 
-        if (field == Field.LENGTH || field == Field.STAR || field == Field.TYPE) {
+        if (field == Field.LENGTH || field == Field.STAR || field == Field.TYPE || field == Field.UR) {
             if (beatmap == null) {
                 throw new IllegalStateException("Beatmap has not been set");
             }
@@ -369,7 +383,12 @@ public final class ScoreFilter {
                 final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
                 diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
                 beatmapAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
-            } catch (AnalyzeException | ParseException e) {
+
+                if (field == Field.UR) {
+                    final OsuReplay osuReplay = ReplayParser.parseReplay(CacheService.getReplayBlocking(tokenProvider.get(), score.getId()));
+                    analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
+                }
+            } catch (AnalyzeException | ParseException | IOException e) {
                 // TODO Add some logs mb
                 // throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
             }
@@ -397,7 +416,7 @@ public final class ScoreFilter {
                     && compare(beatmap.getBpm() * ModSettings.clockRate(score.getMods()));
             case MISS -> score.getStatistics() != null && compare(score.getStatistics().getOrDefault("miss", 0L));
             case SCORE -> score.getTotalScore() != null && compare(score.getTotalScore());
-            case MODS -> compareMods(score.getMods());
+            case UR -> analyze != null && compare(analyze.unstableRate());
             case RANK -> compareRank(score.getRank());
             case ANY -> compareText(allMetadataText(score, beatmap, beatmapset));
             case TITLE -> beatmapset != null
@@ -418,6 +437,7 @@ public final class ScoreFilter {
                     && compareText(beatmapset.getTags());
             case TYPE -> beatmapAnalysis != null && compareType(beatmapAnalysis);
             case SOURCE -> beatmapset != null && compareText(beatmapset.getSource());
+            default -> throw new IllegalStateException("Unexpected value: " + field);
         };
     }
 
@@ -543,6 +563,7 @@ public final class ScoreFilter {
         BPM("BPM"),
         MISS("Misses"),
         SCORE("Score"),
+        UR("Unstable Rate"),
         MODS("Mods"),
         RANK("Rank"),
         ANY("Any metadata"),
@@ -580,6 +601,7 @@ public final class ScoreFilter {
                 case "bpm" -> BPM;
                 case "miss", "misses" -> MISS;
                 case "score" -> SCORE;
+                case "ur" -> UR;
                 case "mod", "mods" -> MODS;
                 case "rank" -> RANK;
                 case "any" -> ANY;

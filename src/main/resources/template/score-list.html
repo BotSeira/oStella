@@ -316,6 +316,15 @@
             flex-flow: wrap;
         }
 
+        .extra-score-info {
+            right: 0;
+            bottom: 6px;
+            background-color: #262639;
+            padding: 4px 8px;
+            position: absolute;
+            border-radius: 6px 0 0 6px;
+        }
+
         .mod-badge {
             display: grid;
             place-items: center;
@@ -660,6 +669,9 @@
                          th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
                 </div>
             </div>
+<!--            <div class="extra-score-info">-->
+<!--                UR=123.45-->
+<!--            </div>-->
             <img alt="jacket" class="jacket"
                  src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
                  th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>

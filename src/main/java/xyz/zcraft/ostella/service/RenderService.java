@@ -33,7 +33,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.IntStream;
 
 public class RenderService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(RenderService.class);
@@ -183,10 +182,6 @@ public class RenderService implements AutoCloseable {
         return ctx;
     }
 
-    public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type) {
-        return renderScores(user, scores, type, List.of());
-    }
-
     public byte[] renderUserInfo(UserExtended user, List<Score> topScores) {
         Context ctx = createContext();
         ctx.setVariable("user", user);
@@ -200,15 +195,7 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
-    public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type, List<String> filters) {
-        return renderScores(
-                user,
-                scores,
-                type,
-                filters,
-                IntStream.rangeClosed(1, scores.size()).boxed().toList()
-        );
-    }
+    public record ScoreEntry(Score score, String extra) {}
 
     public byte[] renderScores(
             UserExtended user,
@@ -217,13 +204,12 @@ public class RenderService implements AutoCloseable {
             List<String> filters,
             List<Integer> scorePositions
     ) {
-        return renderScores(user, scores, type, filters, scorePositions, scoreListTitle(type, filters, scores.size()));
+        return renderScores(user, scores, filters, scorePositions, scoreListTitle(type, filters, scores.size()));
     }
 
     public byte[] renderScores(
             UserExtended user,
             List<Score> scores,
-            ScoreType type,
             List<String> filters,
             List<Integer> scorePositions,
             String title

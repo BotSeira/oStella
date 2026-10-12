@@ -37,10 +37,12 @@ public final class WhatIfEstimates {
             }
         }
         Instant updatedAt = Instant.ofEpochMilli(model.samples().stream().mapToLong(UserStatRecord::updatedAt).min().orElse(0));
-        return new Result("osu", status, resultPp, resultRank, updatedAt.toString(),
+        return new Result(
+                "osu", status, resultPp, resultRank, updatedAt.toString(),
                 Duration.between(updatedAt, now).compareTo(Duration.ofHours(48)) >= 0, model.samples().size(),
                 model.first().globalRank(), model.last().globalRank(),
-                model.last().pp(), model.first().pp());
+                model.last().pp(), model.first().pp()
+        );
     }
 
     public static void validate(Double pp, Long rank) {

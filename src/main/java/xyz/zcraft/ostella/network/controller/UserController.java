@@ -444,7 +444,7 @@ public class UserController {
     private byte[] renderScoreList(ScoreListData data) {
         return data.title() == null
                 ? renderer.renderScores(data.user(), data.scores(), data.type(), data.filters(), data.positions())
-                : renderer.renderScores(data.user(), data.scores(), data.type(), data.filters(), data.positions(), data.title());
+                : renderer.renderScores(data.user(), data.scores(), data.filters(), data.positions(), data.title());
     }
 
     private record ScoreListData(UserExtended user, List<Score> scores, ScoreType type,
