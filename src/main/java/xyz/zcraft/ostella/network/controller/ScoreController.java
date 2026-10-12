@@ -301,7 +301,7 @@ public class ScoreController {
         final String of = requireStringFrom(context, "of", "rs", "bp", "rp");
         final long u = requireLong(context, "u");
         final int i = requirePositiveInt(context, "i");
-        final List<ScoreFilter> filters = requireScoreFilters(context, tokenManager::getTokenData);
+        final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
 
         final ScoreType type = switch (of.toLowerCase()) {
             case "rs" -> ScoreType.RECENT;

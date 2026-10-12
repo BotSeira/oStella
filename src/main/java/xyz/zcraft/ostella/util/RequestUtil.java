@@ -11,10 +11,12 @@ import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 public class RequestUtil {
@@ -37,9 +39,9 @@ public class RequestUtil {
         putResult(context, Map.of(key, val));
     }
 
-    public static List<ScoreFilter> requireScoreFilters(Context context, Supplier<TokenData> tokenSupplier) {
+    public static List<ScoreFilter> requireScoreFilters(Context context, Function<Long, Path> replayProvider) {
         try {
-            return ScoreFilter.parseList(context.queryParam("filters"), tokenSupplier);
+            return ScoreFilter.parseList(context.queryParam("filters"), replayProvider);
         } catch (IllegalArgumentException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
         }

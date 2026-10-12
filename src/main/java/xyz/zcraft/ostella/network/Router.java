@@ -55,6 +55,16 @@ public class Router implements Closeable {
     final WhatIfController whatIfController;
     private final Runnable detachWhatIfObserver;
 
+    public Path getReplayBlocking(Long id) {
+        return executor.enqueueAsync(() -> {
+            try {
+                return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).join();
+    }
+
     public Router(AppConfig conf, TokenManager tokenManager) throws IOException {
         this.conf = conf;
         this.tokenManager = tokenManager;

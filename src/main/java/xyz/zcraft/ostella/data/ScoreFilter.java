@@ -13,7 +13,9 @@ import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -38,12 +40,12 @@ public final class ScoreFilter {
     private final Set<String> textValues;
     private final Pattern regexValue;
     private final String displayText;
-    private final Supplier<TokenData> tokenProvider;
+    private final Function<Long, Path> replayProvider;
 
     private ScoreFilter(
             Field field, Operator operator, double numericValue,
             Set<String> textValues, Pattern regexValue, String displayText,
-            Supplier<TokenData> tokenProvider
+            Function<Long, Path> replayProvider
     ) {
         this.field = field;
         this.operator = operator;
@@ -51,10 +53,10 @@ public final class ScoreFilter {
         this.textValues = textValues;
         this.regexValue = regexValue;
         this.displayText = displayText;
-        this.tokenProvider = tokenProvider;
+        this.replayProvider = replayProvider;
     }
 
-    public static List<ScoreFilter> parseList(String encodedFilters, Supplier<TokenData> tokenProvider) {
+    public static List<ScoreFilter> parseList(String encodedFilters, Function<Long, Path> replayProvider) {
         if (encodedFilters == null || encodedFilters.isBlank()) {
             return List.of();
         }
@@ -64,12 +66,12 @@ public final class ScoreFilter {
             if (token.isBlank()) {
                 throw new IllegalArgumentException("Filter cannot be empty");
             }
-            filters.add(parse(token, tokenProvider));
+            filters.add(parse(token, replayProvider));
         }
         return List.copyOf(filters);
     }
 
-    public static ScoreFilter parse(String token, Supplier<TokenData> tokenProvider) {
+    public static ScoreFilter parse(String token, Function<Long, Path> replayProvider) {
         Matcher matcher = FILTER_PATTERN.matcher(token.trim());
         if (!matcher.matches()) {
             throw new IllegalArgumentException("Invalid score filter: " + token);
@@ -80,16 +82,16 @@ public final class ScoreFilter {
         String value = matcher.group(3).trim();
 
         if (field == Field.MODS) {
-            return parseMods(field, operator, value, tokenProvider);
+            return parseMods(field, operator, value, replayProvider);
         }
         if (field == Field.RANK) {
-            return parseRank(field, operator, value, tokenProvider);
+            return parseRank(field, operator, value, replayProvider);
         }
         if (field.isMetadataText()) {
-            return parseMetadataText(field, operator, value, tokenProvider);
+            return parseMetadataText(field, operator, value, replayProvider);
         }
         if (field.isBoolean()) {
-            return parseBoolean(field, operator, value, tokenProvider);
+            return parseBoolean(field, operator, value, replayProvider);
         }
         if (!operator.isNumeric()) {
             throw new IllegalArgumentException("Filter " + field.label + " does not support operator " + operator.symbol);
@@ -99,11 +101,11 @@ public final class ScoreFilter {
         validateRange(field, numericValue);
         return new ScoreFilter(
                 field, operator, numericValue, Set.of(), null,
-                field.label + " " + operator.display + " " + formatValue(field, numericValue), tokenProvider
+                field.label + " " + operator.display + " " + formatValue(field, numericValue), replayProvider
         );
     }
 
-    private static ScoreFilter parseMods(Field field, Operator operator, String value, Supplier<TokenData> tokenProvider) {
+    private static ScoreFilter parseMods(Field field, Operator operator, String value, Function<Long, Path> replayProvider) {
         if (!operator.isText()) {
             throw new IllegalArgumentException("Mods only supports ~, !~, = and !=");
         }
@@ -112,11 +114,11 @@ public final class ScoreFilter {
         String displayValue = mods.isEmpty() ? "NM" : String.join("", mods.stream().sorted().toList());
         return new ScoreFilter(
                 field, operator, Double.NaN, mods, null,
-                field.label + " " + operator.display + " " + displayValue, tokenProvider
+                field.label + " " + operator.display + " " + displayValue, replayProvider
         );
     }
 
-    private static ScoreFilter parseRank(Field field, Operator operator, String value, Supplier<TokenData> tokenProvider) {
+    private static ScoreFilter parseRank(Field field, Operator operator, String value, Function<Long, Path> replayProvider) {
         if (!operator.isNumeric()) {
             throw new IllegalArgumentException("Rank only supports >, >=, <, <=, = and !=");
         }
@@ -126,7 +128,7 @@ public final class ScoreFilter {
             throw new IllegalArgumentException("Invalid rank: " + value);
         }
         return new ScoreFilter(field, operator, rankValue, Set.of(rank), null,
-                field.label + " " + operator.display + " " + rank, tokenProvider);
+                field.label + " " + operator.display + " " + rank, replayProvider);
     }
 
     private static String normalizeRank(String rank) {
@@ -153,7 +155,7 @@ public final class ScoreFilter {
     }
 
     private static ScoreFilter parseMetadataText(
-            Field field, Operator operator, String value, Supplier<TokenData> tokenProvider
+            Field field, Operator operator, String value, Function<Long, Path> replayProvider
     ) {
         if (!operator.isText()) {
             throw new IllegalArgumentException(field.label + " only supports ~, !~, = and !=");
@@ -191,11 +193,11 @@ public final class ScoreFilter {
         }
         return new ScoreFilter(
                 field, operator, Double.NaN, Set.of(value.toLowerCase(Locale.ROOT)), regex,
-                field.label + " " + operator.display + " " + value, tokenProvider
+                field.label + " " + operator.display + " " + value, replayProvider
         );
     }
 
-    private static ScoreFilter parseBoolean(Field field, Operator operator, String value, Supplier<TokenData> tokenProvider) {
+    private static ScoreFilter parseBoolean(Field field, Operator operator, String value, Function<Long, Path> replayProvider) {
         if (operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
             throw new IllegalArgumentException(field.label + " only supports = and !=");
         }
@@ -206,7 +208,7 @@ public final class ScoreFilter {
         return new ScoreFilter(
                 field, operator, Double.NaN, Set.of(normalized), null,
                 field.label + " " + operator.display + " " + normalized,
-                tokenProvider
+                replayProvider
         );
     }
 
@@ -395,10 +397,10 @@ public final class ScoreFilter {
                 beatmapAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
 
                 if (field == Field.UR) {
-                    final OsuReplay osuReplay = ReplayParser.parseReplay(CacheService.getReplayBlocking(tokenProvider.get(), score.getId()));
+                    final OsuReplay osuReplay = ReplayParser.parseReplay(replayProvider.apply(score.getId()));
                     analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
                 }
-            } catch (AnalyzeException | ParseException | IOException e) {
+            } catch (Exception e) {
                 // TODO Add some logs mb
                 // throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
             }
