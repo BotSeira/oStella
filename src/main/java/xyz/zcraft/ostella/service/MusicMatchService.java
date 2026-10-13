@@ -7,7 +7,7 @@ import java.util.*;
 
 public final class MusicMatchService {
     public static final int CANDIDATE_LIMIT = 500;
-    public static final int RESULT_LIMIT = 50;
+    public static final int RESULT_LIMIT = 100;
 
     public static Result match(String title, String artist) {
         return match(title, artist, SetMetaStore.candidates(title, artist, CANDIDATE_LIMIT + 1));
@@ -37,17 +37,21 @@ public final class MusicMatchService {
             Set<String> artists = keys(candidate.artist(), candidate.artistUnicode());
 
             boolean exactArtist = !artistKey.isEmpty() && artists.contains(artistKey);
+            boolean sharedArtistCredit = !artistKey.isEmpty() && !exactArtist && artists.stream()
+                    .anyMatch(a -> containsArtistCredit(artistKey, a));
             double artistSimilarity = artistKey.isEmpty() ? 0 : artists.stream()
                     .mapToDouble(a -> similarity(artistKey, a)).max().orElse(0);
 
-            if (!artistKey.isEmpty() && !exactArtist && artistSimilarity < 0.85) continue;
+            if (!artistKey.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < 0.85) continue;
 
             boolean exact = exactTitle && exactArtist;
             String reason = exact ? "exact_title_and_artist"
                     : !exactTitle ? "length_variant_requires_review"
+                    : sharedArtistCredit ? "shared_artist_credit_requires_review"
                     : artistKey.isEmpty() ? "title_only_requires_review" : "similar_artist_requires_review";
 
-            double score = exact ? 1.0 : (exactTitle ? 0.7 : 0.5) + 0.2 * artistSimilarity;
+            double score = exact ? 1.0 : sharedArtistCredit ? (exactTitle ? 0.95 : 0.69)
+                    : (exactTitle ? 0.7 : 0.5) + 0.2 * artistSimilarity;
 
             matches.add(new Match(candidate, score, reason, exact));
         }
@@ -71,11 +75,22 @@ public final class MusicMatchService {
         return keys;
     }
 
+    /** Compare complete normalized phrases, not arbitrary substrings or individual name tokens. */
+    private static boolean containsArtistCredit(String left, String right) {
+        if (left.equals(right)) return false;
+        String shorter = left.length() <= right.length() ? left : right;
+        String longer = left.length() <= right.length() ? right : left;
+        if (shorter.codePointCount(0, shorter.length()) < 2) return false;
+        // Normalization turns punctuation separators into spaces. Padding enforces both boundaries.
+        // This is evidence for a candidate, not proof: spaces also occur inside a single artist's name.
+        return (" " + longer + " ").contains(" " + shorter + " ");
+    }
+
     private static double similarity(String left, String right) {
         if (left.equals(right)) return 1;
 
         final int max = Math.max(left.length(), right.length());
-        if (Math.min(left.length(), right.length()) < 5 || max > 256) return 0;
+        if (Math.min(left.length(), right.length()) < 2 || max > 256) return 0;
         int[] previous = new int[right.length() + 1];
         for (int j = 0; j < previous.length; j++) previous[j] = j;
         for (int i = 1; i <= left.length(); i++) {

@@ -31,32 +31,6 @@ public class SetMetaStore {
                         updated_at BIGINT NOT NULL
                     )
                     """);
-            Set<String> columns = new HashSet<>();
-            try (ResultSet rs = statement.executeQuery("PRAGMA table_info(beatmapsets)")) {
-                while (rs.next()) columns.add(rs.getString("name"));
-            }
-            if (!columns.contains("updated_at")) {
-                if (columns.contains("last_synced_at")) {
-                    statement.execute("ALTER TABLE beatmapsets RENAME COLUMN last_synced_at TO updated_at");
-                    // Preserve the previous observation time, not the migration time.
-                    statement.execute("""
-                            UPDATE beatmapsets SET updated_at = CASE
-                              WHEN typeof(updated_at) IN ('integer', 'real') THEN CAST(updated_at AS INTEGER)
-                              ELSE COALESCE(CAST((julianday(updated_at) - 2440587.5) * 86400000 AS INTEGER), 0)
-                            END
-                            """);
-                } else {
-                    statement.execute("ALTER TABLE beatmapsets ADD COLUMN updated_at BIGINT NOT NULL DEFAULT 0");
-                }
-            }
-            boolean backfill = false;
-            for (String column : List.of("artist_romanized", "title_romanized", "title_base", "title_base_romanized")) {
-                if (!columns.contains(column)) {
-                    statement.execute("ALTER TABLE beatmapsets ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''");
-                    backfill = true;
-                }
-            }
-            if (backfill) backfillKeys(connection);
             statement.execute("CREATE INDEX IF NOT EXISTS idx_song ON beatmapsets(title_normalized, artist_normalized)");
             statement.execute("CREATE INDEX IF NOT EXISTS idx_title ON beatmapsets(title_normalized)");
             statement.execute("CREATE INDEX IF NOT EXISTS idx_song_romanized ON beatmapsets(title_romanized, artist_romanized)");

@@ -145,7 +145,10 @@ The existing `GET /beatmapsets/search` remains an online keyword search.
 - Only cached `ranked` sets are eligible. Both ordinary and Unicode title/artist forms are indexed.
   `matched` means at least one exact normalized title-and-artist pair; multiple sets can represent the same song.
   `ambiguous` means candidates require review; `no_match` means none qualified within the searched cache.
-- Title-only queries, similar artist spellings, and TV-size/short-version variants require review.
+- Title-only queries, similar artist spellings, shared artist credits, and TV-size/short-version variants require review.
+  A complete artist phrase may occur inside a longer credit in either direction, for example
+  `ABC` and `ABC DEFG`. These return `shared_artist_credit_requires_review`, below exact pairs
+  but above spelling-only matches. Matching requires phrase boundaries; arbitrary substrings do not qualify.
   Remix, live, cover, and other qualifiers remain significant. This version does not perform arbitrary fuzzy title search.
   Popularity orders otherwise equal matches; it is not evidence that two songs are identical.
 - Retrieval examines at most 500 candidates and returns at most 50 matches per query.
