@@ -86,7 +86,7 @@ public class RenderService implements AutoCloseable {
         }
     }
 
-    private static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
+    public static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
         return filters.isEmpty()
                 ? switch (type) {
             case BEST -> "Best of " + scoreCount + " Scores";
@@ -195,40 +195,29 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
-    public record ScoreEntry(Score score, String extra) {}
-
     public byte[] renderScores(
-            UserExtended user,
-            List<Score> scores,
-            ScoreType type,
+            UserExtended user, List<ScoreEntry> scores,
             List<String> filters,
-            List<Integer> scorePositions
+            String title, String extraTitle
     ) {
-        return renderScores(user, scores, filters, scorePositions, scoreListTitle(type, filters, scores.size()));
-    }
-
-    public byte[] renderScores(
-            UserExtended user, List<Score> scores, List<String> filters, List<Integer> scorePositions, String title
-    ) {
-        if (scores.size() != scorePositions.size()) {
-            throw new IllegalArgumentException("Each rendered score must have a display position");
-        }
         Context ctx = createContext();
         ctx.setVariable("user", user);
-        ctx.setVariable("scores", scores);
+        ctx.setVariable("scores", scores.stream().map(ScoreEntry::getScore).toList());
         var lazerDifficulties = new MultiplayerDifficultyCalculator("lazer");
         var stableDifficulties = new MultiplayerDifficultyCalculator("stable");
-        ctx.setVariable("scoreStars", scores.stream().map(score -> {
+        ctx.setVariable("scoreStars", scores.stream().map(ScoreEntry::getScore).map(score -> {
             var calculator = score.getLegacyScoreId() != null && score.getLegacyScoreId() > 0
                     ? stableDifficulties : lazerDifficulties;
             return calculator.rating(score, score.getBeatmap(), 0);
         }).toList());
-        ctx.setVariable("scorePositions", List.copyOf(scorePositions));
+        ctx.setVariable("scorePositions", scores.stream().map(ScoreEntry::getBestIndex).toList());
+        ctx.setVariable("scoreExtras", scores.stream().map(ScoreEntry::getExtra).toList());
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());
         ctx.setVariable("type", title);
         ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        ctx.setVariable("extraTitle", extraTitle);
 
         String finalHtml = templateEngine.process("score-list", ctx);
 

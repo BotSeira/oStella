@@ -64,8 +64,10 @@ public final class AddPpController {
                             return new BpProjection.Play(score.getBeatmap().getId(), score.getPp());
                         }).toList();
                         int count = request.count() == null ? 1 : request.count();
-                        var projected = BpProjection.project(profile.getStatistics().getPp(), plays, calculated.pp(), count,
-                                request.beatmapId(), OsuAPI.MAX_USER_SCORES_LIMIT);
+                        var projected = BpProjection.project(
+                                profile.getStatistics().getPp(), plays, calculated.pp(),
+                                count, request.beatmapId(), OsuAPI.MAX_USER_SCORES_LIMIT
+                        );
                         var rankSamples = new HashSet<>(router.whatIf.getModelAround(projected.after(), null).samples());
                         if (projected.before() > 0)
                             rankSamples.addAll(router.whatIf.getModelAround(projected.before(), null).samples());

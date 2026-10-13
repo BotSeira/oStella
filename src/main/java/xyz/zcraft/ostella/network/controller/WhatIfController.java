@@ -6,8 +6,6 @@ import xyz.zcraft.ostella.network.Response;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
 
-import java.time.Instant;
-
 public final class WhatIfController {
     private static final Gson GSON = new Gson();
     private final WhatIfService service;
@@ -24,7 +22,7 @@ public final class WhatIfController {
             Double requestedPp = pp == null ? null : Double.valueOf(pp);
             Long requestedRank = rank == null ? null : Long.valueOf(rank);
             WhatIfEstimates.validate(requestedPp, requestedRank);
-            var result = WhatIfEstimates.estimate(service.getModelAround(requestedPp, requestedRank), requestedPp, requestedRank, Instant.now());
+            var result = WhatIfEstimates.estimate(service.getModelAround(requestedPp, requestedRank), requestedPp, requestedRank);
             ctx.contentType("application/json").result(new Response(true, "Success", GSON.toJsonTree(result)).toString());
         } catch (IllegalArgumentException e) {
             ctx.status(400).contentType("application/json").result(new Response(false,

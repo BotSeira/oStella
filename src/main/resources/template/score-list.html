@@ -36,6 +36,19 @@
             gap: 40px;
         }
 
+        .extra-title {
+            font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            gap: 40px;
+        }
+
         .profile-main {
             position: relative;
             display: flex;
@@ -492,7 +505,7 @@
         .score-type {
             text-align: center;
             text-transform: uppercase;
-            font-size: 2em;
+            font-size: 1.5em;
             font-weight: bold;
             letter-spacing: 8px;
             display: flex;
@@ -647,7 +660,11 @@
     <div class="uid" th:text="'U' + ${user.id}">U12345678</div>
 </div>
 
-<div class="score-type" th:text="${type}">Best of 40 Scores</div>
+<div class="extra-title" th:if="${extraTitle != null and !extraTitle.isBlank()}" th:text="${extraTitle}">
+    This is an example of extra title.
+</div>
+
+<div class="score-type" th:text="${type}">Best Scores</div>
 
 <div class="grid-container">
     <div class="card" th:each="score, iterstat : ${scores}">

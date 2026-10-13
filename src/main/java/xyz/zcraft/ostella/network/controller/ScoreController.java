@@ -9,6 +9,7 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.data.ScoreEntry;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.data.ScoreType;
@@ -75,7 +76,7 @@ public class ScoreController {
         final DiffSpec diffSpec;
 
         final ScoreEntry entry = targetScore.entry();
-        final Score score = entry.score();
+        final Score score = entry.getScore();
         final UserExtended user = targetScore.user();
 
         try {
@@ -95,25 +96,9 @@ public class ScoreController {
                 diffSpec.getDifficulty().od(),
                 diffSpec.getDifficulty().hp()
         ));
-        result.addProperty("best_index", entry.bestIndex());
-        result.addProperty("pp_weight", entry.score().getWeight().getPercentage());
+        result.addProperty("best_index", entry.getBestIndex());
+        result.addProperty("pp_weight", entry.getScore().getWeight().getPercentage());
         return result;
-    }
-
-    public static long getModBits(List<Mod> mods) {
-        long bits = 0;
-
-        for (Mod mod : mods) {
-            switch (mod.getAcronym()) {
-                case "EZ" -> bits |= 2L;
-                case "HR" -> bits |= 16L;
-                case "DT" -> bits |= 64L;
-                case "HT" -> bits |= 256L;
-                case "NC" -> bits |= 512L | 64L;
-            }
-        }
-
-        return bits;
     }
 
     private static double getArFactor(double ar) {
@@ -439,7 +424,7 @@ public class ScoreController {
                             for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
                                 final double percentage = (e.getValue() / sum) * 100;
-                                sb.append("__BP").append("%03d".formatted(e.getKey().bestIndex())).append("__:")
+                                sb.append("__BP").append("%03d".formatted(e.getKey().getBestIndex())).append("__:")
                                         .append(String.format("%05.2f%%", percentage)).append("   ");
                                 showed += percentage;
                             }
@@ -524,7 +509,7 @@ public class ScoreController {
             try {
                 baseWeights.put(current, getWeight(current));
             } catch (ParseException e) {
-                LOG.warn("Failed to parse beatmap with id {}", current.score().getBeatmapId(), e);
+                LOG.warn("Failed to parse beatmap with id {}", current.getScore().getBeatmapId(), e);
             }
         }
 
@@ -542,9 +527,9 @@ public class ScoreController {
         for (Map.Entry<ScoreEntry, Double> entry : baseWeights.entrySet()) {
             final double normalizedWeight = entry.getValue() / maxWeight;
 
-            final double extraFactor = weights.getOrDefault(entry.getKey().score().getId(), 1.0);
+            final double extraFactor = weights.getOrDefault(entry.getKey().getScore().getId(), 1.0);
 
-            if (entry.getKey().bestIndex() > 40 && normalizedWeight < 0.5) {
+            if (entry.getKey().getBestIndex() > 40 && normalizedWeight < 0.5) {
                 if (extraFactor <= 1.0) {
                     continue;
                 }
@@ -575,9 +560,9 @@ public class ScoreController {
     }
 
     private double getWeight(ScoreEntry entry) throws ParseException {
-        final Long beatmapId = entry.score().getBeatmapId();
+        final Long beatmapId = entry.getScore().getBeatmapId();
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, entry.score().getMods());
+        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, entry.getScore().getMods());
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
 
         double patternWeight = 0;
@@ -596,13 +581,13 @@ public class ScoreController {
     }
 
     private double getBestIndexFactor(ScoreEntry entry) {
-        final int x = entry.bestIndex();
+        final int x = entry.getBestIndex();
 
         return Math.clamp((200.0 / (x + 40.0)) - 4.0, -2.5, 0.5);
     }
 
     private double getModWeightFactor(ScoreEntry entry) {
-        final ModSet mods = new ModSet(entry.score().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
+        final ModSet mods = new ModSet(entry.getScore().getMods().stream().map(Mod::getAcronym).filter(Objects::nonNull).collect(Collectors.toSet()));
 
         double factor = 1.0;
 
@@ -673,9 +658,6 @@ public class ScoreController {
 
             return this.has(result);
         }
-    }
-
-    private record ScoreEntry(int bestIndex, Score score) {
     }
 
     private record TargetScore(ScoreEntry entry, UserExtended user) {

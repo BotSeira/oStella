@@ -6,7 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 
 public final class WhatIfEstimates {
-    public static Result estimate(RankPpModel model, Double pp, Long rank, Instant now) {
+    public static Result estimate(RankPpModel model, Double pp, Long rank) {
         validate(pp, rank);
         String status;
         double resultPp;
@@ -39,7 +39,7 @@ public final class WhatIfEstimates {
         Instant updatedAt = Instant.ofEpochMilli(model.samples().stream().mapToLong(UserStatRecord::updatedAt).min().orElse(0));
         return new Result(
                 "osu", status, resultPp, resultRank, updatedAt.toString(),
-                Duration.between(updatedAt, now).compareTo(Duration.ofHours(48)) >= 0, model.samples().size(),
+                Duration.between(updatedAt, Instant.now()).compareTo(Duration.ofHours(48)) >= 0, model.samples().size(),
                 model.first().globalRank(), model.last().globalRank(),
                 model.last().pp(), model.first().pp()
         );
