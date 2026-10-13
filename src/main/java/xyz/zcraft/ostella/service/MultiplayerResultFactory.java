@@ -8,33 +8,6 @@ import xyz.zcraft.osu.model.multiplayer.Room;
 import java.util.*;
 
 public final class MultiplayerResultFactory {
-    private MultiplayerResultFactory() {
-    }
-
-    public static MultiplayerResultData create(
-            Room room,
-            Room.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores,
-            User owner
-    ) {
-        return create(room, item, roomScores, owner, "lazer", "scorev2", room.getType(),
-                MultiplayerResultData.SeriesScore.empty(), null);
-    }
-
-    public static MultiplayerResultData create(
-            Room room,
-            Room.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores,
-            User owner,
-            String client,
-            String scoringType,
-            String teamType,
-            Integer customBo
-    ) {
-        return create(room, item, roomScores, owner, client, scoringType, teamType,
-                MultiplayerResultData.SeriesScore.empty(), customBo);
-    }
-
     public static MultiplayerResultData create(
             Room room,
             Room.PlaylistItem item,

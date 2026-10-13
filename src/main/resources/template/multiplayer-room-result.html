@@ -1804,17 +1804,21 @@
                     <div class="duel-metric"><span>Accuracy</span><strong
                             th:text="${right.accuracy == null ? '--' : Osu.formatAccuracy(right.accuracy)}">97.80%</strong>
                     </div>
-                    <div class="duel-metric"><span>Combo</span><strong
-                            th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong></div>
-                    <div class="duel-metric"><span>Miss</span><strong th:text="${right.misses}">1</strong></div>
-                    <div class="duel-metric"><span>PP</span><strong
-                            th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong>
+                    <div class="duel-metric">
+                        <span>Combo</span>
+                        <strong th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong>
                     </div>
-                    <div class="duel-metric"><span>Rank</span><strong
-                            th:text="${right.grade == null ? '--' : right.grade}">A</strong></div>
-                    <!--                    <div class="duel-metric"><span>Score gap</span><strong-->
-                    <!--                            th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong>-->
-                    <!--                    </div>-->
+                    <div class="duel-metric"><span>Miss</span>
+                        <strong th:text="${right.misses}">1</strong>
+                    </div>
+                    <div class="duel-metric">
+                        <span>PP</span>
+                        <strong th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong>
+                    </div>
+                    <div class="duel-metric">
+                        <span>Rank</span>
+                        <strong th:text="${right.grade == null ? '--' : right.grade}">A</strong>
+                    </div>
                 </div>
             </article>
         </div>

@@ -25,6 +25,8 @@ import xyz.zcraft.osu.model.multiplayer.Room;
 
 import java.util.*;
 
+import static xyz.zcraft.ostella.util.RequestUtil.optionalInteger;
+
 public class MultiplayerController {
     public static final Gson GSON = new Gson();
     private static final Logger LOG = LogManager.getLogger(MultiplayerController.class);
@@ -60,8 +62,7 @@ public class MultiplayerController {
     }
 
     private static List<Room.PlaylistItem> completedItemsThrough(
-            Room room,
-            Room.PlaylistItem currentItem
+            Room room, Room.PlaylistItem currentItem
     ) {
         Map<Long, Room.PlaylistItem> items = new LinkedHashMap<>();
         if (room.getPlaylist() != null) {
@@ -78,6 +79,9 @@ public class MultiplayerController {
             }
             if (item.getId() == currentItem.getId()) break;
         }
+
+        completed.sort(Comparator.comparing(Room.PlaylistItem::getPlayedAt));
+
         return List.copyOf(completed);
     }
 
@@ -129,8 +133,7 @@ public class MultiplayerController {
     }
 
     private static MultiplayerResultData.SeriesScore stableSeriesScore(
-            Match match,
-            Match.MatchGame currentGame
+            Match match, Match.MatchGame currentGame, int warmups
     ) {
         boolean teamMode = isTeamMode(currentGame.getTeamType());
         Set<Long> duelUsers = teamMode ? Set.of() : stableUserIds(currentGame.getScores());
@@ -141,7 +144,9 @@ public class MultiplayerController {
         Map<Long, Integer> playerWins = new HashMap<>();
         int redWins = 0;
         int blueWins = 0;
-        for (Match.MatchGame game : completedGamesThrough(match, currentGame)) {
+        List<Match.MatchGame> completedGamesThrough = completedGamesThrough(match, currentGame);
+        for (int i = warmups; i < completedGamesThrough.size(); i++) {
+            Match.MatchGame game = completedGamesThrough.get(i);
             if (teamMode) {
                 if (!isTeamMode(game.getTeamType())) continue;
                 String winner = stableTeamWinner(game);
@@ -178,6 +183,9 @@ public class MultiplayerController {
             }
             if (game.getId() == currentGame.getId()) break;
         }
+
+        completed.sort(Comparator.comparing(Match.MatchGame::getEndTime));
+
         return List.copyOf(completed);
     }
 
@@ -462,30 +470,20 @@ public class MultiplayerController {
     public void getRoomResult(@NotNull Context context) {
         long roomId = positivePathId(context, "roomId");
         long playlistItemId = positivePathId(context, "playlistItemId");
-        final String obj = context.queryParam("bo");
-
-        final Integer customBo;
-        if (obj != null) {
-            try {
-                customBo = Integer.parseInt(obj);
-            } catch (IllegalArgumentException | NullPointerException e) {
-                throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: bo");
-            }
-        } else {
-            customBo = null;
-        }
+        final Integer customBo = optionalInteger(context, "bo", null);
+        final Integer customWarmups = optionalInteger(context, "warmup", null);
 
         RoomVersion version = roomVersion(context);
         context.future(() -> executor
                 .enqueueAsync(() -> switch (version) {
-                    case LAZER -> getLazerResultData(roomId, playlistItemId, customBo);
-                    case STABLE -> getStableResultData(roomId, playlistItemId, customBo);
+                    case LAZER -> getLazerResultData(roomId, playlistItemId, customBo, customWarmups);
+                    case STABLE -> getStableResultData(roomId, playlistItemId, customBo, customWarmups);
                 })
                 .thenCompose(data -> ImageResponse.respond(context, data, renderer::renderMultiplayerResult, renderer.getRenderExecutor()))
         );
     }
 
-    private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId, Integer customBo) {
+    private MultiplayerResultData getLazerResultData(long roomId, long playlistItemId, Integer customBo, Integer customWarmups) {
         Room room = OsuAPI.getRoom(tokenManager.getTokenData(), roomId);
         Room.PlaylistItem item = findPlaylistItem(room, playlistItemId);
         enrichPlaylistItem(item);
@@ -498,7 +496,8 @@ public class MultiplayerController {
                 : List.of();
         enrichLazerTeamSnapshot(room, item, roomScores, eventItems);
         MultiplayerResultData.SeriesScore seriesScore = lazerSeriesScore(
-                room, item, roomScores, eventItems);
+                room, item, roomScores, eventItems, customWarmups == null ? 0 : customWarmups
+        );
         enrichScores(roomScores, item);
         enrichDuelProfiles(roomScores);
         User owner = resolveOwner(room, item.getOwnerId());
@@ -541,7 +540,7 @@ public class MultiplayerController {
         item.setDetails(eventItem.getDetails());
     }
 
-    private MultiplayerResultData getStableResultData(long matchId, long gameId, Integer customBo) {
+    private MultiplayerResultData getStableResultData(long matchId, long gameId, Integer customBo, Integer customWarmups) {
         Match match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
         Match.MatchGame game = findMatchGame(match, gameId);
 
@@ -560,7 +559,7 @@ public class MultiplayerController {
         enrichPlaylistItem(item);
 
         List<MultiplayerRoomScore> scores = stableScores(match, game, item);
-        MultiplayerResultData.SeriesScore seriesScore = stableSeriesScore(match, game);
+        MultiplayerResultData.SeriesScore seriesScore = stableSeriesScore(match, game, customWarmups == null ? 0 : customWarmups);
         enrichDuelProfiles(scores);
         User stableLobby = new User();
         stableLobby.setUsername("Stable lobby");
@@ -591,7 +590,6 @@ public class MultiplayerController {
         List<MultiplayerRoomScore> scores = (game.getScores() == null
                 ? List.<MatchScore>of()
                 : game.getScores()).stream()
-                .filter(Objects::nonNull)
                 .map(value -> new MultiplayerRoomScore(
                         stableScore(value, game, item, users),
                         null,
@@ -669,7 +667,8 @@ public class MultiplayerController {
             Room room,
             Room.PlaylistItem currentItem,
             List<MultiplayerRoomScore> currentScores,
-            List<Room.PlaylistItem> eventItems
+            List<Room.PlaylistItem> eventItems,
+            int warmups
     ) {
         boolean teamMode = isTeamMode(room.getType());
         Set<Long> duelUsers = teamMode ? Set.of() : scoreUserIds(currentScores);
@@ -683,7 +682,9 @@ public class MultiplayerController {
         int redWins = 0;
         int blueWins = 0;
 
-        for (Room.PlaylistItem item : completedItemsThrough(room, currentItem)) {
+        List<Room.PlaylistItem> completedItemsThrough = completedItemsThrough(room, currentItem);
+        for (int i = warmups; i < completedItemsThrough.size(); i++) {
+            Room.PlaylistItem item = completedItemsThrough.get(i);
             List<MultiplayerRoomScore> scores;
             if (item.getId() == currentItem.getId()) {
                 scores = currentScores;

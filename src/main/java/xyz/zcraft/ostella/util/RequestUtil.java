@@ -6,7 +6,6 @@ import com.google.gson.JsonElement;
 import io.javalin.http.Context;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
-import xyz.zcraft.ostella.data.TokenData;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
@@ -17,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class RequestUtil {
     private final static Gson GSON = new GsonBuilder().serializeSpecialFloatingPointValues().create();
@@ -85,11 +83,21 @@ public class RequestUtil {
         }
     }
 
-    public static long optionalLong(Context context, String param, long fallback) throws ApiException {
+    public static Long optionalLong(Context context, String param, Long fallback) throws ApiException {
         try {
             final String obj = context.queryParam(param);
             if (obj == null) return fallback;
             return Long.parseLong(obj);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
+        }
+    }
+
+    public static Integer optionalInteger(Context context, String param, Integer fallback) throws ApiException {
+        try {
+            final String obj = context.queryParam(param);
+            if (obj == null) return fallback;
+            return Integer.parseInt(obj);
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
         }

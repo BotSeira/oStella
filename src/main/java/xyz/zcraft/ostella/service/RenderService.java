@@ -208,11 +208,7 @@ public class RenderService implements AutoCloseable {
     }
 
     public byte[] renderScores(
-            UserExtended user,
-            List<Score> scores,
-            List<String> filters,
-            List<Integer> scorePositions,
-            String title
+            UserExtended user, List<Score> scores, List<String> filters, List<Integer> scorePositions, String title
     ) {
         if (scores.size() != scorePositions.size()) {
             throw new IllegalArgumentException("Each rendered score must have a display position");
