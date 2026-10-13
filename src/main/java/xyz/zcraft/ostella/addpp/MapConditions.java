@@ -18,7 +18,7 @@ public record MapConditions(String mods, Double accuracy,
     private static final Set<String> MODS;
 
     static {
-        final String PERMITTED_MODS_STR = "NM,DC,NF,HT,NF,AC,BL,DT,FL,HD,HR,NC,PF,SD,ST,TC,AL,CL,DA,MR,SG,AP,RX,SO";
+        final String PERMITTED_MODS_STR = "NM,EZ,DC,NF,HT,AC,BL,DT,FL,HD,HR,NC,PF,SD,ST,TC,AL,CL,DA,MR,SG,AP,RX,SO";
         MODS = Set.of(PERMITTED_MODS_STR.split(","));
     }
 
