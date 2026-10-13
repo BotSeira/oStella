@@ -686,9 +686,11 @@
                          th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
                 </div>
             </div>
-<!--            <div class="extra-score-info">-->
-<!--                UR=123.45-->
-<!--            </div>-->
+            <div class="extra-score-info"
+                 th:if="${scoreExtras.get(iterstat.index) != null && !scoreExtras.get(iterstat.index).isBlank()}"
+                 th:text="${scoreExtras.get(iterstat.index)}">
+                UR=123.45
+            </div>
             <img alt="jacket" class="jacket"
                  src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
                  th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>

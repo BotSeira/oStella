@@ -58,7 +58,8 @@ public class Router implements Closeable {
     public Path getReplayBlocking(Long id) {
         return executor.enqueueAsync(() -> {
             try {
-                return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+                final Path replay = CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+                return replay;
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

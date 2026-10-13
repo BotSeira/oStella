@@ -381,6 +381,11 @@ public class CacheService {
     }
 
     public static Path getReplayBlocking(TokenData tokenData, long id) throws IOException {
+        final Optional<Path> replayCache = getReplayCache(id);
+        if (replayCache.isPresent()) {
+            return replayCache.get();
+        }
+
         Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
 
         LOG.debug("Getting replay {}", id);

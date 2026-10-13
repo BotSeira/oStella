@@ -1,6 +1,9 @@
 package xyz.zcraft.ostella.data;
 
 import lombok.Getter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import xyz.zcraft.ostella.network.controller.ScoreController;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.*;
@@ -324,6 +327,7 @@ public final class ScoreFilter {
         }
         return String.format(Locale.ROOT, "%s", value);
     }
+    private static final Logger LOG = LogManager.getLogger(ScoreFilter.class);
 
     private static String formatNumber(double value, int digits) {
         final String format = "%." + digits + "f";
@@ -399,8 +403,7 @@ public final class ScoreFilter {
                     analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
                 }
             } catch (Exception e) {
-                // TODO Add some logs mb
-                // throw new RuntimeException("Failed to parse beatmap " + beatmap.getId(), e);
+                LOG.error("Failed to get necessary files for score filter", e);
             }
         }
 
