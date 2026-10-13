@@ -68,7 +68,7 @@ public class CacheService {
         Files.createDirectories(SCORE_JSON_CACHE);
         Files.createDirectories(BEATMAP_JSON_CACHE);
         Files.createDirectories(BEATMAPSET_JSON_CACHE);
-        LOG.info("Imported {} beatmapset metadata rows from the existing cache", SetMetaStore.importFromCachedJson());
+//        LOG.info("Imported {} beatmapset metadata rows from the existing cache", SetMetaStore.importFromCachedJson());
     }
 
     private static String bytesToHex(byte[] bytes) {
