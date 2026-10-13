@@ -47,7 +47,7 @@ public final class AddPpController {
         }
 
         var calculation = request.beatmapId() == null
-                ? CompletableFuture.completedFuture(new Calculated(request.pp(), null))
+                ? CompletableFuture.completedFuture(new Calculated(request.pp(), null, true))
                 : router.executor.enqueueAsync(() -> calculateMap(request.beatmapId(), conditions));
 
         ctx.future(() -> calculation.thenCompose(calculated -> {
@@ -78,7 +78,8 @@ public final class AddPpController {
                                         projected.before(),
                                         projected.after(),
                                         profile.getStatistics().getGlobalRank()
-                                )
+                                ),
+                                calculated.ranked()
                         );
                     });
                 }).thenAccept(result -> ctx.contentType("application/json")
@@ -97,13 +98,20 @@ public final class AddPpController {
     private Calculated calculateMap(long id, MapConditions conditions) {
         BeatmapExtended map = OsuAPI.getBeatmap(router.tokenManager.getTokenData(), id);
         if (map == null) throw new ApiException(ErrorCode.NO_BEATMAP_FOUND);
-        if (!"osu".equals(map.getMode()) || !("ranked".equals(map.getStatus()) || "approved".equals(map.getStatus())))
-            throw new IllegalArgumentException("只有 ranked/approved 的 osu!standard 原生谱面能用于账号 PP 估算。");
+        if (!"osu".equals(map.getMode()))
+            throw new IllegalArgumentException("只有 osu!standard 谱面能用于账号 PP 估算。");
         var result = MapPpCalculator.calculate(CacheService.getBeatmapPath(id), conditions);
-        String title = map.getBeatmapset() == null ? "m" + id
+        String title = map.getBeatmapset() == null
+                ? "m" + id
                 : map.getBeatmapset().getArtist() + " - " + map.getBeatmapset().getTitle();
-        return new Calculated(result.pp(), new MapResult(id, title, map.getVersion(), conditions.mods(),
-                result.stars(), result.maxCombo(), result.hits()));
+        return new Calculated(
+                result.pp(),
+                new MapResult(
+                        id, title, map.getVersion(), conditions.mods(),
+                        result.stars(), result.maxCombo(), result.hits()
+                ),
+                "ranked".equals(map.getStatus())
+        );
     }
 
     private void badRequest(Context ctx, String message) {
@@ -132,9 +140,9 @@ public final class AddPpController {
 
     public record Result(String username, long userId, Long rank, double beforePp, double afterPp, double change,
                          double scorePp, int count, int sampled, List<Integer> positions, boolean replaced,
-                         MapResult map, WhatIfEstimates.RankProjection rankProjection) {
+                         MapResult map, WhatIfEstimates.RankProjection rankProjection, boolean ranked) {
     }
 
-    private record Calculated(double pp, MapResult map) {
+    private record Calculated(double pp, MapResult map, boolean ranked) {
     }
 }
