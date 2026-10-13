@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.data;
 
+import lombok.Getter;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.*;
@@ -9,10 +10,7 @@ import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
-import xyz.zcraft.osu.parser.exception.AnalyzeException;
-import xyz.zcraft.osu.parser.exception.ParseException;
 
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
@@ -20,9 +18,6 @@ import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * A validated filter applied to a score-list response.
- */
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
@@ -34,11 +29,14 @@ public final class ScoreFilter {
             "(?i)^(?:any|title|artist|mapper|genre|language)(?:=|!=)$"
     );
 
+    @Getter
     private final Field field;
+    @Getter
     private final Operator operator;
     private final double numericValue;
     private final Set<String> textValues;
     private final Pattern regexValue;
+    @Getter
     private final String displayText;
     private final Function<Long, Path> replayProvider;
 
@@ -557,11 +555,7 @@ public final class ScoreFilter {
         return (operator == Operator.EQUAL) == equal;
     }
 
-    public String displayText() {
-        return displayText;
-    }
-
-    private enum Field {
+    public enum Field {
         ACCURACY("Accuracy"),
         COMBO("Combo"),
         PP("PP"),
