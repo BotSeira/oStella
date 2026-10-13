@@ -30,6 +30,24 @@ public final class AddPpController {
         this.router = router;
     }
 
+    public void calculatePp(Context ctx) {
+        Request request;
+        MapConditions conditions;
+        try {
+            request = parseRequest(ctx);
+            if (request.beatmapId() == null) throw new IllegalArgumentException("请指定谱面 ID。");
+            conditions = request.validate();
+        } catch (IllegalArgumentException | JsonParseException e) {
+            badRequest(ctx, e.getMessage());
+            return;
+        }
+
+        ctx.future(() -> router.executor.enqueueAsync(() -> calculateMap(request.beatmapId(), conditions))
+                .thenAccept(result -> ctx.contentType("application/json")
+                        .result(new Response(true, "Success", gson.toJsonTree(result)).toString()))
+                .exceptionally(error -> handleError(ctx, error)));
+    }
+
     public void addPp(Context ctx) {
         long uid;
         Request request;
@@ -37,9 +55,7 @@ public final class AddPpController {
         try {
             uid = Long.parseLong(ctx.pathParam("userId"));
             if (uid <= 0) throw new IllegalArgumentException("玩家 ID 必须为正整数。");
-            if (ctx.body().length() > 4096) throw new IllegalArgumentException("请求内容过长。");
-            request = gson.fromJson(ctx.body(), Request.class);
-            if (request == null) throw new IllegalArgumentException("缺少估算参数。");
+            request = parseRequest(ctx);
             conditions = request.validate();
         } catch (IllegalArgumentException | JsonParseException e) {
             badRequest(ctx, e.getMessage());
@@ -86,15 +102,24 @@ public final class AddPpController {
                     });
                 }).thenAccept(result -> ctx.contentType("application/json")
                         .result(new Response(true, "Success", gson.toJsonTree(result)).toString()))
-                .exceptionally(error -> {
-                    Throwable cause = error;
-                    while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
-                    if (cause instanceof IllegalArgumentException) {
-                        badRequest(ctx, cause.getMessage());
-                        return null;
-                    }
-                    throw new CompletionException(cause);
-                }));
+                .exceptionally(error -> handleError(ctx, error)));
+    }
+
+    private Request parseRequest(Context ctx) {
+        if (ctx.body().length() > 4096) throw new IllegalArgumentException("请求内容过长。");
+        Request request = gson.fromJson(ctx.body(), Request.class);
+        if (request == null) throw new IllegalArgumentException("缺少估算参数。");
+        return request;
+    }
+
+    private Void handleError(Context ctx, Throwable error) {
+        Throwable cause = error;
+        while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+        if (cause instanceof IllegalArgumentException) {
+            badRequest(ctx, cause.getMessage());
+            return null;
+        }
+        throw new CompletionException(cause);
     }
 
     private Calculated calculateMap(long id, MapConditions conditions) {

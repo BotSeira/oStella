@@ -200,6 +200,15 @@ refresh stale rows. A missing match may indicate incomplete catalogue coverage.
 
 ### Hypothetical PP updates
 
+`POST /beatmaps/pp` calculates a single map's PP without a user ID or BP lookup. It accepts
+`{"beatmapId":1234567,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
+The regular `success`, `message`, `data` envelope contains `data.pp`, `data.map`
+(`id`, `title`, `difficulty`, `mods`, `stars`, `maxCombo`, `hits`) and `data.ranked`.
+`hits` contains `great`, `ok`, `meh`, `misses`, `combo` and `accuracy`.
+Only osu!standard maps are supported. `beatmapId` must be positive; `conditions` may be omitted.
+`pp` must be omitted and `count` may be omitted or set to 1. This endpoint shares the request validation
+and map calculation with addpp, including its condition syntax and defaults described below.
+
 `POST /users/{userId}/addpp` accepts `{"pp":200,"count":4,"conditions":[]}` or
 `{"beatmapId":1234567,"count":1,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
 It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgments.
