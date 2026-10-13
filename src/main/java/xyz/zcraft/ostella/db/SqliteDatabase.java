@@ -48,6 +48,7 @@ public class SqliteDatabase {
 
     public static void initTables(Connection connection) throws Exception {
         UserStatisticsStore.createTablesIfNeeded(connection);
+        SetMetaStore.createTablesIfNeeded(connection);
     }
 
     public static Connection getConnection() throws SQLException {

@@ -2,6 +2,8 @@ package xyz.zcraft.ostella.network.controller;
 
 import com.google.gson.*;
 import io.javalin.http.Context;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -11,7 +13,9 @@ import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
+import xyz.zcraft.ostella.service.MusicMatchService;
 import xyz.zcraft.ostella.service.RenderService;
+import xyz.zcraft.ostella.util.MusicMetaUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.Beatmap;
 import xyz.zcraft.osu.model.BeatmapExtended;
@@ -53,64 +57,32 @@ public class BeatmapsetController {
         }
     }
 
-    public void getBeatmapsets(@NotNull Context context) {
-        final JsonElement body = JsonParser.parseString(context.body());
-        final var idArr = body.getAsJsonObject().getAsJsonArray("ids");
-
-        if (idArr == null || idArr.isEmpty()) {
-            context.status(400).result(Response.error("Missing 'ids' array in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
-            return;
-        }
-
-        context.future(() -> {
-            List<CompletableFuture<Beatmapset>> beatmapsetFutures = new ArrayList<>(idArr.size());
-            for (JsonElement jsonElement : idArr) {
-                final long id = jsonElement.getAsLong();
-                beatmapsetFutures.add(
-                        CompletableFuture.supplyAsync(
-                                () -> CacheService.getBeatmapsetJsonCache(id)
-                                        .orElseGet(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id))
-                        )
-                );
+    static List<SearchQuery> parseSearchQueries(String body) {
+        try {
+            JsonElement root = JsonParser.parseString(body);
+            if (!root.isJsonObject() || !root.getAsJsonObject().has("queries")
+                    || !root.getAsJsonObject().get("queries").isJsonArray()) {
+                throw new IllegalArgumentException("Body must contain a queries array");
             }
-
-            return CompletableFuture.allOf(beatmapsetFutures.toArray(new CompletableFuture[0]))
-                    .thenApply(_ -> {
-                        JsonArray resultArr = new JsonArray();
-                        for (var future : beatmapsetFutures) {
-                            try {
-                                final Beatmapset beatmapset = future.join();
-                                if (beatmapset == null) {
-                                    continue;
-                                }
-                                CacheService.tryCache(beatmapset);
-
-                                final List<Beatmap> beatmaps = new ArrayList<>(beatmapset.getBeatmaps().size());
-                                for (BeatmapExtended beatmap : beatmapset.getBeatmaps()) {
-                                    final Beatmap e = convertToShort(beatmap);
-                                    beatmaps.add(e);
-                                }
-
-                                beatmapset.setConverts(null);
-                                beatmapset.setRecentFavourites(null);
-                                beatmapset.setRelatedUsers(null);
-
-                                final var obj = GSON.toJsonTree(beatmapset).getAsJsonObject();
-                                obj.add("beatmaps", GSON.toJsonTree(beatmaps));
-
-                                resultArr.add(obj);
-                            } catch (CompletionException e) {
-                                if (e.getCause() instanceof ApiException apiEx) {
-                                    if (apiEx.getErrorCode() == ErrorCode.NO_BEATMAPSET_FOUND || apiEx.getErrorCode() == ErrorCode.BEATMAPSET_FETCH_FAILED) {
-                                        LOG.warn("Beatmapset not found for one of the requested ids: {}", apiEx.getMessage());
-                                    }
-                                }
-                                LOG.error("Error fetching beatmapset data", e);
-                            }
-                        }
-                        return resultArr;
-                    }).thenAccept(usersArr -> context.status(200).result(new Response(true, "Success", usersArr).toString()));
-        });
+            JsonArray array = root.getAsJsonObject().getAsJsonArray("queries");
+            if (array.isEmpty() || array.size() > 100) {
+                throw new IllegalArgumentException("queries must contain 1..100 items");
+            }
+            List<SearchQuery> queries = new ArrayList<>(array.size());
+            for (JsonElement element : array) {
+                if (element.isJsonObject()) {
+                    JsonObject object = element.getAsJsonObject();
+                    String title = searchText(object.get("title"), "title");
+                    String artist = object.has("artist") ? searchText(object.get("artist"), "artist") : null;
+                    queries.add(new SearchQuery.Meta(title, artist));
+                } else {
+                    queries.add(new SearchQuery.Literal(searchText(element, "query")));
+                }
+            }
+            return List.copyOf(queries);
+        } catch (JsonParseException | IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage());
+        }
     }
 
     private @NonNull Beatmap convertToShort(BeatmapExtended beatmap) {
@@ -282,5 +254,113 @@ public class BeatmapsetController {
                                 new Response(true, "Query successful", GSON.toJsonTree(result)).toString()
                         )
                 ));
+    }
+
+    private static String searchText(JsonElement element, String field) {
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new IllegalArgumentException(field + " must be a string");
+        }
+        String value = element.getAsString().strip();
+        if (value.length() > 256 || MusicMetaUtil.normalize(value).isEmpty()) {
+            throw new IllegalArgumentException(field + " must contain searchable text and be at most 256 characters");
+        }
+        return value;
+    }
+
+    public void getBeatmapsets(@NotNull Context context) {
+        final JsonElement body = JsonParser.parseString(context.body());
+        final var idArr = body.getAsJsonObject().getAsJsonArray("ids");
+
+        if (idArr == null || idArr.isEmpty()) {
+            context.status(400).result(Response.error("Missing 'ids' array in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        context.future(() -> {
+            List<CompletableFuture<Beatmapset>> beatmapsetFutures = new ArrayList<>(idArr.size());
+            for (JsonElement jsonElement : idArr) {
+                final long id = jsonElement.getAsLong();
+                beatmapsetFutures.add(
+                        CompletableFuture.supplyAsync(
+                                () -> CacheService.getBeatmapsetJsonCache(id)
+                                        .orElseGet(() -> {
+                                            Beatmapset fetched = OsuAPI.getBeatmapset(tokenManager.getTokenData(), id);
+                                            if (fetched != null) CacheService.tryCache(fetched);
+                                            return fetched;
+                                        })
+                        )
+                );
+            }
+
+            return CompletableFuture.allOf(beatmapsetFutures.toArray(new CompletableFuture[0]))
+                    .thenApply(_ -> {
+                        JsonArray resultArr = new JsonArray();
+                        for (var future : beatmapsetFutures) {
+                            try {
+                                final Beatmapset beatmapset = future.join();
+                                if (beatmapset == null) {
+                                    continue;
+                                }
+
+                                final List<Beatmap> beatmaps = new ArrayList<>(beatmapset.getBeatmaps().size());
+                                for (BeatmapExtended beatmap : beatmapset.getBeatmaps()) {
+                                    final Beatmap e = convertToShort(beatmap);
+                                    beatmaps.add(e);
+                                }
+
+                                beatmapset.setConverts(null);
+                                beatmapset.setRecentFavourites(null);
+                                beatmapset.setRelatedUsers(null);
+
+                                final var obj = GSON.toJsonTree(beatmapset).getAsJsonObject();
+                                obj.add("beatmaps", GSON.toJsonTree(beatmaps));
+
+                                resultArr.add(obj);
+                            } catch (CompletionException e) {
+                                if (e.getCause() instanceof ApiException apiEx) {
+                                    if (apiEx.getErrorCode() == ErrorCode.NO_BEATMAPSET_FOUND || apiEx.getErrorCode() == ErrorCode.BEATMAPSET_FETCH_FAILED) {
+                                        LOG.warn("Beatmapset not found for one of the requested ids: {}", apiEx.getMessage());
+                                    }
+                                }
+                                LOG.error("Error fetching beatmapset data", e);
+                            }
+                        }
+                        return resultArr;
+                    }).thenAccept(usersArr -> context.status(200).result(new Response(true, "Success", usersArr).toString()));
+        });
+    }
+
+    public void searchBeatmapsetBatch(@NotNull Context context) {
+        final List<SearchQuery> queries = parseSearchQueries(context.body());
+        context.future(() -> CompletableFuture.supplyAsync(() -> {
+            List<MusicMatchService.Result> results = new ArrayList<>(queries.size());
+            for (SearchQuery query : queries) {
+                if (query instanceof SearchQuery.Meta meta) {
+                    results.add(MusicMatchService.match(meta.getTitle(), meta.getArtist()));
+                } else if (query instanceof SearchQuery.Literal literal) {
+                    results.add(MusicMatchService.match(literal.getQuery(), null));
+                }
+            }
+            return results;
+        }).thenAccept(results -> context.status(200).result(
+                new Response(true, "Query successful", GSON.toJsonTree(results)).toString())));
+    }
+
+    public static class SearchQuery {
+        private SearchQuery() {
+        }
+
+        @Data
+        @EqualsAndHashCode(callSuper = true)
+        public static class Literal extends SearchQuery {
+            private final String query;
+        }
+
+        @Data
+        @EqualsAndHashCode(callSuper = true)
+        public static class Meta extends SearchQuery {
+            private final String title;
+            private final String artist;
+        }
     }
 }

@@ -123,12 +123,45 @@ the player credential must not replace the oStella service header.
 
 ### Beatmapsets
 
-| Method | Path                                   | Purpose                | Params / POST Body   | Response |
-|--------|----------------------------------------|------------------------|----------------------|----------|
-| GET    | `/beatmapsets/lookup`                  | Resolve beatmapset IDs | See section below    | JSON     |
-| GET    | `/beatmapsets/search`                  | Search beatmapsets     | `q` (search keyword) | JSON     |
-| GET    | `/beatmapsets/{beatmapsetId}`          | Beatmapset card image  | path `beatmapsetId`  | PNG      |
-| GET    | `/beatmapsets/{beatmapsetId}/download` | Download beatmapset    | path `beatmapsetId`  | OSZ      |
+| Method | Path                                   | Purpose                  | Params / POST Body                                        | Response |
+|--------|----------------------------------------|--------------------------|-----------------------------------------------------------|----------|
+| GET    | `/beatmapsets/lookup`                  | Resolve beatmapset IDs   | See section below                                         | JSON     |
+| GET    | `/beatmapsets/search`                  | Search beatmapsets       | `q` (search keyword)                                      | JSON     |
+| POST   | `/beatmapsets/search/batch`            | Match cached ranked sets | `{"queries":[{"title":"Song","artist":"Artist"},"Song"]}` | JSON     |
+| GET    | `/beatmapsets/{beatmapsetId}`          | Beatmapset card image    | path `beatmapsetId`                                       | PNG      |
+| GET    | `/beatmapsets/{beatmapsetId}/download` | Download beatmapset      | path `beatmapsetId`                                       | OSZ      |
+
+#### Local music matching
+
+`POST /beatmapsets/search/batch` searches SQLite without calling osu!'s search API.
+The existing `GET /beatmapsets/search` remains an online keyword search.
+
+- Supply 1–100 queries. Each query is a title string or an object with `title` and optional `artist`.
+  Present fields must be nonblank strings with at most 256 characters and nonempty normalized text.
+  Literal strings are titles, not osu! search expressions.
+- Results are under `data.result`, in input order (including duplicates and unmatched queries).
+  Each result contains `title`, optional `artist`, `status`, `matches`, and `truncated`.
+  A match contains `beatmapset` metadata, a heuristic `score` (not a probability), `reason`, and `exact`.
+- Only cached `ranked` sets are eligible. Both ordinary and Unicode title/artist forms are indexed.
+  `matched` means at least one exact normalized title-and-artist pair; multiple sets can represent the same song.
+  `ambiguous` means candidates require review; `no_match` means none qualified within the searched cache.
+- Title-only queries, similar artist spellings, and TV-size/short-version variants require review.
+  Remix, live, cover, and other qualifiers remain significant. This version does not perform arbitrary fuzzy title search.
+  Popularity orders otherwise equal matches; it is not evidence that two songs are identical.
+- Retrieval examines at most 500 candidates and returns at most 50 matches per query.
+  `truncated` signals that either bound was exceeded, so the response may be incomplete.
+
+The existing JSON cache is imported at startup, and `import-set-json` repeats the import manually.
+Imports process 250 sets per transaction, skip malformed/incomplete files with log warnings, and use
+file modification times as observation times. Earlier batches remain committed if a later database write fails;
+rerunning is safe. Older observations cannot overwrite newer rows. `updated_at` records local observation time,
+not osu!'s upstream modification time. Existing schemas and normalized keys migrate automatically at startup.
+
+New beatmapset JSON cache writes also update SQLite. Cached JSON is reused for 24 hours for ranked sets,
+or 1 hour for other statuses; normal cache fetches and enabled `autocache beatmapset-json on` refresh expired entries.
+Automatic caching still discovers sets through cached users' best scores; it does not download the entire ranked
+catalogue. SQLite metadata remains available when JSON cache files are cleared, and matching itself does not
+refresh stale rows. A missing match may indicate incomplete catalogue coverage.
 
 ### Scores
 
@@ -379,17 +412,3 @@ Log files are written to `logs/`:
 ## License
 
 MIT. See `LICENSE`.
-
-
-## PP / global rank estimates
-
-`GET /whatif?pp=12345` converts osu!standard account total PP to global rank.
-`GET /whatif?rank=12345` converts global rank to total PP. Supply exactly one positive finite PP value or positive integer rank; malformed, repeated or combined parameters return HTTP 400. The existing service Bearer token applies.
-
-The standard `{success, message, data}` response contains `mode`, `status`, `pp`, `rank`, `updatedAt` (UTC ISO timestamp), `stale`, `sampleCount`, `minRank`, `maxRank`, `minPp`, and `maxPp`. `COVERED` means interpolation; `HIGH_PP`, `LOW_PP`, `LOW_RANK`, and `HIGH_RANK` mean the converted value is the corresponding coverage boundary, not an extrapolation. Rank may be fractional until displayed. `/users/{userId}/addpp` also returns `rankProjection`, using this same backend model and preserving the actual rank for zero gain (`UNCHANGED`).
-
-The backend bundles the 197-sample snapshot supplied in `SeiraCore/whatif-osu-snapshot.json`, captured at 2026-10-09 02:38 Beijing time; its monotone curve retains 196 points and covers #1–#2,875,798. Runtime cache: `data/whatif-osu-snapshot.json`, relative to oStella's working directory. Existing SeiraCore runtime snapshots use the same format and can be copied there before startup; startup prefers a validated cache at least as recent as the bundled snapshot. The supplied source file is left untouched.
-
-Maintenance starts and stops with the HTTP server and works without SeiraCore or a `/whatif` request. Every minute it merges complete standard-mode user statistics observed directly from successful osu! profile, lookup, self and batch requests. This reuses existing responses and never samples hypothetical score PP. Each sample has its own timestamp, bounded pending data and a maximum of 1024 retained users; individual updates do not reset the full snapshot's age.
-
-After five minutes without authenticated non-health requests, snapshots older than 24 hours are refreshed; estimates also request an overdue refresh in the background. Requests immediately use the existing immutable snapshot. Background sampling shares oStella's API rate gate, yields to foreground traffic, requests at most 50 users per batch, spaces batches by one second and bounds each HTTP request to 30 seconds. Admission waits at most 30 seconds per batch; deferred work is retried on a later minute. OAuth readiness is checked before fetching. Network failures back off for 30 minutes; invalid or incomplete coverage retains the old model. Atomic cache-write failures retain both the old state and pending samples for retry. Data older than 48 hours is flagged stale. These remain sample-based estimates, not exact live rankings.

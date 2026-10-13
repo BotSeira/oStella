@@ -129,9 +129,9 @@ public final class AddPpController {
                     throw new IllegalArgumentException("谱面 ID 必须为正整数；谱面估算只支持一条成绩。");
                 return MapConditions.parse(conditions);
             }
-            if (!Double.isFinite(pp) || pp <= 0 || pp > 100_000 || count == null || count < 1 || count > 100
+            if (!Double.isFinite(pp) || pp <= 0 || pp > 100_000_000 || count == null || count < 1 || count > 200
                     || (conditions != null && !conditions.isEmpty()))
-                throw new IllegalArgumentException("单条 PP 必须为 0–100000 之间的正数，条数为 1–100。");
+                throw new IllegalArgumentException("单条 PP 必须为 0–100000000 之间的正数，条数为 1–200。");
             return null;
         }
     }

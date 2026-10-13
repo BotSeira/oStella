@@ -15,7 +15,12 @@ public record MapConditions(String mods, Double accuracy,
                             Integer great, Integer ok, Integer meh, Integer misses, Integer combo, boolean fc) {
     private static final Pattern ACC = Pattern.compile("(\\d+(?:\\.\\d+)?)%");
     private static final Pattern COUNT = Pattern.compile("(\\d+)(great|ok|meh|miss|misses|x|combo)");
-    private static final Set<String> MODS = Set.of("NF", "EZ", "HD", "HR", "SD", "DT", "NC", "HT", "FL", "SO", "PF", "CL", "MR", "DA", "DC");
+    private static final Set<String> MODS;
+
+    static {
+        final String PERMITTED_MODS_STR = "NM,DC,NF,HT,NF,AC,BL,DT,FL,HD,HR,NC,PF,SD,ST,TC,AL,CL,DA,MR,SG,AP,RX,SO";
+        MODS = Set.of(PERMITTED_MODS_STR.split(","));
+    }
 
     public static MapConditions parse(List<String> tokens) {
         if (tokens == null) tokens = List.of();
@@ -66,7 +71,7 @@ public record MapConditions(String mods, Double accuracy,
                 mods = parseMods(raw);
                 hasMods = true;
             } else
-                throw new IllegalArgumentException("无法识别条件「" + raw + "」。支持 HDDT、97.41%、13miss、18ok、2meh、1200x、FC。");
+                throw new IllegalArgumentException("无法识别条件「" + raw + "」");
             if (!seen.add(key)) throw new IllegalArgumentException(key + " 重复或冲突，请只提供一次。");
         }
         int miss = misses == null ? 0 : misses;
