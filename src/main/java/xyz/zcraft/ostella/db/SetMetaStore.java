@@ -26,6 +26,8 @@ public class SetMetaStore {
                         artist TEXT NOT NULL, artist_unicode TEXT,
                         title TEXT NOT NULL, title_unicode TEXT,
                         artist_normalized TEXT NOT NULL, title_normalized TEXT NOT NULL,
+                        artist_romanized TEXT NOT NULL, title_romanized TEXT NOT NULL,
+                        title_base TEXT NOT NULL, title_base_romanized TEXT NOT NULL,
                         source TEXT, status TEXT NOT NULL, ranked_at TEXT,
                         play_count INTEGER DEFAULT 0, favourite_count INTEGER DEFAULT 0,
                         updated_at BIGINT NOT NULL
