@@ -573,6 +573,12 @@
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getBpm() - score.getBeatmap().getBpm())}"
                       th:text="${DiffSpecs.getIntDiffChangeStr(diff.getBpm() - score.getBeatmap().getBpm())}">▲100</span>
             </div>
+            <div class="map-stat-group" style="margin-top: -2px;">
+                <span class="map-stat-label">LEN</span>
+                <span class="map-stat-value"
+                      style="font-size: 1em;"
+                      th:text="${DiffSpecs.getLengthStr(diff)}">1:23</span>
+            </div>
         </div>
     </div>
 
@@ -604,7 +610,7 @@
                     1,234,567
                 </span>
                 <span style="margin-left: 2px;"
-                      th:if="${score.getRankGlobal() != null}"
+                      th:if="${score.getRankGlobal() != null && score.getRankGlobal() > 0}"
                       th:text="${'(#' + #numbers.formatInteger(score.getRankGlobal(), 1, 'COMMA') + ')'}">
                     (#114,514)
                 </span>
