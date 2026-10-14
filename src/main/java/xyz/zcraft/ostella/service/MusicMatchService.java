@@ -43,7 +43,7 @@ public final class MusicMatchService {
                     .mapToDouble(a -> similarity(artistKey, a)).max().orElse(0);
 
             double allowedEdits = Math.max(0.85, (int)Math.floor(0.15 * candidate.artistUnicode().length()));
-            if (candidates.size() > 1 && !artistKey.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits) continue;
+            if (matches.isEmpty() && !artistKey.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits) continue;
 
             boolean exact = exactTitle && exactArtist;
             String reason = exact ? "exact_title_and_artist"
