@@ -245,6 +245,7 @@ public class UserController {
         final boolean hasUrFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.UR);
         final boolean hasTypeFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.TYPE);
         final AtomicInteger filteredForNoReplay = new AtomicInteger(0);
+        final AtomicInteger filteredForError = new AtomicInteger(0);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
                         tokenManager.getTokenData(), u, ScoreType.BEST, n - start + 1, start - 1
                 ))
@@ -258,8 +259,7 @@ public class UserController {
                                 }
                                 FilteredScores filteredScores = applyFilters(scores, filters, start);
 
-                                filteredScores.entries().stream()
-                                        .filter(e -> CacheService.hasReplayCache(e.getScore().getId()))
+                                filteredScores.entries()
                                         .forEach(e -> {
                                             try {
                                                 final Score score = e.getScore();
@@ -293,10 +293,15 @@ public class UserController {
                                                 }
                                             } catch (Exception ex) {
                                                 LOG.error("Failed to get extra info for score entry", ex);
+                                                filteredForError.incrementAndGet();
                                             }
                                         });
 
                                 StringBuilder extraTitle = new StringBuilder();
+
+                                if (filteredForError.get() > 0) {
+                                    extraTitle.append(filteredForError.get()).append(" filtered due to error.");
+                                }
 
                                 if (filteredForNoReplay.get() > 0) {
                                     extraTitle.append(filteredForNoReplay.get()).append(" filtered for no replay.");

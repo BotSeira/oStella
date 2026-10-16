@@ -86,20 +86,6 @@ public class RenderService implements AutoCloseable {
         }
     }
 
-    public static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
-        return filters.isEmpty()
-                ? switch (type) {
-            case BEST -> "Best of " + scoreCount + " Scores";
-            case RECENT -> "Most recent " + scoreCount + " Scores";
-            case RECENT_PASS -> "Most recent " + scoreCount + " Passed Scores";
-        }
-                : switch (type) {
-            case BEST -> "Filtered Scores From Best Scores";
-            case RECENT -> "Filtered Scores From Recent Scores";
-            case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
-        };
-    }
-
     private @NonNull ThreadFactory getThreadFactory() {
         AtomicInteger workerId = new AtomicInteger();
 
@@ -408,19 +394,17 @@ public class RenderService implements AutoCloseable {
             });
         }
 
-        private static void closeSafely(String resource, Runnable action) {
-            try {
-                action.run();
-            } catch (Exception e) {
-                LOG.error("Error closing {}", resource, e);
-            }
+        private static void closeSafely(Runnable action) {
+
         }
 
         @Override
         public void close() {
-//            closeSafely("BrowserContext", context::close);
-//            closeSafely("Browser", browser::close);
-            closeSafely("Playwright", playwright::close);
+            try {
+                playwright.close();
+            } catch (Exception e) {
+                LOG.error("Error closing Playwright", e);
+            }
 
             LOG.info(
                     "Playwright closed for render worker {}",
