@@ -19,21 +19,19 @@ import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
 import xyz.zcraft.osu.model.UserExtended;
-import xyz.zcraft.osu.parser.BeatmapAnalyzer;
-import xyz.zcraft.osu.parser.BeatmapParser;
-import xyz.zcraft.osu.parser.ReplayAnalyzer;
-import xyz.zcraft.osu.parser.ReplayParser;
+import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
-import xyz.zcraft.osu.parser.exception.ParseException;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.service.CacheService.tryCache;
@@ -86,7 +84,7 @@ public class UserController {
             currentPp += bestScore.getWeight().getPp();
             try {
                 if (bestScore.getEndedAt() != null && !Instant.parse(bestScore.getEndedAt()).isBefore(cutoff)) {
-                    entries.add(new ScoreEntry(index + 1, bestScore, null));
+                    entries.add(new ScoreEntry(index + 1, bestScore));
                     newIds.add(bestScore.getId());
                 }
             } catch (DateTimeParseException e) {
@@ -117,7 +115,7 @@ public class UserController {
                 tryCache(beatmapset);
                 return beatmapset;
             }))) {
-                entries.add(new ScoreEntry(index + firstPosition, score, null));
+                entries.add(new ScoreEntry(index + firstPosition, score));
             }
         }
         if (!filters.isEmpty() && entries.isEmpty()) {
@@ -245,6 +243,8 @@ public class UserController {
         final int start = requireScoreListStart(context, n);
         final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
         final boolean hasUrFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.UR);
+        final boolean hasTypeFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.TYPE);
+        final AtomicInteger filteredForNoReplay = new AtomicInteger(0);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
                         tokenManager.getTokenData(), u, ScoreType.BEST, n - start + 1, start - 1
                 ))
@@ -257,23 +257,52 @@ public class UserController {
                                     router.ensurePp(score);
                                 }
                                 FilteredScores filteredScores = applyFilters(scores, filters, start);
-                                if (hasUrFilter) {
-                                    filteredScores.entries().stream()
-                                            .filter(e -> CacheService.hasReplayCache(e.getScore().getId()))
-                                            .forEach(e -> {
-                                                try {
-                                                    final Score score = e.getScore();
-                                                    final Long beatmapId = score.getBeatmapId();
-                                                    final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-                                                    final OsuReplay osuReplay = ReplayParser.parseReplay(CacheService.getReplayCache(score.getId()).get());
-                                                    final ReplayAnalyze analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
-                                                    e.setExtra("UR: %.2f".formatted(analyze.unstableRate()));
-                                                } catch (Exception ex) {
-                                                    LOG.error("Failed to calculate UR for score entry", ex);
+
+                                filteredScores.entries().stream()
+                                        .filter(e -> CacheService.hasReplayCache(e.getScore().getId()))
+                                        .forEach(e -> {
+                                            try {
+                                                final Score score = e.getScore();
+                                                final Long beatmapId = score.getBeatmapId();
+                                                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+                                                final OsuReplay osuReplay;
+                                                final ReplayAnalyze analyze;
+                                                final Optional<Path> replayCache = CacheService.getReplayCache(score.getId());
+
+                                                if (replayCache.isPresent()) {
+                                                    osuReplay = ReplayParser.parseReplay(replayCache.get());
+                                                    analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
+                                                } else {
+                                                    analyze = null;
                                                 }
-                                            });
+
+                                                if (hasUrFilter) {
+                                                    if (analyze != null) {
+                                                        e.addExtra("UR: %.2f".formatted(analyze.unstableRate()));
+                                                    } else {
+                                                        filteredForNoReplay.incrementAndGet();
+                                                    }
+                                                }
+
+                                                if (hasTypeFilter) {
+                                                    var diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
+                                                    var pattern = BeatmapPatternAnalyzer.analyze(osuBeatmap, diffSpec.getDifficulty());
+
+                                                    var primary = pattern.primaryType();
+                                                    e.addExtra("%s: %d%%".formatted(primary.type().name(), (int) primary.percentage()));
+                                                }
+                                            } catch (Exception ex) {
+                                                LOG.error("Failed to get extra info for score entry", ex);
+                                            }
+                                        });
+
+                                StringBuilder extraTitle = new StringBuilder();
+
+                                if (filteredForNoReplay.get() > 0) {
+                                    extraTitle.append(filteredForNoReplay.get()).append(" filtered for no replay.");
                                 }
-                                return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Best Scores", null);
+
+                                return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Best Scores", extraTitle.toString());
                             });
                 })
                 .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));

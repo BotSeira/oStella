@@ -211,7 +211,7 @@ public class RenderService implements AutoCloseable {
             return calculator.rating(score, score.getBeatmap(), 0);
         }).toList());
         ctx.setVariable("scorePositions", scores.stream().map(ScoreEntry::getBestIndex).toList());
-        ctx.setVariable("scoreExtras", scores.stream().map(ScoreEntry::getExtra).toList());
+        ctx.setVariable("scoreExtras", scores.stream().map(ScoreEntry::getExtraString).toList());
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());
         ctx.setVariable("type", title);
