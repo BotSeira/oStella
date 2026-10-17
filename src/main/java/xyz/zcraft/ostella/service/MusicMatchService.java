@@ -42,7 +42,7 @@ public final class MusicMatchService {
             double artistSimilarity = artistKey.isEmpty() ? 0 : artists.stream()
                     .mapToDouble(a -> similarity(artistKey, a)).max().orElse(0);
 
-            double allowedEdits = Math.max(0.85, (int)Math.floor(0.15 * candidate.artistUnicode().length())) * (candidates.size() == 1 ? 0.8 : 1.0);
+            double allowedEdits = Math.max(0.85, (int)Math.floor(0.15 * candidate.artistUnicode().length())) * (candidates.size() == 1 ? 0.5 : 1.0);
             if (!artistKey.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits) continue;
 
             boolean exact = exactTitle && exactArtist;
@@ -82,9 +82,7 @@ public final class MusicMatchService {
         String shorter = left.length() <= right.length() ? left : right;
         String longer = left.length() <= right.length() ? right : left;
         if (shorter.codePointCount(0, shorter.length()) < 2) return false;
-        // Normalization turns punctuation separators into spaces. Padding enforces both boundaries.
-        // This is evidence for a candidate, not proof: spaces also occur inside a single artist's name.
-        return (" " + longer + " ").contains(" " + shorter + " ");
+        return (longer).contains(shorter);
     }
 
     private static double similarity(String left, String right) {
