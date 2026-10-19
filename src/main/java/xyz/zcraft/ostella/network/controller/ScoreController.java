@@ -157,7 +157,7 @@ public class ScoreController {
     private byte[] renderScore(Score score) {
         final BeatmapExtended beatmap = score.getBeatmap();
         try {
-            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
+            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(ScoreFormatUtil.getBeatmapId(score)));
             final DiffSpec diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
 
             Double calPp = null;
