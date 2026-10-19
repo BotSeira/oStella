@@ -122,15 +122,19 @@ public class SetMetaStore {
                         || set.getArtist() == null || set.getTitle() == null || set.getStatus() == null) {
                     throw new IllegalArgumentException("Beatmapset requires a positive id, artist, title and status");
                 }
-                String artist = MusicMetaUtil.normalizeOrFallback(set.getArtistUnicode(), set.getArtist());
-                String title = MusicMetaUtil.normalizeOrFallback(set.getTitleUnicode(), set.getTitle());
+                String title = MusicMetaUtil.fallback(set.getTitleUnicode(), set.getTitle());
+                String artist = MusicMetaUtil.fallback(set.getArtistUnicode(), set.getArtist());
+
+                String titleNormalized = MusicMetaUtil.normalize(title);
+                String artistNormalized = MusicMetaUtil.normalize(artist);
+
                 statement.setLong(1, set.getId());
                 statement.setString(2, set.getArtist());
                 statement.setString(3, set.getArtistUnicode());
                 statement.setString(4, set.getTitle());
                 statement.setString(5, set.getTitleUnicode());
-                statement.setString(6, artist);
-                statement.setString(7, title);
+                statement.setString(6, artistNormalized);
+                statement.setString(7, titleNormalized);
                 statement.setString(8, set.getSource());
                 statement.setString(9, set.getStatus());
                 statement.setString(10, set.getRankedDate());

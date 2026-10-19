@@ -35,4 +35,8 @@ public final class MusicMetaUtil {
         String normalized = normalize(preferred);
         return normalized.isEmpty() ? normalize(fallback) : normalized;
     }
+
+    public static String fallback(String preferred, String fallback) {
+        return preferred != null && !preferred.isBlank() ? preferred : fallback;
+    }
 }

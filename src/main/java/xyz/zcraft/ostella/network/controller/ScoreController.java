@@ -149,7 +149,7 @@ public class ScoreController {
                     return score;
                 })
                 .thenCompose(score -> {
-                    if (score.getUser() != null) return CompletableFuture.completedFuture(score);
+                    if (score.getUser() != null && score.getUser() instanceof UserExtended) return CompletableFuture.completedFuture(score);
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), score.getUserId()))
                             .thenApply(user -> {
                                 score.setUser(user);
