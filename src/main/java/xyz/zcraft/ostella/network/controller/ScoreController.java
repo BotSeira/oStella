@@ -335,22 +335,19 @@ public class ScoreController {
         return executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, type, fetchLimit))
                 .thenApply(result -> {
-                    ArrayList<Score> scores = new ArrayList<>(result);
+                    ScoreStore.upsertScores(result);
+                    List<Score> scores = new ArrayList<>(result);
                     if ("bd".equalsIgnoreCase(of)) {
-                        scores.addAll(
-                                ScoreStore.getUserBests(u, i)
-                                        .stream()
-                                        .map(ScoreRecord::toScore)
-                                        .map(router::fillBeatmaps)
-                                        .toList()
-                        );
+                        scores = ScoreStore.getUserBests(u, i)
+                                .stream()
+                                .map(ScoreRecord::toScore)
+                                .map(router::fillBeatmaps)
+                                .toList();
                     }
 
                     if (!filters.isEmpty()) {
                         scores.forEach(Router::ensurePp);
                     }
-
-                    scores.sort(Comparator.comparingDouble(Score::getPp).reversed());
 
                     List<Score> filteredScores = applyFilters(scores, filters);
                     if (filteredScores.size() < i) {
