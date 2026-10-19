@@ -22,6 +22,8 @@ import xyz.zcraft.ostella.whatif.RankPpModel;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
 import xyz.zcraft.osu.model.ModSettings;
+import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
 import xyz.zcraft.osu.model.UserExtended;
@@ -37,6 +39,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -544,24 +547,15 @@ public class UserController {
 
         ctx.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
-                .thenApply(scores -> {
+                .thenCompose(scores -> {
                     ScoreStore.upsertScores(scores);
                     var merged = ScoreStore.getUserBests(u, 200).stream()
                             .map(ScoreRecord::toScore)
                             .sorted(Comparator.comparing(Score::getPp).reversed())
                             .toList();
-                    return new DerankedScores(scores.stream().map(Score::getPp).toList(), merged);
-                }).thenApply(scores -> {
-                    if (scores.merged().isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    List<CompletableFuture<Score>> futures = new ArrayList<>();
-                    for (Score score : scores.merged()) {
-                        futures.add(executor.enqueueAsync(() -> {
-                            Router.ensurePp(score);
-                            return router.fillBeatmaps(score);
-                        }));
-                    }
-                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
-                    return scores;
+                    if (start > merged.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    return fillDerankedMetadata(merged, scores, start, endPosition)
+                            .thenApply(_ -> new DerankedScores(scores.stream().map(Score::getPp).toList(), merged));
                 })
                 .thenCompose(data -> {
                     var scores = data.merged().stream()
@@ -632,6 +626,50 @@ public class UserController {
                             });
                 })
                 .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderDerankedBest, renderer.getRenderExecutor())));
+    }
+
+    private CompletableFuture<Void> fillDerankedMetadata(
+            List<Score> scores, List<Score> official, int start, int end
+    ) {
+        Map<Long, CompletableFuture<BeatmapExtended>> beatmaps = new HashMap<>();
+        Map<Long, CompletableFuture<Beatmapset>> sets = new ConcurrentHashMap<>();
+        for (Score score : official) {
+            if (score.getBeatmap() != null) {
+                beatmaps.put(score.getBeatmap().getId(), CompletableFuture.completedFuture(score.getBeatmap()));
+            }
+            if (score.getBeatmapset() != null) {
+                sets.put(score.getBeatmapset().getId(), CompletableFuture.completedFuture(score.getBeatmapset()));
+            }
+        }
+
+        List<CompletableFuture<?>> futures = new ArrayList<>();
+        for (int i = 0; i < scores.size(); i++) {
+            Score score = scores.get(i);
+            boolean displayed = i >= start - 1 && i < end;
+            // Off-page scores only need map status for the ranked/unranked totals.
+            if (!displayed && !Boolean.TRUE.equals(score.getRanked())) continue;
+            var beatmap = beatmaps.computeIfAbsent(score.getBeatmapId(), id ->
+                    CacheService.getBeatmapJsonCache(id).map(CompletableFuture::completedFuture)
+                            .orElseGet(() -> executor.enqueueAsync(() -> {
+                                var fetched = OsuAPI.getBeatmap(tokenManager.getTokenData(), id);
+                                if (fetched == null) throw new ApiException(ErrorCode.NO_BEATMAP_FOUND);
+                                tryCache(fetched);
+                                return fetched;
+                            })));
+            futures.add(beatmap.thenCompose(map -> {
+                score.setBeatmap(map);
+                if (!displayed) return CompletableFuture.completedFuture(null);
+                return sets.computeIfAbsent(map.getBeatmapsetId(), id ->
+                        CacheService.getBeatmapsetJsonCache(id).map(CompletableFuture::completedFuture)
+                                .orElseGet(() -> executor.enqueueAsync(() -> {
+                                    var fetched = OsuAPI.getBeatmapset(tokenManager.getTokenData(), id);
+                                    if (fetched == null) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
+                                    tryCache(fetched);
+                                    return fetched;
+                                }))).thenAccept(score::setBeatmapset);
+            }));
+        }
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
     }
 
     private record RecentBestData(FilteredScores scores, Double ppChange) {
