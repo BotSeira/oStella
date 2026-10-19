@@ -20,10 +20,7 @@ import xyz.zcraft.ostella.util.RequestUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
@@ -161,17 +158,29 @@ public class ScoreController {
                 })
                 .thenCompose(score -> {
                     if (score.getBeatmap() != null) return CompletableFuture.completedFuture(score);
+                    final Optional<BeatmapExtended> beatmapJsonCache = CacheService.getBeatmapJsonCache(score.getBeatmapId());
+                    if (beatmapJsonCache.isPresent()) {
+                        score.setBeatmap(beatmapJsonCache.get());
+                        return CompletableFuture.completedFuture(score);
+                    }
                     return executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId()))
                             .thenApply(beatmap -> {
                                 score.setBeatmap(beatmap);
+                                CacheService.tryCache(beatmap);
                                 return score;
                             });
                 })
                 .thenCompose(score -> {
                     if (score.getBeatmapset() != null) return CompletableFuture.completedFuture(score);
+                    final Optional<Beatmapset> beatmapsetJsonCache = CacheService.getBeatmapsetJsonCache(score.getBeatmap().getBeatmapsetId());
+                    if (beatmapsetJsonCache.isPresent()) {
+                        score.setBeatmapset(beatmapsetJsonCache.get());
+                        return CompletableFuture.completedFuture(score);
+                    }
                     return executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId()))
                             .thenApply(beatmapset -> {
                                 score.setBeatmapset(beatmapset);
+                                tryCache(beatmapset);
                                 return score;
                             });
                 })
