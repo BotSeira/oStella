@@ -558,8 +558,11 @@ public class UserController {
                         weight.setPp(scorePp);
                         current.setWeight(weight);
 
-                        if (current.getRanked() != null && current.getRanked()
-                                && "RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())) {
+                        if (current.getRanked() != null
+                                && current.getRanked()
+                                && "RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())
+                                && isModsRankable(current.getMods())
+                        ) {
                             entry.setScoreType("Ranked");
                             rankedCount++;
                             rankedPp += scorePp;
@@ -604,6 +607,60 @@ public class UserController {
                             });
                 })
                 .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderDerankedBest, renderer.getRenderExecutor())));
+    }
+
+    private static final Set<String> RANKED_MODS = Set.of(
+            "EZ", "NF", "HT", "DC",
+            "HR", "SD", "PF", "DT", "NC", "HD", "TC", "FL", "BL", "AC",
+            "SO", "AL", "SG", "MU", "NS", "TD"
+    );
+
+    private static boolean isModsRankable(List<Mod> mods) {
+        if (mods == null || mods.isEmpty()) return true;
+
+        return mods.stream().allMatch(m -> {
+            String acronym = m.getAcronym();
+            if (acronym == null) return false;
+
+            acronym = acronym.toUpperCase(Locale.ROOT);
+            if (!RANKED_MODS.contains(acronym)) return false;
+
+            var settings = m.getSettings();
+
+            return switch (acronym) {
+                case "HT" -> hasDefaultSpeed(settings, 0.75, true);
+                case "DC" -> hasDefaultSpeed(settings, 0.75, false);
+                case "DT" -> hasDefaultSpeed(settings, 1.5, true);
+                case "NC" -> hasDefaultSpeed(settings, 1.5, false);
+
+                case "SD", "PF", "AC", "MU", "NS" -> true;
+
+                default -> settings == null || settings.isEmpty();
+            };
+        });
+    }
+
+    private static boolean hasDefaultSpeed(
+            Map<String, ?> settings,
+            double defaultSpeed,
+            boolean allowPitch
+    ) {
+        if (settings == null || settings.isEmpty()) return true;
+
+        for (String key : settings.keySet()) {
+            if (!key.equals("speed_change") && !(allowPitch && key.equals("adjust_pitch"))) {
+                return false;
+            }
+        }
+
+        Object speed = settings.get("speed_change");
+        if (speed == null) return true;
+
+        try {
+            return Double.compare(Double.parseDouble(speed.toString()), defaultSpeed) == 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     private CompletableFuture<Void> fillDerankedMetadata(
