@@ -302,7 +302,8 @@ public class ScoreController {
 
         return executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, type, fetchLimit))
-                .thenApply(scores -> {
+                .thenApply(result -> {
+                    ArrayList<Score> scores = new ArrayList<>(result);
                     if ("bd".equalsIgnoreCase(of)) {
                         scores.addAll(
                                 ScoreStore.getUserBests(u, i)
@@ -317,7 +318,7 @@ public class ScoreController {
                         scores.forEach(Router::ensurePp);
                     }
 
-                    scores = scores.stream().sorted(Comparator.comparingDouble(Score::getPp).reversed()).toList();
+                    scores.sort(Comparator.comparingDouble(Score::getPp).reversed());
 
                     List<Score> filteredScores = applyFilters(scores, filters);
                     if (filteredScores.size() < i) {
