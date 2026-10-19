@@ -7,17 +7,20 @@ import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.config.ConfigLoader;
+import xyz.zcraft.ostella.db.ScoreStore;
 import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.WebServer;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.VersionInfo;
+import xyz.zcraft.osu.model.Score;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public final class OstellaConsoleProcessor {
     private static final long STARTED_AT = System.currentTimeMillis();
@@ -166,6 +169,7 @@ public final class OstellaConsoleProcessor {
                 case "config" -> config(input);
                 case "log" -> log(input);
                 case "import-set-json" -> importSetJson(input);
+                case "import-score-json" -> importScoreJson(input);
                 case "system" -> exact(input, 1, this::system, "Usage: system");
                 case "stop", "shutdown", "exit", "quit" -> stop(input);
                 default -> Result.error("Unknown console command: " + input.value(0) + ". Run 'help'.");
@@ -185,6 +189,16 @@ public final class OstellaConsoleProcessor {
             return Result.ok("Imported " + count + " beatmapsets from cache.");
         } catch (IOException e) {
             return Result.error("Failed to import beatmapsets from cache: " + rootMessage(e));
+        }
+    }
+
+    private Result importScoreJson(ConsoleInputParser.ParsedInput input) {
+        if (input.size() != 1) return Result.error("Usage: import-score-json");
+        try {
+            int count = ScoreStore.importFromCachedJson();
+            return Result.ok("Imported " + count + " scores from cache.");
+        } catch (IOException e) {
+            return Result.error("Failed to import scores from cache: " + rootMessage(e));
         }
     }
 

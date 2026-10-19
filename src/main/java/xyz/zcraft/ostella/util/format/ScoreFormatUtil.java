@@ -149,9 +149,20 @@ public class ScoreFormatUtil {
 
     public static boolean replayPresent(Score score) {
         if (score == null) return false;
-        return score.getHasReplay() || CacheService.hasReplayCache(score.getId());
+        return (score.getHasReplay() != null && score.getHasReplay()) || CacheService.hasReplayCache(score.getId());
+    }
+
+    public static String getScoreRankColor(String status) {
+        if (status == null) return "#d0d0d0";
+        return switch (status.toUpperCase()) {
+            case "RANKED" -> "#262639";
+            case "UNRANKED" -> "#af002a";
+            default -> "#d0a100";
+        };
+    }
+
+    public static boolean shouldShowRankStatus(String status) {
+        if (status == null) return false;
+        return !status.equalsIgnoreCase("RANKED");
     }
 }
-
-
-

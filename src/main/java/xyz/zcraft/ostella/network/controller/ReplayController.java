@@ -350,7 +350,7 @@ public class ReplayController {
                             .filter(Objects::nonNull)
                             .filter(score -> CacheService.hasReplayCache(score.getId()) || score.getHasReplay())
                             .filter(score -> seenIds.add(score.getId()))
-                            .peek(router::ensurePp)
+                            .peek(Router::ensurePp)
                             .collect(Collectors.toCollection(LinkedList::new));
                 })
                 .thenCompose(validScores ->

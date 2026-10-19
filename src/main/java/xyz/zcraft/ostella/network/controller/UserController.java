@@ -6,15 +6,21 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import xyz.zcraft.ostella.addpp.BpProjection;
 import xyz.zcraft.ostella.data.ScoreEntry;
 import xyz.zcraft.ostella.data.ScoreFilter;
+import xyz.zcraft.ostella.data.ScoreRecord;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.db.ScoreStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.whatif.RankPpModel;
+import xyz.zcraft.ostella.whatif.WhatIfEstimates;
+import xyz.zcraft.ostella.whatif.WhatIfService;
 import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.User;
@@ -45,6 +51,7 @@ public class UserController {
 
     public final RenderService renderer;
     public final AsyncService executor;
+    public final WhatIfService whatIfService;
     public final TokenManager tokenManager;
     public final Router router;
 
@@ -52,6 +59,7 @@ public class UserController {
         this.router = router;
         this.renderer = router.renderer;
         this.executor = router.executor;
+        this.whatIfService = router.whatIf;
         this.tokenManager = router.tokenManager;
     }
 
@@ -158,6 +166,7 @@ public class UserController {
                             if (user == null) {
                                 throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
                             }
+
                             for (Score score : scores) {
                                 router.ensurePp(score);
                             }
@@ -263,8 +272,7 @@ public class UserController {
                                         .forEach(e -> {
                                             try {
                                                 final Score score = e.getScore();
-                                                final Long beatmapId = score.getBeatmapId();
-                                                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+                                                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmapId()));
                                                 final OsuReplay osuReplay;
                                                 final ReplayAnalyze analyze;
                                                 final Optional<Path> replayCache = CacheService.getReplayCache(score.getId());
@@ -518,11 +526,120 @@ public class UserController {
         return renderer.renderScores(data.user(), data.scores(), data.filters(), data.title(), data.extraTitle());
     }
 
+    private byte[] renderDerankedBest(DerankedBestData data) {
+        return renderer.renderDerankedBest(
+                data.user(), data.scores(), data.newGlobalRank(), data.newPp(),
+                data.counts(), data.ppCounts(), data.scoreTypes()
+        );
+    }
+
+    public void getDerankedBest(@NotNull Context ctx) {
+        final long u = requirePathLong(ctx, "userId");
+        final int n = requireScoreListLimit(ctx);
+        final int start = requireScoreListStart(ctx, n);
+
+        ctx.future(() -> executor
+                .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
+                .thenApply(scores -> {
+                    ScoreStore.upsertScores(scores);
+                    var merged = ScoreStore.getUserBests(u, 200).stream()
+                            .map(ScoreRecord::toScore)
+                            .sorted(Comparator.comparing(Score::getPp).reversed())
+                            .toList();
+                    return new DerankedScores(scores.stream().map(Score::getPp).toList(), merged);
+                }).thenApply(scores -> {
+                    if (scores.merged().isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    for (Score score : scores.merged()) {
+                        router.fillBeatmaps(score);
+                        router.ensurePp(score);
+                    }
+                    return scores;
+                })
+                .thenCompose(data -> {
+                    var scores = data.merged().stream()
+                            .sorted(Comparator.comparing(Score::getPp).reversed()).toList();
+                    List<String> scoreTypes = new ArrayList<>(scores.size());
+
+                    int rankedCount = 0;
+                    int unrankedCount = 0;
+                    int localCount = 0;
+
+                    double rankedPp = 0;
+                    double unrankedPp = 0;
+                    double localPp = 0;
+
+                    for (int i = 0; i < scores.size(); i++) {
+                        final Score current = scores.get(i);
+                        final Score.Weight weight = new Score.Weight();
+                        final double percentage = Math.pow(0.95, i);
+                        final double scorePp = current.getPp() * percentage;
+                        weight.setPercentage(percentage * 100.0);
+                        weight.setPp(scorePp);
+                        current.setWeight(weight);
+
+                        if (current.getRanked() != null && current.getRanked()
+                                && "RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())) {
+                            scoreTypes.add("Ranked");
+                            rankedCount++;
+                            rankedPp += scorePp;
+                        } else if (current.getId() < 0) {
+                            scoreTypes.add("Local");
+                            localCount++;
+                            localPp += scorePp;
+                        } else {
+                            scoreTypes.add("Unranked");
+                            unrankedCount++;
+                            unrankedPp += scorePp;
+                        }
+                    }
+
+                    final List<Integer> scoreCounts = List.of(rankedCount, unrankedCount, localCount);
+                    final List<Double> ppCounts = List.of(rankedPp, unrankedPp, localPp);
+
+                    if (start > scores.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    final int end = Math.min(scores.size(), start + n - 1);
+                    final List<Score> rangedScores = scores.subList(start - 1, end);
+                    ctx.header("X-Score-Ids", rangedScores.stream().map(Score::getId)
+                            .map(String::valueOf).collect(Collectors.joining(",")));
+
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
+                            .thenApply(user -> {
+                                if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                final double currentPp = user.getStatistics().getPp();
+                                final double newPp = BpProjection.projectBests(currentPp, data.officialPp(),
+                                        scores.stream().map(Score::getPp).toList(), 200);
+                                Long newRank = user.getStatistics().getGlobalRank();
+                                if (newPp > currentPp) {
+                                    var samples = new HashSet<>(whatIfService.getModelAround(newPp, null).samples());
+                                    if (currentPp > 0)
+                                        samples.addAll(whatIfService.getModelAround(currentPp, null).samples());
+                                    newRank = WhatIfEstimates.project(RankPpModel.from(samples),
+                                            currentPp, newPp, newRank).rank();
+                                }
+                                putRankPpHeaders(ctx, user);
+                                return new DerankedBestData(
+                                        user, rangedScores, newRank, newPp, scoreCounts, ppCounts,
+                                        scoreTypes.subList(start - 1, end)
+                                );
+                            });
+                })
+                .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderDerankedBest, renderer.getRenderExecutor())));
+    }
+
     private record RecentBestData(FilteredScores scores, Double ppChange) {
+    }
+
+    private record DerankedScores(List<Double> officialPp, List<Score> merged) {
     }
 
     private record ScoreListData(UserExtended user, List<ScoreEntry> scores,
                                  List<String> filters, String title, String extraTitle) {
+    }
+
+    private record DerankedBestData(
+            UserExtended user, List<Score> scores, Long newGlobalRank, double newPp,
+            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes
+    ) {
     }
 
     record FilteredScores(List<ScoreEntry> entries) {

@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.runtime;
 
+import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
@@ -27,6 +28,7 @@ public final class OstellaApplication implements AutoCloseable, OstellaConsoleAc
     private final JLineConsole console;
     private final CountDownLatch stopSignal = new CountDownLatch(1);
     private final AtomicBoolean closed = new AtomicBoolean();
+    @Getter
     private volatile WebServer server;
     private volatile Thread runner;
 

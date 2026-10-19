@@ -1,7 +1,9 @@
 package xyz.zcraft.ostella.network;
 
+import com.google.gson.JsonObject;
 import io.javalin.Javalin;
 import io.javalin.http.UnauthorizedResponse;
+import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -21,6 +23,7 @@ public class WebServer implements Closeable {
 
     private final AppConfig conf;
     private final Javalin app;
+    @Getter
     private final Router router;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -100,6 +103,7 @@ public class WebServer implements Closeable {
                     .get("/users/{userId}/rank", router.userController::getUserRank)
                     .post("/users/{userId}/addpp", router.addPpController::addPp)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
+                    .get("/users/{userId}/scores/deranked-best", router.userController::getDerankedBest)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
 
@@ -156,7 +160,12 @@ public class WebServer implements Closeable {
                     })
                     .exception(Exception.class, (e, ctx) -> {
                         failures.incrementAndGet();
-                        ctx.status(500).contentType("application/json").result(new Response(false, "An error occurred while processing the request!", null).toString());
+                        JsonObject obj = new JsonObject();
+                        obj.addProperty("message", e.getMessage());
+                        obj.addProperty("error", e.toString());
+                        ctx.status(500).contentType("application/json").result(
+                                new Response(false, "An error occurred while processing the request!", obj).toString()
+                        );
                         LOG.error("An error occurred while processing request: {}", ctx.queryString(), e);
                     });
         });

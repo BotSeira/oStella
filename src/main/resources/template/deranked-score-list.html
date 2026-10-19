@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/html" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        window.__OSTELLA_RENDER_READY__ = false;
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            width: fit-content;
+            height: fit-content;
+
+            background-color: #1a1a2e;
+            color: white;
+            font-family: 'Dejavu Sans', Tahoma, Geneva, Verdana, sans-serif !important;
+        }
+
+        .profile-header {
+            position: relative;
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            gap: 40px;
+        }
+
+        .extra-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            gap: 40px;
+        }
+
+        .profile-main {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 40px;
+            width: 100%;
+        }
+
+        .avatar {
+            width: 150px;
+            height: 150px;
+            border-radius: 20px;
+            object-fit: cover;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        /*noinspection CssUnusedSymbol*/
+        .avatar-online {
+            border-color: #2ecc71;
+            border-style: solid;
+            border-width: 4px;
+        }
+
+        .supporter-heart {
+            width: 28px;
+            height: 28px;
+            fill: #ff66aa;
+            filter: drop-shadow(0 0 6px rgba(255, 102, 170, 0.6));
+            margin-right: 5px;
+        }
+
+        .profile-details {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            flex-grow: 1;
+        }
+
+        .profile-name-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .username {
+            font-size: 3em;
+            font-weight: bold;
+        }
+
+        .teamName {
+            font-size: 1.4em;
+        }
+
+        .flag {
+            width: 40px;
+            border-radius: 4px;
+        }
+
+        .teamFlag {
+            width: 60px;
+            border-radius: 4px;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 40px;
+        }
+
+        .stat-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            color: #a0a0b8;
+            font-size: 1.1em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .stat-sub {
+            font-size: 1.2em;
+            color: #c4c4c4;
+        }
+
+        .mod-extra {
+            min-height: 30px;
+            grid-area: 1 / 2;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            padding: 2px 12px;
+            margin-left: -8px;
+            background-color: #591f1d;
+            font-size: 14px;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            max-width: 280px;
+            overflow-wrap: anywhere;
+            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+        }
+    </style>
+    <style>
+        .grid-container {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            min-width: 1660px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px 12px 4px 12px;
+            position: relative;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            width: 400px; /* Changed to 100% to fit the grid perfectly */
+            height: 100%;
+            align-content: center;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .song-cover {
+            position: relative;
+        }
+
+        .jacket {
+            display: block;
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .rank-badge {
+            position: absolute;
+            bottom: 6px;
+            left: 8px;
+            width: 50px;
+            height: 50px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+            border-radius: 6px;
+            background: linear-gradient(135deg, #f1c40f, #e67e22);
+            color: white;
+            font-weight: 900;
+            font-size: 1.8em;
+            text-align: center;
+            align-content: center;
+        }
+
+        .mod-badges {
+            display: flex;
+            gap: 8px;
+            position: absolute;
+            top: 0;
+            right: 6px;
+            left: 10px;
+            color: white;
+            font-weight: 900;
+            font-size: 1.1em;
+            justify-content: end;
+            flex-flow: wrap;
+        }
+
+        .extra-score-info {
+            right: 0;
+            bottom: 6px;
+            background-color: #262639;
+            padding: 4px 8px;
+            position: absolute;
+            border-radius: 6px 0 0 6px;
+            font-size: 1.5em;
+            font-weight: bold;
+            max-width: 310px;
+        }
+
+        .mod-badge {
+            display: grid;
+            place-items: center;
+        }
+
+        .song-cover:has(.mod-extra) {
+            display: grid;
+            margin-bottom: 10px;
+        }
+
+        .song-cover:has(.mod-extra) .jacket {
+            grid-area: 1 / 1;
+            height: 100%;
+            min-height: 100px;
+            margin-bottom: 0;
+        }
+
+        .song-cover:has(.mod-extra) .mod-badges {
+            grid-area: 1 / 1;
+            position: relative;
+            z-index: 1;
+            inset: auto;
+            align-self: start;
+            margin: 0 6px 0 10px;
+            padding-bottom: 58px;
+        }
+
+        .mod-back {
+            grid-area: 1 / 1;
+            z-index: 1;
+        }
+
+        .mod-icon {
+            grid-area: 1 / 1;
+            z-index: 2;
+            filter: brightness(0) saturate(100%) invert(16%) sepia(7%) saturate(5011%) hue-rotate(314deg) brightness(107%) contrast(101%);
+        }
+
+        .song-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .title-sub {
+            display: flex;
+            margin-bottom: 6px;
+
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .song-artist {
+            font-size: 1em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-weight: lighter;
+        }
+
+        .beatmap-id {
+            font-size: 1em;
+            margin-left: auto;
+            font-weight: lighter;
+            letter-spacing: 1px;
+        }
+
+        .score-record {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            align-items: center;
+            color: #a0a0b8;
+            margin-top: 6px;
+        }
+
+        .diff-badge {
+            display: flex;
+            align-items: center;
+            background: linear-gradient(135deg, #8e44ad, #c0392b);
+            color: #fff;
+            font-weight: 700;
+            padding: 1px 8px;
+            border-radius: 40px;
+            font-size: 1em;
+            gap: 4px;
+        }
+
+        .diff {
+            display: flex;
+            align-items: center;
+            /*gap: 10px;*/
+        }
+
+        .diff-title {
+            font-size: 1.2em;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-left: 5px;
+        }
+
+        .replay-icon {
+            margin-left: 2px;
+            font-size: 0.8em;
+            transform: translateY(-1px);
+        }
+
+        .score-status {
+            margin-left: auto;
+        }
+
+        .acc-number {
+            font-size: 1.2em;
+            color: #fff;
+            grid-column: 1 / 1;
+            grid-row: 1 / 1;
+        }
+
+        .hit-stat {
+            grid-column: 1 / 1;
+            grid-row: 2 / 2;
+        }
+
+        .score-pp {
+            display: flex;
+            justify-content: right;
+            align-items: center;
+            gap: 4px;
+
+            grid-column: 2 / 2;
+            grid-row: 1 / 3;
+        }
+
+        .pp-weight {
+            display: flex;
+            flex-direction: column;
+            align-items: end;
+            border-right: 1px solid white;
+            padding-right: 4px;
+
+            font-size: 0.8em;
+        }
+
+        .pp-number {
+            font-size: 2.2em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .hit-count span {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+    <style>
+        .score-type {
+            text-align: center;
+            text-transform: uppercase;
+            font-size: 1.5em;
+            font-weight: bold;
+            letter-spacing: 8px;
+            display: flex;
+            align-items: center;
+        }
+
+        .score-type::before,
+        .score-type::after {
+            content: "";
+            flex: 1;
+            border-bottom: 4px solid #FFF;
+        }
+
+        .score-type:not(:empty)::before {
+            margin-right: 15px;
+        }
+
+        .score-type:not(:empty)::after {
+            margin-left: 15px;
+        }
+
+        .bottom {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 1.5em;
+            color: #a0a0b8;
+            letter-spacing: 1px;
+            margin-top: 15px;
+        }
+    </style>
+    <title>oStella - Scores</title>
+</head>
+<body>
+
+<div class="profile-header">
+    <div class="profile-main">
+        <img alt="avatar" class="avatar" src="https://a.ppy.sh/2"
+             th:classappend="${user.isOnline() ? ' avatar-online' : ''}"
+             th:src="${cache.getImageSrc(user.getAvatarUrl())}">
+        <div class="profile-details">
+            <div class="profile-name-row">
+                <img alt="flag"
+                     class="flag"
+                     src="https://osu.ppy.sh/images/flags/AU.png"
+                     th:src="${cache.getImageSrc(Users.getFlagUrl(user))}">
+                <span class="username" th:text="${user.username}">ExampleUser</span>
+                <svg class="supporter-heart" th:if="${user.isSupporter}" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <img alt="team-flag" class="teamFlag"
+                     src="https://assets.ppy.sh/teams/flag/41211/7e1c4a9bf4562f0375e955d230f56e06a579ea1881691b423d0a015572abf645.png"
+                     th:if="${user.team != null}"
+                     th:src="${cache.getImageSrc(user.getTeam().getFlagUrl())}">
+                <span class="teamName" th:if="${user.team != null}" th:text="${user.team.name}">Team Name</span>
+            </div>
+            <div style="display: flex; ">
+                <div>
+                    <div class="stats-row">
+                        <div class="stat-group">
+                            <span class="stat-label">Performance</span>
+                            <span class="stat-value" th:text="${#numbers.formatInteger(newPp, 1, 'COMMA')} + 'pp'">3,000pp</span>
+                            <span class="stat-sub" th:text="${'▲ ' + #numbers.formatInteger(newPp - user.statistics.pp, 1, 'COMMA')} + 'pp'">▲ 1,234pp</span>
+                        </div>
+                        <div class="stat-group">
+                            <span class="stat-label">Global Rank</span>
+                            <span class="stat-value"
+                                  th:text="'#' + ${#numbers.formatInteger(newGlobalRank, 1, 'COMMA')}">#123,456,789</span>
+                            <span class="stat-sub" th:text="${'▲ #' + #numbers.formatInteger(user.statistics.globalRank - newGlobalRank, 1, 'COMMA')}">▲ #1,234</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="width: 700px; height: 100%;">
+            <div style="width: 700px; height: 100%; display: flex; gap: 10px; justify-content: end; margin: -10px 0;">
+                <div style="align-content: center; margin-top: -40px; font-size: 2em; margin-right: 10px;">Scores</div>
+                <canvas width="600" height="100" id="scoreRatioChart"></canvas>
+            </div>
+            <div style="width: 700px; height: 100%; display: flex; gap: 10px; justify-content: end;">
+                <div style="align-content: center; margin-top: -40px; font-size: 2em; margin-right: 10px;">PP</div>
+                <canvas width="600" height="100" id="ppRatioChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="score-type">Deranked Bests</div>
+
+<div class="grid-container">
+    <div class="card" th:each="score, iterstat : ${scores}">
+        <div class="song-cover">
+            <div class="rank-badge" th:style="'background:' + ${Scores.getRankBgColor(score)}" th:text="${score.rank}">
+                SS
+            </div>
+            <div class="mod-badges" th:if="${score.mods != null and !score.mods.isEmpty()}">
+                <div class="mod-badge" th:each="amod : ${score.getMods()}">
+                    <svg class="mod-back" fill="#ff6666" height="44" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="44">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <div class="mod-extra" th:if="${!#strings.isEmpty(Mods.getSettingsText(amod))}"
+                         th:style="'color: ' + ${Mods.getColorHex(amod)}"
+                         th:text="${Mods.getSettingsText(amod)}"></div>
+                    <img alt="mod" class="mod-icon"
+                         height="40" src="https://osu.ppy.sh/assets/images/mod-hidden.823bd26e.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
+                </div>
+            </div>
+            <div class="extra-score-info"
+                 th:if="${Scores.shouldShowRankStatus(scoreExtras.get(iterstat.index))}"
+                 th:text="${scoreExtras.get(iterstat.index)}"
+                 th:style="${'background-color: ' + Scores.getScoreRankColor(scoreExtras.get(iterstat.index))}">
+                Unranked
+            </div>
+            <img alt="jacket" class="jacket"
+                 src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
+                 th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>
+
+        <div class="song-title" th:text="${score.beatmapset.title}">This Is An Example Song Title</div>
+        <div class="title-sub">
+            <span style="font-family: serif; margin-top: -3px;"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+                  th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+            <span style="color: #a0a0b8; margin: 0 3px;" th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
+            <span class="song-artist" th:text="${score.beatmapset.artist}">This Is An Example Artist</span>
+            <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
+        </div>
+        <div class="diff">
+            <div class="diff-badge"
+                 th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
+                 th:with="stars=${scoreStars[iterstat.index]}">
+                <div class="diff-rating"
+                     th:style="'color: ' + ${stars == null ? '#000000' : Colors.getBeatmapDiffTextColor(stars)} + ';'"
+                     th:text="${stars == null ? '★—' : '★' + Osu.formatStarRating(stars)}">
+                    ★5.78
+                </div>
+            </div>
+            <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
+            <div class="score-status" th:text="${Scores.getScoreStatus(score)}">❤</div>
+        </div>
+        <div style="display: grid;">
+            <span class="acc-number"
+                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+            <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
+                456 / 132 / 12 / 34
+            </div>
+            <div class="score-pp">
+                <div class="pp-weight" th:if="${Scores.hasWeight(score)}">
+                    <span th:text="${score.getWeight().getPercentage().intValue()} + '%'">100%</span>
+                    <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
+                </div>
+                <div class="pp-number"
+                     th:text="${#numbers.formatDecimal(score.getPp(), 1, 1)} + 'pp'">123pp
+                </div>
+            </div>
+
+        </div>
+        <div class="score-record">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span th:text="${'#' + iterstat.index}">#1</span>
+                <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
+                <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
+            </div>
+            <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
+        </div>
+    </div>
+    <div class="card" th:each="score, iterstat : ${scores}">
+        <div class="song-cover">
+            <div class="rank-badge" th:style="'background:' + ${Scores.getRankBgColor(score)}" th:text="${score.rank}">
+                SS
+            </div>
+            <div class="mod-badges" th:if="${score.mods != null and !score.mods.isEmpty()}">
+                <div class="mod-badge" th:each="amod : ${score.getMods()}">
+                    <svg class="mod-back" fill="#ff6666" height="44" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="44">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <div class="mod-extra" th:if="${!#strings.isEmpty(Mods.getSettingsText(amod))}"
+                         th:style="'color: ' + ${Mods.getColorHex(amod)}"
+                         th:text="${Mods.getSettingsText(amod)}"></div>
+                    <img alt="mod" class="mod-icon"
+                         height="40" src="https://osu.ppy.sh/assets/images/mod-hidden.823bd26e.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
+                </div>
+            </div>
+            <div class="extra-score-info"
+                 th:if="${Scores.shouldShowRankStatus(scoreExtras.get(iterstat.index))}"
+                 th:text="${scoreExtras.get(iterstat.index)}"
+                 th:style="${'background-color: ' + Scores.getScoreRankColor(scoreExtras.get(iterstat.index))}">
+                Unranked
+            </div>
+            <img alt="jacket" class="jacket"
+                 src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
+                 th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>
+
+        <div class="song-title" th:text="${score.beatmapset.title}">This Is An Example Song Title</div>
+        <div class="title-sub">
+            <span style="font-family: serif; margin-top: -3px;"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+                  th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+            <span style="color: #a0a0b8; margin: 0 3px;" th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
+            <span class="song-artist" th:text="${score.beatmapset.artist}">This Is An Example Artist</span>
+            <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
+        </div>
+        <div class="diff">
+            <div class="diff-badge"
+                 th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
+                 th:with="stars=${scoreStars[iterstat.index]}">
+                <div class="diff-rating"
+                     th:style="'color: ' + ${stars == null ? '#000000' : Colors.getBeatmapDiffTextColor(stars)} + ';'"
+                     th:text="${stars == null ? '★—' : '★' + Osu.formatStarRating(stars)}">
+                    ★5.78
+                </div>
+            </div>
+            <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
+            <div class="score-status" th:text="${Scores.getScoreStatus(score)}">❤</div>
+        </div>
+        <div style="display: grid;">
+            <span class="acc-number"
+                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+            <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
+                456 / 132 / 12 / 34
+            </div>
+            <div class="score-pp">
+                <div class="pp-weight" th:if="${Scores.hasWeight(score)}">
+                    <span th:text="${score.getWeight().getPercentage().intValue()} + '%'">100%</span>
+                    <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
+                </div>
+                <div class="pp-number"
+                     th:text="${#numbers.formatDecimal(score.getPp(), 1, 1)} + 'pp'">123pp
+                </div>
+            </div>
+
+        </div>
+        <div class="score-record">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span th:text="${'#' + iterstat.index}">#1</span>
+                <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
+                <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
+            </div>
+            <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
+        </div>
+    </div>
+    <div class="card" th:each="score, iterstat : ${scores}">
+        <div class="song-cover">
+            <div class="rank-badge" th:style="'background:' + ${Scores.getRankBgColor(score)}" th:text="${score.rank}">
+                SS
+            </div>
+            <div class="mod-badges" th:if="${score.mods != null and !score.mods.isEmpty()}">
+                <div class="mod-badge" th:each="amod : ${score.getMods()}">
+                    <svg class="mod-back" fill="#ff6666" height="44" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="44">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <div class="mod-extra" th:if="${!#strings.isEmpty(Mods.getSettingsText(amod))}"
+                         th:style="'color: ' + ${Mods.getColorHex(amod)}"
+                         th:text="${Mods.getSettingsText(amod)}"></div>
+                    <img alt="mod" class="mod-icon"
+                         height="40" src="https://osu.ppy.sh/assets/images/mod-hidden.823bd26e.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
+                </div>
+            </div>
+            <div class="extra-score-info"
+                 th:if="${Scores.shouldShowRankStatus(scoreExtras.get(iterstat.index))}"
+                 th:text="${scoreExtras.get(iterstat.index)}"
+                 th:style="${'background-color: ' + Scores.getScoreRankColor(scoreExtras.get(iterstat.index))}">
+                Unranked
+            </div>
+            <img alt="jacket" class="jacket"
+                 src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
+                 th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>
+
+        <div class="song-title" th:text="${score.beatmapset.title}">This Is An Example Song Title</div>
+        <div class="title-sub">
+            <span style="font-family: serif; margin-top: -3px;"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+                  th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+            <span style="color: #a0a0b8; margin: 0 3px;" th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
+            <span class="song-artist" th:text="${score.beatmapset.artist}">This Is An Example Artist</span>
+            <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
+        </div>
+        <div class="diff">
+            <div class="diff-badge"
+                 th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
+                 th:with="stars=${scoreStars[iterstat.index]}">
+                <div class="diff-rating"
+                     th:style="'color: ' + ${stars == null ? '#000000' : Colors.getBeatmapDiffTextColor(stars)} + ';'"
+                     th:text="${stars == null ? '★—' : '★' + Osu.formatStarRating(stars)}">
+                    ★5.78
+                </div>
+            </div>
+            <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
+            <div class="score-status" th:text="${Scores.getScoreStatus(score)}">❤</div>
+        </div>
+        <div style="display: grid;">
+            <span class="acc-number"
+                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+            <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
+                456 / 132 / 12 / 34
+            </div>
+            <div class="score-pp">
+                <div class="pp-weight" th:if="${Scores.hasWeight(score)}">
+                    <span th:text="${score.getWeight().getPercentage().intValue()} + '%'">100%</span>
+                    <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
+                </div>
+                <div class="pp-number"
+                     th:text="${#numbers.formatDecimal(score.getPp(), 1, 1)} + 'pp'">123pp
+                </div>
+            </div>
+
+        </div>
+        <div class="score-record">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span th:text="${'#' + iterstat.index}">#1</span>
+                <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
+                <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
+            </div>
+            <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
+        </div>
+    </div>
+    <div class="card" th:each="score, iterstat : ${scores}">
+        <div class="song-cover">
+            <div class="rank-badge" th:style="'background:' + ${Scores.getRankBgColor(score)}" th:text="${score.rank}">
+                SS
+            </div>
+            <div class="mod-badges" th:if="${score.mods != null and !score.mods.isEmpty()}">
+                <div class="mod-badge" th:each="amod : ${score.getMods()}">
+                    <svg class="mod-back" fill="#ff6666" height="44" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="44">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <div class="mod-extra" th:if="${!#strings.isEmpty(Mods.getSettingsText(amod))}"
+                         th:style="'color: ' + ${Mods.getColorHex(amod)}"
+                         th:text="${Mods.getSettingsText(amod)}"></div>
+                    <img alt="mod" class="mod-icon"
+                         height="40" src="https://osu.ppy.sh/assets/images/mod-hidden.823bd26e.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
+                </div>
+            </div>
+            <div class="extra-score-info"
+                 th:if="${Scores.shouldShowRankStatus(scoreExtras.get(iterstat.index))}"
+                 th:text="${scoreExtras.get(iterstat.index)}"
+                 th:style="${'background-color: ' + Scores.getScoreRankColor(scoreExtras.get(iterstat.index))}">
+                Unranked
+            </div>
+            <img alt="jacket" class="jacket"
+                 src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
+                 th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>
+
+        <div class="song-title" th:text="${score.beatmapset.title}">This Is An Example Song Title</div>
+        <div class="title-sub">
+            <span style="font-family: serif; margin-top: -3px;"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+                  th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+            <span style="color: #a0a0b8; margin: 0 3px;" th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
+            <span class="song-artist" th:text="${score.beatmapset.artist}">This Is An Example Artist</span>
+            <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
+        </div>
+        <div class="diff">
+            <div class="diff-badge"
+                 th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
+                 th:with="stars=${scoreStars[iterstat.index]}">
+                <div class="diff-rating"
+                     th:style="'color: ' + ${stars == null ? '#000000' : Colors.getBeatmapDiffTextColor(stars)} + ';'"
+                     th:text="${stars == null ? '★—' : '★' + Osu.formatStarRating(stars)}">
+                    ★5.78
+                </div>
+            </div>
+            <div class="diff-title" th:text="${score.beatmap.version}">This Is An Example Diff</div>
+            <div class="score-status" th:text="${Scores.getScoreStatus(score)}">❤</div>
+        </div>
+        <div style="display: grid;">
+            <span class="acc-number"
+                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+            <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
+                456 / 132 / 12 / 34
+            </div>
+            <div class="score-pp">
+                <div class="pp-weight" th:if="${Scores.hasWeight(score)}">
+                    <span th:text="${score.getWeight().getPercentage().intValue()} + '%'">100%</span>
+                    <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
+                </div>
+                <div class="pp-number"
+                     th:text="${#numbers.formatDecimal(score.getPp(), 1, 1)} + 'pp'">123pp
+                </div>
+            </div>
+
+        </div>
+        <div class="score-record">
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <span th:text="${'#' + iterstat.index}">#1</span>
+                <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
+                <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
+            </div>
+            <span class="score-time" th:text="${score.getEndedAt()}">2026-04-11T23:30:27Z</span>
+        </div>
+    </div>
+</div>
+
+<div class="bottom">
+    <span th:text="'Data collected in ' + ${time}">Data collected in 2026-04-11T23:30:27Z</span>
+    <span>Generated with oStella</span>
+</div>
+
+<!--suppress ThymeleafObsoleteInlineAttributeInspection -->
+<script th:inline="javascript">
+    const values = /*[[${counts}]]*/ [30, 50, 20];
+    const colors = ['#36A2EB', '#FF6384', '#FFCE56'];
+    const labels = ['Ranked', 'Unranked', 'Local'];
+
+    const total = values.reduce((a, b) => a + b, 0);
+
+    new Chart(document.getElementById('scoreRatioChart'), {
+        type: 'bar',
+        data: {
+            labels: [''],
+            datasets: values.map((value, i) => ({
+                label: `${labels[i]} (${(value / total * 100).toFixed(1)}%)`,
+                data: [value],
+                backgroundColor: colors[i],
+                barThickness: 24,
+                borderWidth: 0
+            }))
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: false,
+            animated: false,
+            maintainAspectRatio: false,
+            layout: {padding: 0},
+            scales: {
+                x: {
+                    stacked: true,
+                    display: false,
+                    min: 0,
+                    max: total
+                },
+                y: {
+                    stacked: true,
+                    display: false
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        color: '#ffffff',
+                        font: {
+                            size: 17,
+                            family: 'Arial',
+                            weight: 'bold'
+                        },
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 6
+                    }
+                }
+            }
+        }
+    });
+</script>
+
+<!--suppress ThymeleafObsoleteInlineAttributeInspection -->
+<script th:inline="javascript">
+    const ppValues = /*[[${countsPp}]]*/ [30, 50, 20] ;
+    const ppTotal = ppValues.reduce((a, b) => a + b, 0);
+
+    new Chart(document.getElementById('ppRatioChart'), {
+        type: 'bar',
+        data: {
+            labels: [''],
+            datasets: ppValues.map((value, i) => ({
+                label: `${labels[i]} (${(value / ppTotal * 100).toFixed(1)}%)`,
+                data: [value],
+                backgroundColor: colors[i],
+                barThickness: 24,
+                borderWidth: 0
+            }))
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: false,
+            animated: false,
+            maintainAspectRatio: false,
+            layout: { padding: 0 },
+            scales: {
+                x: {
+                    stacked: true,
+                    display: false,
+                    min: 0,
+                    max: ppTotal
+                },
+                y: {
+                    stacked: true,
+                    display: false
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        color: '#ffffff',
+                        font: {
+                            size: 17,
+                            family: 'Arial',
+                            weight: 'bold'
+                        },
+                        boxWidth: 12,
+                        boxHeight: 12,
+                        padding: 6
+                    }
+                }
+            }
+        }
+    });
+
+    window.__OSTELLA_RENDER_READY__ = true;
+</script>
+</body>
+</html>

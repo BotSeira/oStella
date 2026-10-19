@@ -9,10 +9,8 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.data.ScoreEntry;
-import xyz.zcraft.ostella.data.ScoreFilter;
-import xyz.zcraft.ostella.data.ScoreId;
-import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.*;
+import xyz.zcraft.ostella.db.ScoreStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -169,6 +167,12 @@ public class ScoreController {
                 LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
             }
 
+            if (score.getPp() == null) {
+                score.setPp(calPp);
+            }
+
+            CacheService.tryCache(score);
+
             final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
 
             return renderer.renderScore(score, diffSpec, calPp, replayPresent);
@@ -283,7 +287,7 @@ public class ScoreController {
     }
 
     public CompletableFuture<Score> getScoreFromRefAsync(@NotNull Context context) {
-        final String of = requireStringFrom(context, "of", "rs", "bp", "rp");
+        final String of = requireStringFrom(context, "of", "rs", "bp", "rp", "bd");
         final long u = requireLong(context, "u");
         final int i = requirePositiveInt(context, "i");
         final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
@@ -291,7 +295,7 @@ public class ScoreController {
         final ScoreType type = switch (of.toLowerCase()) {
             case "rs" -> ScoreType.RECENT;
             case "rp" -> ScoreType.RECENT_PASS;
-            case "bp" -> ScoreType.BEST;
+            case "bp", "bd" -> ScoreType.BEST;
             default -> throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid score type: " + of);
         };
         final int fetchLimit = scoreLookupFetchLimit(i, filters);
@@ -299,9 +303,22 @@ public class ScoreController {
         return executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, type, fetchLimit))
                 .thenApply(scores -> {
-                    if (!filters.isEmpty()) {
-                        scores.forEach(router::ensurePp);
+                    if ("bd".equalsIgnoreCase(of)) {
+                        scores.addAll(
+                                ScoreStore.getUserBests(u, i)
+                                        .stream()
+                                        .map(ScoreRecord::toScore)
+                                        .map(router::fillBeatmaps)
+                                        .toList()
+                        );
                     }
+
+                    if (!filters.isEmpty()) {
+                        scores.forEach(Router::ensurePp);
+                    }
+
+                    scores = scores.stream().sorted(Comparator.comparingDouble(Score::getPp).reversed()).toList();
+
                     List<Score> filteredScores = applyFilters(scores, filters);
                     if (filteredScores.size() < i) {
                         throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores found for user!");

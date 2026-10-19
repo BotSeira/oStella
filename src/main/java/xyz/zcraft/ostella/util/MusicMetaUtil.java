@@ -23,11 +23,12 @@ public final class MusicMetaUtil {
                 .trim();
     }
 
-    /**
-     * Only known length qualifiers are relaxed; remix/live/cover names remain significant.
-     */
     public static String baseTitle(String input) {
-        return normalize(input).replaceFirst(" (tv size|tv edit|short ver|short version)$", "");
+        String result = input;
+        result = result.replaceFirst("\\(.*\\)$", "").trim();
+        result = normalize(result);
+        result = result.replaceFirst("(tv size|tv edit|short ver|short version)$", "");
+        return result.trim();
     }
 
     public static String normalizeOrFallback(String preferred, String fallback) {

@@ -9,6 +9,13 @@ public final class BpProjection {
     private BpProjection() {
     }
 
+    /** Preserve bonus PP and the unsampled tail while replacing the observed BP window. */
+    public static double projectBests(double currentPp, List<Double> official, List<Double> merged, int window) {
+        double before = weighted(official.stream().sorted(Comparator.reverseOrder()).toList(), window);
+        double after = weighted(merged.stream().sorted(Comparator.reverseOrder()).toList(), window);
+        return currentPp + Math.max(0, after - before);
+    }
+
     public static Result project(double currentPp, List<Play> best, double pp, int count, Long mapId, int window) {
         if (!Double.isFinite(currentPp) || currentPp < 0 || !Double.isFinite(pp) || pp < 0
                 || count < 1 || count > 100 || window < 1 || (mapId != null && count != 1))

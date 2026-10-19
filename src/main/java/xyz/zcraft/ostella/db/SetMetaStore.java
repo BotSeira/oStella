@@ -153,13 +153,9 @@ public class SetMetaStore {
     }
 
     public static int importFromCachedJson() throws IOException {
-        return importFromCachedJson(Path.of("data", "cache", "json", "beatmapset"));
-    }
-
-    public static int importFromCachedJson(Path directory) throws IOException {
         List<ObservedSet> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
         int[] count = {0};
-        CacheService.walkBeatmapsetCache(directory, (set, modifiedAt) -> {
+        CacheService.walkBeatmapsetCache((set, modifiedAt) -> {
             batch.add(new ObservedSet(set, modifiedAt));
             if (batch.size() == IMPORT_BATCH_SIZE) {
                 count[0] += upsertObserved(batch);

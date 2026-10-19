@@ -10,6 +10,7 @@ import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.db.ScoreStore;
 import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.osu.model.BeatmapExtended;
@@ -411,6 +412,7 @@ public class CacheService {
     }
 
     public static void cacheScoreJson(Score score) throws IOException {
+        ScoreStore.upsertScore(score);
         Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
     }
 
@@ -715,13 +717,9 @@ public class CacheService {
         }
     }
 
-    public static void walkBeatmapsetCache(Consumer<Beatmapset> consumer) throws IOException {
-        walkBeatmapsetCache(BEATMAPSET_JSON_CACHE, (set, modifiedAt) -> consumer.accept(set));
-    }
-
-    public static void walkBeatmapsetCache(Path directory, BiConsumer<Beatmapset, Long> consumer) throws IOException {
-        if (!Files.exists(directory)) return;
-        try (var stream = Files.list(directory)) {
+    public static void walkBeatmapsetCache(BiConsumer<Beatmapset, Long> consumer) throws IOException {
+        if (!Files.exists(BEATMAPSET_JSON_CACHE)) return;
+        try (var stream = Files.list(BEATMAPSET_JSON_CACHE)) {
             for (Path path : (Iterable<Path>) stream.filter(Files::isRegularFile)
                     .filter(p -> p.getFileName().toString().endsWith(".json"))::iterator) {
                 Beatmapset set;
@@ -739,6 +737,29 @@ public class CacheService {
                     continue;
                 }
                 consumer.accept(set, modifiedAt);
+            }
+        }
+    }
+
+    public static void walkScoreCache(BiConsumer<Score, Long> consumer) throws IOException {
+        if (!Files.exists(SCORE_JSON_CACHE)) return;
+        try (var stream = Files.list(SCORE_JSON_CACHE)) {
+            for (Path path : (Iterable<Path>) stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".json"))::iterator) {
+                Score score;
+                long modifiedAt;
+                try (var reader = Files.newBufferedReader(path)) {
+                    score = GSON.fromJson(reader, Score.class);
+                    if (score == null || score.getId() == null) {
+                        LOG.warn("Skipping incomplete score cache file {}", path);
+                        continue;
+                    }
+                    modifiedAt = Files.getLastModifiedTime(path).toMillis();
+                } catch (IOException | com.google.gson.JsonParseException e) {
+                    LOG.warn("Skipping unreadable score cache file {}", path, e);
+                    continue;
+                }
+                consumer.accept(score, modifiedAt);
             }
         }
     }

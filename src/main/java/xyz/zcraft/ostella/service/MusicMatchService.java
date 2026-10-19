@@ -10,7 +10,15 @@ public final class MusicMatchService {
     public static final int RESULT_LIMIT = 100;
 
     public static Result match(String title, String artist) {
-        return match(title, artist, SetMetaStore.candidates(title, artist, CANDIDATE_LIMIT + 1));
+        LinkedList<SetMetaStore.Metadata> candidates = new LinkedList<>();
+
+        final List<SetMetaStore.Metadata> candidateExactTitle = SetMetaStore.candidates(title, artist, CANDIDATE_LIMIT + 1);
+        final List<SetMetaStore.Metadata> candidatePartTitle = SetMetaStore.candidates(title.split(" ")[0], artist, CANDIDATE_LIMIT + 1);
+
+        candidates.addAll(candidateExactTitle);
+        candidates.addAll(candidatePartTitle);
+
+        return match(title, artist, candidates);
     }
 
     public static Result match(String title, String artist, List<SetMetaStore.Metadata> candidates) {
