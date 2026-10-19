@@ -561,7 +561,7 @@ public class UserController {
                         if (current.getRanked() != null
                                 && current.getRanked()
                                 && "RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())
-                                && isModsRankable(current.getMods())
+                                && isModsRankable(current.getMods(), current.getBuildId() == null)
                         ) {
                             entry.setScoreType("Ranked");
                             rankedCount++;
@@ -615,7 +615,7 @@ public class UserController {
             "SO", "AL", "SG", "MU", "NS", "TD"
     );
 
-    private static boolean isModsRankable(List<Mod> mods) {
+    private static boolean isModsRankable(List<Mod> mods, boolean allowCl) {
         if (mods == null || mods.isEmpty()) return true;
 
         return mods.stream().allMatch(m -> {
@@ -623,6 +623,9 @@ public class UserController {
             if (acronym == null) return false;
 
             acronym = acronym.toUpperCase(Locale.ROOT);
+
+            if ("CL".equals(acronym)) return allowCl;
+            
             if (!RANKED_MODS.contains(acronym)) return false;
 
             var settings = m.getSettings();
