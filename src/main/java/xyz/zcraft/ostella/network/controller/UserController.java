@@ -549,10 +549,14 @@ public class UserController {
                     return new DerankedScores(scores.stream().map(Score::getPp).toList(), merged);
                 }).thenApply(scores -> {
                     if (scores.merged().isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    List<CompletableFuture<Score>> futures = new ArrayList<>();
                     for (Score score : scores.merged()) {
-                        router.fillBeatmaps(score);
-                        router.ensurePp(score);
+                        futures.add(executor.enqueueAsync(() -> {
+                            Router.ensurePp(score);
+                            return router.fillBeatmaps(score);
+                        }));
                     }
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
                     return scores;
                 })
                 .thenCompose(data -> {

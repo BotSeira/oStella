@@ -331,24 +331,20 @@ public class Router implements Closeable {
     public Score fillBeatmaps(Score score) {
         score.setBeatmap(
                 CacheService.getBeatmapJsonCache(score.getBeatmapId())
-                        .orElseGet(() -> executor.enqueueAsync(
-                                () -> {
-                                    final BeatmapExtended beatmap = OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId());
-                                    CacheService.tryCache(beatmap);
-                                    return beatmap;
-                                }).join()
-                        )
+                        .orElseGet(() -> {
+                            final BeatmapExtended beatmap = OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId());
+                            CacheService.tryCache(beatmap);
+                            return beatmap;
+                        })
         );
 
         score.setBeatmapset(
                 CacheService.getBeatmapsetJsonCache(score.getBeatmap().getBeatmapsetId())
-                        .orElseGet(() -> executor.enqueueAsync(
-                                () -> {
-                                    final Beatmapset beatmapset = OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId());
-                                    CacheService.tryCache(beatmapset);
-                                    return beatmapset;
-                                }).join()
-                        )
+                        .orElseGet(() -> {
+                            final Beatmapset beatmapset = OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId());
+                            CacheService.tryCache(beatmapset);
+                            return beatmapset;
+                        })
         );
 
         return score;
