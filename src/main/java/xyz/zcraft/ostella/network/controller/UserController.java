@@ -7,28 +7,20 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.addpp.BpProjection;
-import xyz.zcraft.ostella.data.ScoreEntry;
-import xyz.zcraft.ostella.data.ScoreCategoryTotals;
-import xyz.zcraft.ostella.data.ScoreFilter;
-import xyz.zcraft.ostella.data.ScoreRecord;
-import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.db.ScoreStore;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
-import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.ScoreListRange;
+import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.whatif.RankPpModel;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
-import xyz.zcraft.osu.model.ModSettings;
-import xyz.zcraft.osu.model.BeatmapExtended;
-import xyz.zcraft.osu.model.Beatmapset;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.User;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
@@ -66,6 +58,24 @@ public class UserController {
         this.executor = router.executor;
         this.whatIfService = router.whatIf;
         this.tokenManager = router.tokenManager;
+    }
+
+    private static List<String> filterLabels(List<ScoreFilter> filters) {
+        return filters.stream().map(ScoreFilter::getDisplayText).toList();
+    }
+
+    /**
+     * These callers fetched /users/{id}/osu; playmode is a preference, not the response ruleset.
+     */
+    static void putRankPpHeaders(Context context, UserExtended user) {
+        context.header("X-User-Id", String.valueOf(user.getId()));
+        var stats = user.getStatistics();
+        if (stats == null || stats.getGlobalRank() == null || stats.getGlobalRank() <= 0
+                || stats.getPp() == null || !Double.isFinite(stats.getPp()) || stats.getPp() <= 0) return;
+        context.header("X-Osu-Ruleset", "osu");
+        context.header("X-Osu-Global-Rank", String.valueOf(stats.getGlobalRank()));
+        context.header("X-Osu-Total-Pp", String.valueOf(stats.getPp()));
+        context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
     }
 
     private RecentBestData filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
@@ -117,24 +127,6 @@ public class UserController {
         return new FilteredScores(entries);
     }
 
-    private static List<String> filterLabels(List<ScoreFilter> filters) {
-        return filters.stream().map(ScoreFilter::getDisplayText).toList();
-    }
-
-    /**
-     * These callers fetched /users/{id}/osu; playmode is a preference, not the response ruleset.
-     */
-    static void putRankPpHeaders(Context context, UserExtended user) {
-        context.header("X-User-Id", String.valueOf(user.getId()));
-        var stats = user.getStatistics();
-        if (stats == null || stats.getGlobalRank() == null || stats.getGlobalRank() <= 0
-                || stats.getPp() == null || !Double.isFinite(stats.getPp()) || stats.getPp() <= 0) return;
-        context.header("X-Osu-Ruleset", "osu");
-        context.header("X-Osu-Global-Rank", String.valueOf(stats.getGlobalRank()));
-        context.header("X-Osu-Total-Pp", String.valueOf(stats.getPp()));
-        context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
-    }
-
     public void getRecentScores(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
         final var range = ScoreListRange.from(context);
@@ -152,7 +144,7 @@ public class UserController {
                             }
 
                             for (Score score : scores) {
-                                router.ensurePp(score);
+                                Router.ensurePp(score);
                             }
 
                             FilteredScores filteredScores = applyFilters(scores, filters, range.start());
@@ -247,7 +239,7 @@ public class UserController {
                             .thenApply(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
                                 for (Score score : scores) {
-                                    router.ensurePp(score);
+                                    Router.ensurePp(score);
                                 }
                                 FilteredScores filteredScores = applyFilters(scores, filters, range.start());
 
@@ -365,8 +357,9 @@ public class UserController {
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
                             .thenApply(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+
                                 for (ScoreEntry entry : data.scores().entries()) {
-                                    router.ensurePp(entry.getScore());
+                                    Router.ensurePp(entry.getScore());
                                 }
 
                                 String extraTitle = "Date range: " + days + (days == 1 ? " Day" : " Days");
@@ -408,7 +401,7 @@ public class UserController {
                             .limit(USER_INFO_DISPLAY_SCORE_COUNT)
                             .toList();
                     for (Score score : displayScores) {
-                        router.ensurePp(score);
+                        Router.ensurePp(score);
                     }
 
                     putRankPpHeaders(context, data.user());
@@ -506,6 +499,13 @@ public class UserController {
     }
 
     private byte[] renderScoreList(ScoreListData data) {
+        SetMetaStore.upsertBeatmapset(
+                data.scores().stream()
+                        .map(ScoreEntry::getScore)
+                        .map(Score::getBeatmapset)
+                        .filter(Objects::nonNull)
+                        .toList()
+        );
         return renderer.renderScores(data.user(), data.scores(), data.filters(), data.title(), data.extraTitle());
     }
 

@@ -9,6 +9,7 @@ import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -244,7 +245,14 @@ public class Router implements Closeable {
             return CompletableFuture.completedFuture(null);
         }
 
-        return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id));
+        return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id))
+                .thenApply(s -> {
+                    Optional.ofNullable(s)
+                            .map(Score::getBeatmapset)
+                            .map(List::of)
+                            .ifPresent(SetMetaStore::upsertBeatmapset);
+                    return s;
+                });
     }
 
     public void renderCustomTemplate(@NotNull Context context) {

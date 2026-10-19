@@ -157,7 +157,6 @@ public class ScoreController {
                             });
                 })
                 .thenCompose(score -> {
-                    if (score.getBeatmap() != null) return CompletableFuture.completedFuture(score);
                     final Optional<BeatmapExtended> beatmapJsonCache = CacheService.getBeatmapJsonCache(score.getBeatmapId());
                     if (beatmapJsonCache.isPresent()) {
                         score.setBeatmap(beatmapJsonCache.get());
@@ -171,7 +170,6 @@ public class ScoreController {
                             });
                 })
                 .thenCompose(score -> {
-                    if (score.getBeatmapset() != null) return CompletableFuture.completedFuture(score);
                     final Optional<Beatmapset> beatmapsetJsonCache = CacheService.getBeatmapsetJsonCache(score.getBeatmap().getBeatmapsetId());
                     if (beatmapsetJsonCache.isPresent()) {
                         score.setBeatmapset(beatmapsetJsonCache.get());

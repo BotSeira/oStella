@@ -7,6 +7,7 @@ import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
 import xyz.zcraft.ostella.data.ScoreType;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.db.data.UserStatRecord;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
@@ -533,7 +534,9 @@ public class OsuAPI {
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
             }
-            return GSON.fromJson(body, Beatmapset.class);
+            final Beatmapset beatmapset = GSON.fromJson(body, Beatmapset.class);
+            SetMetaStore.upsertBeatmapset(beatmapset);
+            return beatmapset;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to get beatmapset id " + setId, e);
         }
@@ -563,7 +566,9 @@ public class OsuAPI {
             if (JsonParser.parseString(body).getAsJsonObject().has("error")) {
                 return null;
             }
-            return GSON.fromJson(body, Beatmapset.class);
+            final Beatmapset beatmapset = GSON.fromJson(body, Beatmapset.class);
+            SetMetaStore.upsertBeatmapset(beatmapset);
+            return beatmapset;
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to get beatmapset for beatmap id " + beatmapId, e);
         }

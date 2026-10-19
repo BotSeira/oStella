@@ -5,15 +5,12 @@ import xyz.zcraft.ostella.util.MusicMetaUtil;
 import xyz.zcraft.osu.model.Beatmapset;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class SetMetaStore {
     private static final int IMPORT_BATCH_SIZE = 250;
@@ -72,12 +69,16 @@ public class SetMetaStore {
         }
     }
 
-    public static int upsertBeatmapset(List<Beatmapset> sets) {
-        return upsertBeatmapset(sets, System.currentTimeMillis());
+    public static void upsertBeatmapset(Beatmapset set) {
+        upsertBeatmapset(List.of(set), System.currentTimeMillis());
     }
 
-    public static int upsertBeatmapset(List<Beatmapset> sets, long observedAt) {
-        return upsertObserved(sets.stream().map(set -> new ObservedSet(set, observedAt)).toList());
+    public static void upsertBeatmapset(List<Beatmapset> sets) {
+        upsertBeatmapset(sets, System.currentTimeMillis());
+    }
+
+    public static void upsertBeatmapset(List<Beatmapset> sets, long observedAt) {
+        upsertObserved(sets.stream().map(set -> new ObservedSet(set, observedAt)).toList());
     }
 
     private static int upsertObserved(List<ObservedSet> sets) {

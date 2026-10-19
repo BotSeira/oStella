@@ -9,6 +9,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 import xyz.zcraft.ostella.data.SearchResultItem;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -243,6 +244,7 @@ public class BeatmapsetController {
 
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.searchBeatmapset(tokenManager.getTokenData(), query))
                 .thenApply(result -> {
+                    SetMetaStore.upsertBeatmapset(result);
                     if (result == null || result.isEmpty()) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
                     final List<SearchResultItem> list = result.stream().map(SearchResultItem::fromBeatmapset).toList();
                     final var ids = list.stream().map(SearchResultItem::beatmapsetId).map(String::valueOf).toList();
