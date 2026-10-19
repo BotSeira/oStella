@@ -18,14 +18,15 @@ public final class MusicMatchService {
         candidates.addAll(candidateExactTitle);
         candidates.addAll(candidatePartTitle);
 
-        return match(title, artist, candidates);
+        return match(title, artist, candidates.stream().distinct().toList());
     }
 
     public static Result match(String title, String artist, List<SetMetaStore.Metadata> candidates) {
-        String titleKey = MusicMetaUtil.normalize(title);
-        String artistKey = MusicMetaUtil.normalize(artist);
+        String titleBase = MusicMetaUtil.baseTitle(title);
+        String titleNormalized = MusicMetaUtil.normalize(title);
+        String artistNormalized = MusicMetaUtil.normalize(artist);
 
-        if (titleKey.isEmpty()) throw new IllegalArgumentException("Title must contain letters or numbers");
+        if (titleNormalized.isEmpty()) throw new IllegalArgumentException("Title must contain letters or numbers");
 
         boolean truncated = candidates.size() > CANDIDATE_LIMIT;
 
@@ -36,28 +37,29 @@ public final class MusicMatchService {
 
             Set<String> titles = keys(candidate.title(), candidate.titleUnicode());
 
-            boolean exactTitle = titles.contains(titleKey);
+            boolean exactTitle = titles.contains(titleNormalized);
             boolean baseTitle = titles.stream()
-                    .anyMatch(t -> MusicMetaUtil.baseTitle(t).equals(MusicMetaUtil.baseTitle(titleKey)));
+                    .anyMatch(t -> MusicMetaUtil.baseTitle(t).equals(titleBase));
 
             if (!exactTitle && !baseTitle) continue;
 
             Set<String> artists = keys(candidate.artist(), candidate.artistUnicode());
 
-            boolean exactArtist = !artistKey.isEmpty() && artists.contains(artistKey);
-            boolean sharedArtistCredit = !artistKey.isEmpty() && !exactArtist && artists.stream()
-                    .anyMatch(a -> containsArtistCredit(artistKey, a));
-            double artistSimilarity = artistKey.isEmpty() ? 0 : artists.stream()
-                    .mapToDouble(a -> similarity(artistKey, a)).max().orElse(0);
+            boolean exactArtist = !artistNormalized.isEmpty() && artists.contains(artistNormalized);
+            boolean sharedArtistCredit = !artistNormalized.isEmpty() && !exactArtist && artists.stream()
+                    .anyMatch(a -> containsArtistCredit(artistNormalized, a));
+            double artistSimilarity = artistNormalized.isEmpty() ? 0 : artists.stream()
+                    .mapToDouble(a -> similarity(artistNormalized, a)).max().orElse(0);
 
             double allowedEdits = Math.max(0.85, (int)Math.floor(0.15 * candidate.artistUnicode().length())) * (candidates.size() == 1 ? 0.5 : 1.0);
-            if (!artistKey.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits) continue;
+            if (!artistNormalized.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits)
+                continue;
 
             boolean exact = exactTitle && exactArtist;
             String reason = exact ? "exact_title_and_artist"
                     : !exactTitle ? "length_variant_requires_review"
                     : sharedArtistCredit ? "shared_artist_credit_requires_review"
-                    : artistKey.isEmpty() ? "title_only_requires_review" : "similar_artist_requires_review";
+                    : artistNormalized.isEmpty() ? "title_only_requires_review" : "similar_artist_requires_review";
 
             double score = exact ? 1.0 : sharedArtistCredit ? (exactTitle ? 0.95 : 0.69)
                     : (exactTitle ? 0.7 : 0.5) + 0.2 * artistSimilarity;
@@ -79,7 +81,10 @@ public final class MusicMatchService {
     }
 
     private static Set<String> keys(String primary, String unicode) {
-        Set<String> keys = new HashSet<>(List.of(MusicMetaUtil.normalize(primary), MusicMetaUtil.normalize(unicode)));
+        Set<String> keys = new HashSet<>(List.of(
+                MusicMetaUtil.normalize(primary), MusicMetaUtil.normalize(unicode),
+                MusicMetaUtil.baseTitle(primary), MusicMetaUtil.baseTitle(unicode)
+        ));
         keys.remove("");
         return keys;
     }
