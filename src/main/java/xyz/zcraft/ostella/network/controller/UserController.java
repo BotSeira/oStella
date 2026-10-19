@@ -8,6 +8,7 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.addpp.BpProjection;
 import xyz.zcraft.ostella.data.ScoreEntry;
+import xyz.zcraft.ostella.data.ScoreCategoryTotals;
 import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreRecord;
 import xyz.zcraft.ostella.data.ScoreType;
@@ -18,6 +19,7 @@ import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.util.ScoreListRange;
 import xyz.zcraft.ostella.whatif.RankPpModel;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
@@ -64,30 +66,6 @@ public class UserController {
         this.executor = router.executor;
         this.whatIfService = router.whatIf;
         this.tokenManager = router.tokenManager;
-    }
-
-    private static int requireScoreListLimit(Context context) {
-        return requireScoreListLimit(context, "n");
-    }
-
-    private static int requireScoreListLimit(Context context, String parameter) {
-        int limit = requirePositiveInt(context, parameter);
-        if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
-            throw new ApiException(
-                    ErrorCode.ILLEGAL_ARGUMENT,
-                    "Score limit must not exceed " + OsuAPI.MAX_USER_SCORES_LIMIT
-            );
-        }
-        return limit;
-    }
-
-    private static int requireScoreListStart(Context context, int endPosition) {
-        String startParam = context.queryParam("start");
-        int start = startParam == null ? 1 : requirePositiveInt(context, "start");
-        if (start > endPosition) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Score range start must not exceed its end");
-        }
-        return start;
     }
 
     private RecentBestData filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
@@ -159,14 +137,13 @@ public class UserController {
 
     public void getRecentScores(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireScoreListLimit(context);
-        final int start = requireScoreListStart(context, n);
+        final var range = ScoreListRange.from(context);
         final boolean fail = requireBoolean(context, "fail", false);
         final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
 
         final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, type, n - start + 1, start - 1)
+                        tokenManager.getTokenData(), u, type, range.count(), range.offset())
                 )
                 .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
                         .thenApply(user -> {
@@ -178,7 +155,7 @@ public class UserController {
                                 router.ensurePp(score);
                             }
 
-                            FilteredScores filteredScores = applyFilters(scores, filters, start);
+                            FilteredScores filteredScores = applyFilters(scores, filters, range.start());
                             return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Recent Scores", null);
                         }))
                 .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
@@ -255,15 +232,14 @@ public class UserController {
 
     public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireScoreListLimit(context);
-        final int start = requireScoreListStart(context, n);
+        final var range = ScoreListRange.from(context);
         final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
         final boolean hasUrFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.UR);
         final boolean hasTypeFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.TYPE);
         final AtomicInteger filteredForNoReplay = new AtomicInteger(0);
         final AtomicInteger filteredForError = new AtomicInteger(0);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, ScoreType.BEST, n - start + 1, start - 1
+                        tokenManager.getTokenData(), u, ScoreType.BEST, range.count(), range.offset()
                 ))
                 .thenCompose(scores -> {
                     if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -273,7 +249,7 @@ public class UserController {
                                 for (Score score : scores) {
                                     router.ensurePp(score);
                                 }
-                                FilteredScores filteredScores = applyFilters(scores, filters, start);
+                                FilteredScores filteredScores = applyFilters(scores, filters, range.start());
 
                                 filteredScores.entries()
                                         .forEach(e -> {
@@ -536,14 +512,15 @@ public class UserController {
     private byte[] renderDerankedBest(DerankedBestData data) {
         return renderer.renderDerankedBest(
                 data.user(), data.scores(), data.newGlobalRank(), data.newPp(),
-                data.counts(), data.ppCounts(), data.scoreTypes(), data.start()
+                data.counts(), data.ppCounts()
         );
     }
 
     public void getDerankedBest(@NotNull Context ctx) {
         final long u = requirePathLong(ctx, "userId");
-        final int endPosition = requireScoreListLimit(ctx, "end");
-        final int start = requireScoreListStart(ctx, endPosition);
+        final var range = ScoreListRange.from(ctx);
+        final int endPosition = range.end();
+        final int start = range.start();
 
         ctx.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
@@ -560,7 +537,7 @@ public class UserController {
                 .thenCompose(data -> {
                     var scores = data.merged().stream()
                             .sorted(Comparator.comparing(Score::getPp).reversed()).toList();
-                    List<String> scoreTypes = new ArrayList<>(scores.size());
+                    List<ScoreEntry> entries = new ArrayList<>(scores.size());
 
                     int rankedCount = 0;
                     int unrankedCount = 0;
@@ -572,6 +549,8 @@ public class UserController {
 
                     for (int i = 0; i < scores.size(); i++) {
                         final Score current = scores.get(i);
+                        final ScoreEntry entry = new ScoreEntry(i + 1, current);
+                        entries.add(entry);
                         final Score.Weight weight = new Score.Weight();
                         final double percentage = Math.pow(0.95, i);
                         final double scorePp = current.getPp() * percentage;
@@ -581,27 +560,27 @@ public class UserController {
 
                         if (current.getRanked() != null && current.getRanked()
                                 && "RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())) {
-                            scoreTypes.add("Ranked");
+                            entry.setScoreType("Ranked");
                             rankedCount++;
                             rankedPp += scorePp;
                         } else if (current.getId() < 0) {
-                            scoreTypes.add("Local");
+                            entry.setScoreType("Local");
                             localCount++;
                             localPp += scorePp;
                         } else {
-                            scoreTypes.add("Unranked");
+                            entry.setScoreType("Unranked");
                             unrankedCount++;
                             unrankedPp += scorePp;
                         }
                     }
 
-                    final List<Integer> scoreCounts = List.of(rankedCount, unrankedCount, localCount);
-                    final List<Double> ppCounts = List.of(rankedPp, unrankedPp, localPp);
+                    final var scoreCounts = new ScoreCategoryTotals<>(rankedCount, unrankedCount, localCount);
+                    final var ppCounts = new ScoreCategoryTotals<>(rankedPp, unrankedPp, localPp);
 
                     if (start > scores.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     final int end = Math.min(scores.size(), endPosition);
-                    final List<Score> rangedScores = scores.subList(start - 1, end);
-                    ctx.header("X-Score-Ids", rangedScores.stream().map(Score::getId)
+                    final List<ScoreEntry> rangedScores = entries.subList(start - 1, end);
+                    ctx.header("X-Score-Ids", rangedScores.stream().map(ScoreEntry::getScore).map(Score::getId)
                             .map(String::valueOf).collect(Collectors.joining(",")));
 
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
@@ -620,8 +599,7 @@ public class UserController {
                                 }
                                 putRankPpHeaders(ctx, user);
                                 return new DerankedBestData(
-                                        user, rangedScores, newRank, newPp, scoreCounts, ppCounts,
-                                        scoreTypes.subList(start - 1, end), start
+                                        user, rangedScores, newRank, newPp, scoreCounts, ppCounts
                                 );
                             });
                 })
@@ -683,8 +661,8 @@ public class UserController {
     }
 
     private record DerankedBestData(
-            UserExtended user, List<Score> scores, Long newGlobalRank, double newPp,
-            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes, int start
+            UserExtended user, List<ScoreEntry> scores, Long newGlobalRank, double newPp,
+            ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts
     ) {
     }
 

@@ -211,26 +211,24 @@ public class RenderService implements AutoCloseable {
     }
 
     public byte[] renderDerankedBest(
-            UserExtended user, List<Score> scores, long newRank, double newPp,
-            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes, int start
+            UserExtended user, List<ScoreEntry> scores, long newRank, double newPp,
+            ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts
     ) {
         Context ctx = createContext();
         ctx.setVariable("user", user);
         ctx.setVariable("scores", scores);
         var lazerDifficulties = new MultiplayerDifficultyCalculator("lazer");
         var stableDifficulties = new MultiplayerDifficultyCalculator("stable");
-        ctx.setVariable("scoreStars", scores.stream().map(score -> {
+        ctx.setVariable("scoreStars", scores.stream().map(ScoreEntry::getScore).map(score -> {
             var calculator = score.getLegacyScoreId() != null && score.getLegacyScoreId() > 0
                     ? stableDifficulties : lazerDifficulties;
             return calculator.rating(score, score.getBeatmap(), 0);
         }).toList());
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
-        ctx.setVariable("scoreExtras", scoreTypes);
         ctx.setVariable("newGlobalRank", newRank);
         ctx.setVariable("newPp", newPp);
         ctx.setVariable("counts", counts);
         ctx.setVariable("countsPp", ppCounts);
-        ctx.setVariable("start", start);
 
         String finalHtml = templateEngine.process("deranked-score-list", ctx);
 

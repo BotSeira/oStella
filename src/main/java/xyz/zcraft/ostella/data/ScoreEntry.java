@@ -13,6 +13,10 @@ public final class ScoreEntry {
     private final int bestIndex;
     private final Score score;
 
+    /** Optional classification used by deranked bests. */
+    @Setter
+    private String scoreType;
+
     @NotNull
     @Setter
     private List<String> extras;

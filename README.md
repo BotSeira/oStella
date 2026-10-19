@@ -194,9 +194,18 @@ refresh stale rows. A missing match may indicate incomplete catalogue coverage.
 | GET    | `/users/me`                         | User data                     | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
 | GET    | `/users/me/friends`                 | Friends list for user         | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
 | POST   | `/users/leaderboards`               | User PP leaderboard image     | `{"uids":[user ids]}`                                   | PNG      |
-| GET    | `/users/{userId}/scores/bestof`     | Best-of-N scores image        | path `userId`, query `n` (count)                        | PNG      |
-| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n` (count)                        | PNG      |
+| GET    | `/users/{userId}/scores/bestof`     | Best scores image             | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/deranked-best` | Deranked best scores image  | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
 | GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1)        | PNG      |
+
+All three score-list endpoints accept `n=10` (positions 1 through 10),
+`start=21&end=30` (inclusive positions 21 through 30), or `start=21&n=10`
+(10 scores starting at position 21). Positions must satisfy
+`1 <= start <= end <= 200`; `n` must be between 1 and 200, and `start+n-1`
+must not exceed 200. Do not combine `n` and `end`, or supply `start` alone. Fewer available scores
+produce a shorter list. Filters apply after selecting the range and preserve
+the original position numbers.
 
 ### Hypothetical PP updates
 

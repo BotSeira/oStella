@@ -499,7 +499,7 @@
 <div class="score-type">Bests Deranked</div>
 
 <div class="grid-container">
-    <div class="card" th:each="score, iterstat : ${scores}">
+    <div class="card" th:each="entry, iterstat : ${scores}" th:with="score=${entry.score}">
         <div class="song-cover">
             <div class="rank-badge" th:style="'background:' + ${Scores.getRankBgColor(score)}" th:text="${score.rank}">
                 SS
@@ -519,9 +519,9 @@
                 </div>
             </div>
             <div class="extra-score-info"
-                 th:if="${Scores.shouldShowRankStatus(scoreExtras.get(iterstat.index))}"
-                 th:text="${scoreExtras.get(iterstat.index)}"
-                 th:style="${'background-color: ' + Scores.getScoreRankColor(scoreExtras.get(iterstat.index))}">
+                 th:if="${Scores.shouldShowRankStatus(entry.scoreType)}"
+                 th:text="${entry.scoreType}"
+                 th:style="${'background-color: ' + Scores.getScoreRankColor(entry.scoreType)}">
                 Unranked
             </div>
             <img alt="jacket" class="jacket"
@@ -569,7 +569,7 @@
         </div>
         <div class="score-record" th:style="${Scores.isLocal(score) ? 'font-size: 0.8em;' : ''}">
             <div style="display: flex; gap: 2px; align-items: center;">
-                <span th:text="'#' + ${(iterstat.index + start)}">#1</span>
+                <span th:text="${'#' + entry.bestIndex}">#1</span>
                 <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
                 <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
             </div>
@@ -585,7 +585,7 @@
 
 <!--suppress ThymeleafObsoleteInlineAttributeInspection -->
 <script th:inline="javascript">
-    const values = /*[[${counts}]]*/ [30, 50, 20];
+    const values = [ /*[[${counts.ranked()}]]*/ 30, /*[[${counts.unranked()}]]*/ 50, /*[[${counts.local()}]]*/ 20];
     const colors = ['#36A2EB', '#FF6384', '#FFCE56'];
     const labels = ['Ranked', 'Unranked', 'Local'];
 
@@ -644,7 +644,7 @@
 
 <!--suppress ThymeleafObsoleteInlineAttributeInspection -->
 <script th:inline="javascript">
-    const ppValues = /*[[${countsPp}]]*/ [30, 50, 20] ;
+    const ppValues = [ /*[[${countsPp.ranked()}]]*/ 30, /*[[${countsPp.unranked()}]]*/ 50, /*[[${countsPp.local()}]]*/ 20];
     const ppTotal = ppValues.reduce((a, b) => a + b, 0);
 
     new Chart(document.getElementById('ppRatioChart'), {
