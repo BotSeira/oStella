@@ -151,11 +151,18 @@ public class ScoreController {
                             .header("X-Score-Id", ScoreId.format(score));
                     return score;
                 })
+                .thenCompose(score -> {
+                    if (score.getUser() != null) return CompletableFuture.completedFuture(score);
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), score.getUserId()))
+                            .thenApply(user -> {
+                                score.setUser(user);
+                                return score;
+                            });
+                })
                 .thenCompose(score -> ImageResponse.respond(context, score, this::renderScore, renderer.getRenderExecutor())));
     }
 
     private byte[] renderScore(Score score) {
-        final BeatmapExtended beatmap = score.getBeatmap();
         try {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(ScoreFormatUtil.getBeatmapId(score)));
             final DiffSpec diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
@@ -173,7 +180,7 @@ public class ScoreController {
 
             CacheService.tryCache(score);
 
-            final boolean replayPresent = score.getHasReplay() || CacheService.hasReplayCache(score.getId());
+            final boolean replayPresent = (score.getHasReplay() != null && score.getHasReplay()) || CacheService.hasReplayCache(score.getId());
 
             return renderer.renderScore(score, diffSpec, calPp, replayPresent);
         } catch (ParseException e) {
