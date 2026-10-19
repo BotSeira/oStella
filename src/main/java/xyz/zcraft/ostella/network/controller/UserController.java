@@ -64,7 +64,11 @@ public class UserController {
     }
 
     private static int requireScoreListLimit(Context context) {
-        int limit = requirePositiveInt(context, "n");
+        return requireScoreListLimit(context, "n");
+    }
+
+    private static int requireScoreListLimit(Context context, String parameter) {
+        int limit = requirePositiveInt(context, parameter);
         if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
             throw new ApiException(
                     ErrorCode.ILLEGAL_ARGUMENT,
@@ -529,14 +533,14 @@ public class UserController {
     private byte[] renderDerankedBest(DerankedBestData data) {
         return renderer.renderDerankedBest(
                 data.user(), data.scores(), data.newGlobalRank(), data.newPp(),
-                data.counts(), data.ppCounts(), data.scoreTypes()
+                data.counts(), data.ppCounts(), data.scoreTypes(), data.start()
         );
     }
 
     public void getDerankedBest(@NotNull Context ctx) {
         final long u = requirePathLong(ctx, "userId");
-        final int n = requireScoreListLimit(ctx);
-        final int start = requireScoreListStart(ctx, n);
+        final int endPosition = requireScoreListLimit(ctx, "end");
+        final int start = requireScoreListStart(ctx, endPosition);
 
         ctx.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
@@ -601,7 +605,7 @@ public class UserController {
                     final List<Double> ppCounts = List.of(rankedPp, unrankedPp, localPp);
 
                     if (start > scores.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    final int end = Math.min(scores.size(), start + n - 1);
+                    final int end = Math.min(scores.size(), endPosition);
                     final List<Score> rangedScores = scores.subList(start - 1, end);
                     ctx.header("X-Score-Ids", rangedScores.stream().map(Score::getId)
                             .map(String::valueOf).collect(Collectors.joining(",")));
@@ -623,7 +627,7 @@ public class UserController {
                                 putRankPpHeaders(ctx, user);
                                 return new DerankedBestData(
                                         user, rangedScores, newRank, newPp, scoreCounts, ppCounts,
-                                        scoreTypes.subList(start - 1, end)
+                                        scoreTypes.subList(start - 1, end), start
                                 );
                             });
                 })
@@ -642,7 +646,7 @@ public class UserController {
 
     private record DerankedBestData(
             UserExtended user, List<Score> scores, Long newGlobalRank, double newPp,
-            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes
+            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes, int start
     ) {
     }
 

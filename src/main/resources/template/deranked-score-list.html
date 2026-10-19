@@ -520,7 +520,7 @@
             </div>
             <div class="extra-score-info"
                  th:if="${Scores.shouldShowRankStatus(scoreExtras.get(iterstat.index))}"
-                 th:text="${scoreExtras.get(iterstat.index + 1)}"
+                 th:text="${scoreExtras.get(iterstat.index)}"
                  th:style="${'background-color: ' + Scores.getScoreRankColor(scoreExtras.get(iterstat.index))}">
                 Unranked
             </div>
@@ -569,7 +569,7 @@
         </div>
         <div class="score-record">
             <div style="display: flex; gap: 8px; align-items: center;">
-                <span th:text="${'#' + iterstat.index}">#1</span>
+                <span th:text="${'#' + (iterstat.index + start)}">#1</span>
                 <div class="score-id" th:text="${Scores.getDisplayScoreId(score)}">S1234567890</div>
                 <div class="replay-icon" th:if="${Scores.replayPresent(score)}">▶</div>
             </div>

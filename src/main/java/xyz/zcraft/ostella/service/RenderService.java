@@ -212,7 +212,7 @@ public class RenderService implements AutoCloseable {
 
     public byte[] renderDerankedBest(
             UserExtended user, List<Score> scores, long newRank, double newPp,
-            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes
+            List<Integer> counts, List<Double> ppCounts, List<String> scoreTypes, int start
     ) {
         Context ctx = createContext();
         ctx.setVariable("user", user);
@@ -230,6 +230,7 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("newPp", newPp);
         ctx.setVariable("counts", counts);
         ctx.setVariable("countsPp", ppCounts);
+        ctx.setVariable("start", start);
 
         String finalHtml = templateEngine.process("deranked-score-list", ctx);
 
