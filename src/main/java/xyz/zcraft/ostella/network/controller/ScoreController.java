@@ -159,6 +159,22 @@ public class ScoreController {
                                 return score;
                             });
                 })
+                .thenCompose(score -> {
+                    if (score.getBeatmap() != null) return CompletableFuture.completedFuture(score);
+                    return executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId()))
+                            .thenApply(beatmap -> {
+                                score.setBeatmap(beatmap);
+                                return score;
+                            });
+                })
+                .thenCompose(score -> {
+                    if (score.getBeatmapset() != null) return CompletableFuture.completedFuture(score);
+                    return executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId()))
+                            .thenApply(beatmapset -> {
+                                score.setBeatmapset(beatmapset);
+                                return score;
+                            });
+                })
                 .thenCompose(score -> ImageResponse.respond(context, score, this::renderScore, renderer.getRenderExecutor())));
     }
 
