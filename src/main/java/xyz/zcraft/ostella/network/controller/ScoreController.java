@@ -147,7 +147,7 @@ public class ScoreController {
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    context.header("X-Beatmap-Id", String.valueOf(score.getBeatmap().getId()))
+                    context.header("X-Beatmap-Id", String.valueOf(ScoreFormatUtil.getBeatmapId(score)))
                             .header("X-Score-Id", ScoreId.format(score));
                     return score;
                 })

@@ -165,4 +165,14 @@ public class ScoreFormatUtil {
         if (status == null) return false;
         return !status.equalsIgnoreCase("RANKED");
     }
+
+    public static long getBeatmapId(Score score) {
+        if (score.getBeatmapId() != null) {
+            return score.getBeatmapId();
+        } else if (score.getBeatmap() != null && score.getBeatmap().getId() != null) {
+            return score.getBeatmap().getId();
+        }
+
+        throw new IllegalArgumentException("Score has no valid beatmap ID");
+    }
 }
