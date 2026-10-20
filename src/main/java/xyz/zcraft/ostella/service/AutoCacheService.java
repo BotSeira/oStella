@@ -125,9 +125,14 @@ public final class AutoCacheService implements AutoCloseable {
             if (score.getBeatmap() == null) continue;
             Long map = score.getBeatmap().getId();
             Long set = score.getBeatmap().getBeatmapsetId();
+            Long s = score.getId();
             if (score.getBeatmapset() != null) set = score.getBeatmapset().getId();
             for (Type type : enabled) {
-                Long id = type == Type.BEATMAP || type == Type.BEATMAP_JSON ? map : set;
+                Long id = switch (type) {
+                    case BEATMAP, BEATMAP_JSON -> map;
+                    case BEATMAPSET, BEATMAPSET_JSON -> set;
+                    case SCORE_JSON -> s;
+                };
                 if (id != null && id > 0) unique.add(new Target(type, id));
             }
         }
