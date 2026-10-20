@@ -600,13 +600,13 @@
 
             <div class="data-sub">
                 <span class="if-local"
-                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.LOCAL}">▣</span>
+                      th:if="${Scores.getRankStatus(score).isLocal()}">▣</span>
                 <span class="if-ranked"
-                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.RANKED}">▲</span>
+                      th:if="${Scores.getRankStatus(score).isRanked()}">▲</span>
                 <span class="if-unranked"
-                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.UNRANKED}">×</span>
+                      th:if="${Scores.getRankStatus(score).isUnranked()}">×</span>
                 <span class="if-loved"
-                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.LOVED}">❤</span>
+                      th:if="${Scores.getRankStatus(score).isLoved()}">❤</span>
                 <span style="letter-spacing: 2px; margin-left: 10px; font-weight: bold;"
                       th:if="${diff != null}"
                       th:text="${#numbers.formatInteger(score.getTotalScore(), 1, 'COMMA')}">

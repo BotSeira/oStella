@@ -268,6 +268,22 @@ public class Scores {
     }
 
     public enum RankStatus {
-        LOCAL, RANKED, UNRANKED, LOVED
+        LOCAL, RANKED, UNRANKED, LOVED;
+
+        public boolean isLocal() {
+            return this == LOCAL;
+        }
+
+        public boolean isRanked() {
+            return this == RANKED;
+        }
+
+        public boolean isUnranked() {
+            return this == UNRANKED;
+        }
+
+        public boolean isLoved() {
+            return this == LOVED;
+        }
     }
 }
