@@ -32,7 +32,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -417,12 +416,8 @@ public class CacheService {
     }
 
     public static Set<Long> cachedScoreUsers() {
-        return cachedScoreUsers(SCORE_JSON_CACHE);
-    }
-
-    static Set<Long> cachedScoreUsers(Path directory) {
-        Set<Long> users = new LinkedHashSet<>();
-        try (Stream<Path> files = Files.list(directory)) {
+        List<Long> users = new ArrayList<>();
+        try (Stream<Path> files = Files.list(CacheService.SCORE_JSON_CACHE)) {
             for (Path path : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
                 try {
                     var score = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
@@ -437,7 +432,8 @@ public class CacheService {
         } catch (IOException e) {
             LOG.warn("Unable to discover auto cache users", e);
         }
-        return users;
+        Collections.shuffle(users);
+        return new LinkedHashSet<>(users);
     }
 
     static void prefetch(AutoCacheService.Type type, long id, TokenData token) {
