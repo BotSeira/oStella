@@ -3,8 +3,8 @@ package xyz.zcraft.ostella.data;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import xyz.zcraft.ostella.network.controller.ScoreController;
 import xyz.zcraft.ostella.service.CacheService;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
@@ -24,14 +24,14 @@ import java.util.regex.Pattern;
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
             "(?i)^(acc(?:uracy)?|combo|pp|time|length|len|star|stars|sr|bpm|miss|misses|score|mod|mods|rank|replay"
-                    + "|any|title|artist|mapper|genre|language|tag|source|nsfw|video|storyboard|fullcombo|ar|od|cs|hp|type|ur)"
+                    + "|any|title|artist|mapper|genre|language|tag|source|nsfw|video|storyboard|fullcombo|ar|od|cs|hp|type|ur|client)"
                     + "(>=|<=|!=|!~|>|<|=|~)(.+)$"
     );
     private static final Pattern DURATION_PATTERN = Pattern.compile("(?i)^(?:(\\d+)m)?(?:(\\d+(?:\\.\\d+)?)s)?$");
     private static final Pattern REGEX_FILTER_PREFIX_PATTERN = Pattern.compile(
             "(?i)^(?:any|title|artist|mapper|genre|language)(?:=|!=)$"
     );
-
+    private static final Logger LOG = LogManager.getLogger(ScoreFilter.class);
     @Getter
     private final Field field;
     @Getter
@@ -316,7 +316,7 @@ public final class ScoreFilter {
             case SCORE, AR, CS, HP, OD -> formatNumber(value);
             case UR -> formatNumber(value, 2);
             case MODS, RANK, ANY, TITLE, ARTIST, MAPPER, GENRE, LANGUAGE, TAG, TYPE, SOURCE,
-                 NSFW, VIDEO, STORYBOARD, FULL_COMBO, REPLAY ->
+                 NSFW, VIDEO, STORYBOARD, FULL_COMBO, REPLAY, CLIENT ->
                     throw new IllegalStateException("Text filter has no numeric value");
         };
     }
@@ -327,7 +327,6 @@ public final class ScoreFilter {
         }
         return String.format(Locale.ROOT, "%s", value);
     }
-    private static final Logger LOG = LogManager.getLogger(ScoreFilter.class);
 
     private static String formatNumber(double value, int digits) {
         final String format = "%." + digits + "f";
@@ -450,8 +449,14 @@ public final class ScoreFilter {
                     && compareText(beatmapset.getTags());
             case TYPE -> beatmapAnalysis != null && compareType(beatmapAnalysis);
             case SOURCE -> beatmapset != null && compareText(beatmapset.getSource());
+            case CLIENT -> compareClient(score);
             default -> throw new IllegalStateException("Unexpected value: " + field);
         };
+    }
+
+    private boolean compareClient(Score score) {
+        return (Scores.isStable(score) && "STABLE".equalsIgnoreCase(textValues.stream().findFirst().orElseThrow()))
+                || (!Scores.isStable(score) && "LAZER".equalsIgnoreCase(textValues.stream().findFirst().orElseThrow()));
     }
 
     private boolean compareType(BeatmapPatternAnalysis analysis) {
@@ -587,7 +592,8 @@ public final class ScoreFilter {
         VIDEO("Video"),
         STORYBOARD("Storyboard"),
         REPLAY("Replay"),
-        FULL_COMBO("Full combo");
+        FULL_COMBO("Full combo"),
+        CLIENT("Client");
 
         private final String label;
 
@@ -626,6 +632,7 @@ public final class ScoreFilter {
                 case "storyboard" -> STORYBOARD;
                 case "replay" -> REPLAY;
                 case "fullcombo" -> FULL_COMBO;
+                case "client" -> CLIENT;
                 default -> throw new IllegalArgumentException("Unknown filter field: " + value);
             };
         }
