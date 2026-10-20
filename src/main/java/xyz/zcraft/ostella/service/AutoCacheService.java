@@ -112,7 +112,7 @@ public final class AutoCacheService implements AutoCloseable {
             nextScan = now + Duration.ofMinutes(5).toMillis();
             Set<Long> currentUsers = backend.users();
             refreshed.keySet().retainAll(currentUsers);
-            currentUsers.stream().filter(id -> now >= refreshed.getOrDefault(id, 0L)).forEach(users::addLast);
+            currentUsers.stream().filter(id -> now >= refreshed.getOrDefault(id, 0L) && !users.contains(id)).forEach(users::addLast);
         }
         if (users.isEmpty()) return;
         ApiActivity.checkBackground();
