@@ -79,7 +79,7 @@ public class UserController {
         context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
     }
 
-    private RecentBestData filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
+    static RecentBestData filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
         double currentPp = 0;
         List<ScoreEntry> entries = new ArrayList<>();
         Set<Long> newIds = new HashSet<>();
@@ -98,7 +98,8 @@ public class UserController {
 
         double beforePp = 0;
         int weightIndex = 1;
-        for (int index = 0; index < bestScores.size() && weightIndex < 100; index++) {
+        // Reweight the same fetched BP window used by currentPp, including its tail.
+        for (int index = 0; index < bestScores.size(); index++) {
             Score score = bestScores.get(index);
             if (!newIds.contains(score.getId())) {
                 beforePp += score.getPp() * Math.pow(0.95, weightIndex - 1);
@@ -654,7 +655,7 @@ public class UserController {
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
     }
 
-    private record RecentBestData(FilteredScores scores, Double ppChange) {
+    record RecentBestData(FilteredScores scores, Double ppChange) {
     }
 
     private record DerankedScores(List<Double> officialPp, List<Score> merged) {
