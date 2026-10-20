@@ -3,6 +3,8 @@ package xyz.zcraft.ostella.service;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.db.ScoreStore;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.ApiActivity;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.ostella.util.TokenManager;
@@ -120,6 +122,8 @@ public final class AutoCacheService implements AutoCloseable {
         if (recents == null) throw new IllegalStateException("Missing recent-score response");
         List<Score> scores = new ArrayList<>(bests);
         scores.addAll(recents);
+        ScoreStore.upsertScores(scores);
+        SetMetaStore.upsertBeatmapset(scores.stream().map(Score::getBeatmapset).toList());
         Set<Target> unique = new LinkedHashSet<>();
         for (Score score : scores) {
             if (score.getBeatmap() == null) continue;
