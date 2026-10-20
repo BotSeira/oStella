@@ -132,10 +132,12 @@ public final class AutoCacheService implements AutoCloseable {
             Long s = score.getId();
             if (score.getBeatmapset() != null) set = score.getBeatmapset().getId();
             for (Type type : enabled) {
+                if (type == Type.SCORE_FETCH) continue;
                 Long id = switch (type) {
                     case BEATMAP, BEATMAP_JSON -> map;
                     case BEATMAPSET, BEATMAPSET_JSON -> set;
                     case SCORE_JSON -> s;
+                    default -> throw new IllegalStateException("Unexpected value: " + type);
                 };
                 if (id != null && id > 0) unique.add(new Target(type, id));
             }
@@ -157,7 +159,7 @@ public final class AutoCacheService implements AutoCloseable {
     }
 
     public enum Type {
-        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON, SCORE_JSON;
+        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON, SCORE_JSON, SCORE_FETCH;
 
         public static Type parse(String text) {
             try {

@@ -27,7 +27,7 @@ public final class OstellaConsoleProcessor {
             "config", "log", "system", "stop", "import-score-json", "import-set-json"
     );
     private static final Map<String, List<String>> SUB = Map.of(
-            "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json", "score-json"),
+            "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json", "score-json", "score-fetch"),
             "token", List.of("status", "renew"),
             "replay", List.of("status", "job", "delete"),
             "cache", List.of("query", "delete", "get", "fetch", "status", "clear"),
