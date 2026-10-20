@@ -562,7 +562,7 @@ public class UserController {
                         if (current.getRanked() != null
                                 && current.getRanked()
                                 && "RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())
-                                && Scores.isModsRankable(current.getMods(), current.getBuildId() == null)
+                                && Scores.isModsRankable(current)
                         ) {
                             entry.setScoreType("Ranked");
                             rankedCount++;

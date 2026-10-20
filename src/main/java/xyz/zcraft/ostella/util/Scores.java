@@ -75,7 +75,7 @@ public class Scores {
 
     public static boolean isRanked(Score score) {
         return score != null && score.getRanked() != null && score.getRanked() == true
-                && isModsRankable(score.getMods());
+                && isModsRankable(score);
     }
 
 
@@ -86,7 +86,7 @@ public class Scores {
 
         if (!Boolean.TRUE.equals(score.getPassed())
                 || Boolean.FALSE.equals(score.getRanked())
-                || !isModsRankable(score.getMods())
+                || !isModsRankable(score)
                 || score.getBeatmap() == null
                 || score.getBeatmap().getStatus() == null) {
             return RankStatus.UNRANKED;
@@ -207,14 +207,23 @@ public class Scores {
         throw new IllegalArgumentException("Score has no valid beatmap ID");
     }
 
-    public static boolean isModsRankable(List<Mod> mods) {
+    public static boolean isModsRankable(Score score) {
+        if (score == null) return false;
+        return isModsRankable(score.getMods(), score.getBuildId() == null);
+    }
+
+    public static boolean isModsRankable(List<Mod> mods, boolean allowCl) {
         if (mods == null || mods.isEmpty()) return true;
 
         return mods.stream().allMatch(m -> {
             String acronym = m.getAcronym();
             if (acronym == null) return false;
 
+
             acronym = acronym.toUpperCase(Locale.ROOT);
+
+            if ("CL".equals(acronym)) return allowCl;
+
             if (!RANKED_MODS.contains(acronym)) return false;
 
             var settings = m.getSettings();
