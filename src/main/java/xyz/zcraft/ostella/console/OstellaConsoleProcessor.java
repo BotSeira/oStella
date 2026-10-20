@@ -13,21 +13,21 @@ import xyz.zcraft.ostella.network.WebServer;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.VersionInfo;
-import xyz.zcraft.osu.model.Score;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 public final class OstellaConsoleProcessor {
     private static final long STARTED_AT = System.currentTimeMillis();
     private static final List<String> ROOT = List.of(
-            "help", "status", "metrics", "token", "replay", "cache", "autocache", "config", "log", "system", "stop");
+            "help", "status", "metrics", "token", "replay", "cache", "autocache",
+            "config", "log", "system", "stop", "import-score-json", "import-set-json"
+    );
     private static final Map<String, List<String>> SUB = Map.of(
-            "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json"),
+            "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json", "score-json"),
             "token", List.of("status", "renew"),
             "replay", List.of("status", "job", "delete"),
             "cache", List.of("query", "delete", "get", "fetch", "status", "clear"),
@@ -319,7 +319,7 @@ public final class OstellaConsoleProcessor {
 
     private Result autoCache(ConsoleInputParser.ParsedInput input) {
         if (input.size() != 3 || !("on".equalsIgnoreCase(input.value(2)) || "off".equalsIgnoreCase(input.value(2)))) {
-            return Result.error("Usage: autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>");
+            return Result.error("Usage: autocache <beatmapset|beatmapset-json|beatmap|beatmap-json|score-json> <on|off>");
         }
         var type = xyz.zcraft.ostella.service.AutoCacheService.Type.parse(input.value(1));
         boolean enabled = "on".equalsIgnoreCase(input.value(2));

@@ -78,6 +78,9 @@ public class Scores {
                 && isModsRankable(score);
     }
 
+    public static boolean isStable(Score score) {
+        return score != null && score.getBuildId() != null;
+    }
 
     public static RankStatus getRankStatus(Score score) {
         if (score == null) return null;

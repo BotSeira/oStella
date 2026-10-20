@@ -43,6 +43,10 @@ public final class AutoCacheService implements AutoCloseable {
                 return CacheService.cachedScoreUsers();
             }
 
+            public List<Score> recent(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.RECENT, 100, offset);
+            }
+
             public List<Score> best(long user, int offset) {
                 return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 100, offset);
             }
@@ -110,8 +114,12 @@ public final class AutoCacheService implements AutoCloseable {
         }
         if (users.isEmpty()) return;
         ApiActivity.checkBackground();
-        List<Score> scores = backend.best(users.getFirst(), offset);
-        if (scores == null) throw new IllegalStateException("Missing best-score response");
+        List<Score> bests = backend.best(users.getFirst(), offset);
+        if (bests == null) throw new IllegalStateException("Missing best-score response");
+        List<Score> recents = backend.recent(users.getFirst(), offset);
+        if (recents == null) throw new IllegalStateException("Missing recent-score response");
+        List<Score> scores = new ArrayList<>(bests);
+        scores.addAll(recents);
         Set<Target> unique = new LinkedHashSet<>();
         for (Score score : scores) {
             if (score.getBeatmap() == null) continue;
@@ -140,7 +148,7 @@ public final class AutoCacheService implements AutoCloseable {
     }
 
     public enum Type {
-        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON;
+        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON, SCORE_JSON;
 
         public static Type parse(String text) {
             try {
@@ -155,6 +163,8 @@ public final class AutoCacheService implements AutoCloseable {
         Set<Long> users();
 
         List<Score> best(long user, int offset);
+
+        List<Score> recent(long user, int offset);
 
         void cache(Type type, long id);
     }

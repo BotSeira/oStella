@@ -452,6 +452,12 @@ public class CacheService {
                         if (value != null) cacheBeatmapsetJson(value);
                     }
                 }
+                case SCORE_JSON -> {
+                    if (getScoreJsonCache(id).isEmpty()) {
+                        var value = OsuAPI.getScore(token, id);
+                        if (value != null) cacheScoreJson(value);
+                    }
+                }
                 case BEATMAP_JSON -> {
                     if (getBeatmapJsonCache(id).isEmpty()) {
                         var value = OsuAPI.getBeatmap(token, id);

@@ -503,6 +503,7 @@
                     <span th:style="'color: ' + ${DiffSpecs.getDiffTextColor(diff)}"
                           th:text="${'★' + Osu.formatStarRating(diff.getStar())}">★6.84</span>
                 </div>
+
                 <span class="spec-diff"
                       th:classappend="${'spec-diff' + DiffSpecs.getDiffChangeClassSuffix(diff.getStar() - score.getBeatmap().getDifficultyRating())}"
                       th:text="${DiffSpecs.getDiffChangeStr(diff.getStar() - score.getBeatmap().getDifficultyRating())}">▲1.23
