@@ -1,8 +1,8 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
 import xyz.zcraft.ostella.data.MultiplayerResultData;
 
-public class MultiplayerFormatUtil {
+public class Multiplayers {
     public static int getLeftLoseIndicatorCount(MultiplayerResultData result) {
         final var leftScore = result.versusScores().getFirst();
         final var rightScore = result.versusScores().getLast();

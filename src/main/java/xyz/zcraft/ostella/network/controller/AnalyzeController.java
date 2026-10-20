@@ -21,7 +21,7 @@ import xyz.zcraft.ostella.snapshot.SnapshotRenderer;
 import xyz.zcraft.ostella.snapshot.SnapshotRequest;
 import xyz.zcraft.ostella.snapshot.SnapshotScene;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.ModSettings;
@@ -464,10 +464,10 @@ public class AnalyzeController {
                     String simHitResult = simGreat + " / " + simOk + " / " + simMeh + " / " + simMiss;
 
                     boolean doSimMatch =
-                            simGreat == ScoreFormatUtil.getGreatCount(score)
-                                    && simOk == ScoreFormatUtil.getOkCount(score)
-                                    && simMeh == ScoreFormatUtil.getMehCount(score)
-                                    && simMiss == ScoreFormatUtil.getMissCount(score);
+                            simGreat == Scores.getGreatCount(score)
+                                    && simOk == Scores.getOkCount(score)
+                                    && simMeh == Scores.getMehCount(score)
+                                    && simMiss == Scores.getMissCount(score);
 
                     return perfPlusApi.calculate(score)
                             .exceptionally(error -> {

@@ -1,10 +1,9 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
-import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.ModSettings;
 
-public class ModFormatUtil {
+public class Mods {
     public static String getSettingsText(Mod mod) {
         return ModSettings.settingsText(mod);
     }

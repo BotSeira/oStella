@@ -1,4 +1,4 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
 import xyz.zcraft.ostella.data.BeatmapAnalysisData;
 import xyz.zcraft.ostella.network.PerfPlusApi;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class BeatmapFormatUtil {
+public class Beatmaps {
     public static boolean hasLeaderboard(Beatmap beatmap) {
         return Optional.ofNullable(beatmap.getStatus())
                 .map(s -> "RANKED".equalsIgnoreCase(s) || "LOVED".equalsIgnoreCase(s))

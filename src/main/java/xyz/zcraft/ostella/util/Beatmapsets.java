@@ -1,4 +1,4 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
@@ -6,7 +6,7 @@ import xyz.zcraft.osu.model.Beatmapset;
 import java.util.Objects;
 import java.util.Optional;
 
-public class BeatmapsetFormatUtil {
+public class Beatmapsets {
     public static boolean hasTitleUnicode(Beatmapset beatmapset) {
         if (beatmapset == null) return false;
         return !Objects.equals(beatmapset.getTitle(), beatmapset.getTitleUnicode());

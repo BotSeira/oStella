@@ -14,9 +14,7 @@ import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.util.Colors;
-import xyz.zcraft.ostella.util.MiscUtil;
-import xyz.zcraft.ostella.util.format.*;
+import xyz.zcraft.ostella.util.*;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 
@@ -146,25 +144,25 @@ public class RenderService implements AutoCloseable {
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("Colors", new Colors());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Beatmaps", new BeatmapFormatUtil());
+        ctx.setVariable("Beatmaps", new Beatmaps());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Beatmapsets", new BeatmapsetFormatUtil());
+        ctx.setVariable("Beatmapsets", new Beatmapsets());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Scores", new ScoreFormatUtil());
+        ctx.setVariable("Scores", new Scores());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Users", new UserFormatUtil());
+        ctx.setVariable("Users", new Users());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Mods", new ModFormatUtil());
+        ctx.setVariable("Mods", new Mods());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("DiffSpecs", new DiffSpecFormatUtil());
+        ctx.setVariable("DiffSpecs", new DiffSpecs());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Osu", new OsuFormatUtil());
+        ctx.setVariable("Osu", new Formats());
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("cache", new CacheService());
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("MiscUtil", new MiscUtil());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("MPs", new MultiplayerFormatUtil());
+        ctx.setVariable("MPs", new Multiplayers());
         return ctx;
     }
 
@@ -173,8 +171,8 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("user", user);
         ctx.setVariable("scores", topScores.stream().limit(5).toList());
         ctx.setVariable("performance", UserPerformanceSummary.from(user, topScores));
-        ctx.setVariable("activity", UserFormatUtil.getRecentMonthlyActivity(user));
-        ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
+        ctx.setVariable("activity", Users.getRecentMonthlyActivity(user));
+        ctx.setVariable("change", Users.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
         String finalHtml = templateEngine.process("user-info", ctx);
@@ -201,7 +199,7 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());
         ctx.setVariable("type", title);
-        ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
+        ctx.setVariable("change", Users.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
         ctx.setVariable("extraTitle", extraTitle);
 

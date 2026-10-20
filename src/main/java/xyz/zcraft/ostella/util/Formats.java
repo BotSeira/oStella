@@ -1,14 +1,8 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
 import java.util.Locale;
 
-/**
- * Formats values using the same display rules as the osu! game client.
- */
-public final class OsuFormatUtil {
-    public OsuFormatUtil() {
-    }
-
+public final class Formats {
     public static String formatStarRating(double starRating) {
         return String.format(Locale.ROOT, "%.2f", floorToDecimalDigits(starRating, 2));
     }

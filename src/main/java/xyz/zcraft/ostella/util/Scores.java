@@ -1,14 +1,23 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.ostella.util.Colors;
-import xyz.zcraft.ostella.util.MiscUtil;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 
-public class ScoreFormatUtil {
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+public class Scores {
+    public static final Set<String> RANKED_MODS = Set.of(
+            "EZ", "NF", "HT", "DC",
+            "HR", "SD", "PF", "DT", "NC", "HD", "TC", "FL", "BL", "AC",
+            "SO", "AL", "SG", "MU", "NS", "TD"
+    );
+
     public static boolean hasExtraHitStats(Score score) {
         if (score == null) {
             return false;
@@ -27,19 +36,14 @@ public class ScoreFormatUtil {
         return MiscUtil.getRelativeTimeAgo(score.getEndedAt());
     }
 
-    public static String getScoreStatus(Score score) {
-        if (ScoreId.isLocal(score)) {
-            return "LOC";
-        }
-        if (score.getRanked() == false) {
-            return "×";
-        }
-        if ("LOVED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
-            return "❤";
-        } else if ("RANKED".equalsIgnoreCase(score.getBeatmap().getStatus())) {
-            return "▲";
-        }
-        return "?";
+    public static String getScoreStatusSymbol(Score score) {
+        return switch (getRankStatus(score)) {
+            case UNRANKED -> "×";
+            case RANKED -> "▲";
+            case LOCAL -> "LOC";
+            case LOVED -> "❤";
+            case null -> "?";
+        };
     }
 
     public static boolean isLocal(Score score) {
@@ -68,6 +72,33 @@ public class ScoreFormatUtil {
     public static String getRankBgColor(Score score) {
         return score == null ? "#d0d0d0" : Colors.getScoreRankBgColor(score.getRank());
     }
+
+    public static boolean isRanked(Score score) {
+        return score != null && score.getRanked() != null && score.getRanked() == true
+                && isModsRankable(score.getMods());
+    }
+
+
+    public static RankStatus getRankStatus(Score score) {
+        if (score == null) return null;
+
+        if (isLocal(score)) return RankStatus.LOCAL;
+
+        if (!Boolean.TRUE.equals(score.getPassed())
+                || Boolean.FALSE.equals(score.getRanked())
+                || !isModsRankable(score.getMods())
+                || score.getBeatmap() == null
+                || score.getBeatmap().getStatus() == null) {
+            return RankStatus.UNRANKED;
+        }
+
+        return switch (score.getBeatmap().getStatus().toUpperCase(Locale.ROOT)) {
+            case "RANKED", "APPROVED" -> RankStatus.RANKED;
+            case "LOVED" -> RankStatus.LOVED;
+            default -> RankStatus.UNRANKED;
+        };
+    }
+
 
     public static String getRankText(Score score) {
         if ("XH".equalsIgnoreCase(score.getRank())) {
@@ -174,5 +205,57 @@ public class ScoreFormatUtil {
         }
 
         throw new IllegalArgumentException("Score has no valid beatmap ID");
+    }
+
+    public static boolean isModsRankable(List<Mod> mods) {
+        if (mods == null || mods.isEmpty()) return true;
+
+        return mods.stream().allMatch(m -> {
+            String acronym = m.getAcronym();
+            if (acronym == null) return false;
+
+            acronym = acronym.toUpperCase(Locale.ROOT);
+            if (!RANKED_MODS.contains(acronym)) return false;
+
+            var settings = m.getSettings();
+
+            return switch (acronym) {
+                case "HT" -> hasDefaultSpeed(settings, 0.75, true);
+                case "DC" -> hasDefaultSpeed(settings, 0.75, false);
+                case "DT" -> hasDefaultSpeed(settings, 1.5, true);
+                case "NC" -> hasDefaultSpeed(settings, 1.5, false);
+
+                case "SD", "PF", "AC", "MU", "NS" -> true;
+
+                default -> settings == null || settings.isEmpty();
+            };
+        });
+    }
+
+    public static boolean hasDefaultSpeed(
+            Map<String, ?> settings,
+            double defaultSpeed,
+            boolean allowPitch
+    ) {
+        if (settings == null || settings.isEmpty()) return true;
+
+        for (String key : settings.keySet()) {
+            if (!key.equals("speed_change") && !(allowPitch && key.equals("adjust_pitch"))) {
+                return false;
+            }
+        }
+
+        Object speed = settings.get("speed_change");
+        if (speed == null) return true;
+
+        try {
+            return Double.compare(Double.parseDouble(speed.toString()), defaultSpeed) == 0;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    public enum RankStatus {
+        LOCAL, RANKED, UNRANKED, LOVED
     }
 }

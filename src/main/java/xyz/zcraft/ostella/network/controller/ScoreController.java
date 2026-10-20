@@ -19,7 +19,7 @@ import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.RequestUtil;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
-import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
@@ -144,7 +144,7 @@ public class ScoreController {
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    context.header("X-Beatmap-Id", String.valueOf(ScoreFormatUtil.getBeatmapId(score)))
+                    context.header("X-Beatmap-Id", String.valueOf(Scores.getBeatmapId(score)))
                             .header("X-Score-Id", ScoreId.format(score));
                     return score;
                 })
@@ -187,7 +187,7 @@ public class ScoreController {
 
     private byte[] renderScore(Score score) {
         try {
-            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(ScoreFormatUtil.getBeatmapId(score)));
+            final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(Scores.getBeatmapId(score)));
             final DiffSpec diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
 
             Double calPp = null;
@@ -441,7 +441,7 @@ public class ScoreController {
 
                             for (int i = 0; i < scores.size(); i++) {
                                 final Score score = scores.get(i);
-                                if (!ScoreFormatUtil.replayPresent(score)) {
+                                if (!Scores.replayPresent(score)) {
                                     continue;
                                 }
 
@@ -509,7 +509,7 @@ public class ScoreController {
             for (int i = 0; i < scores.size(); i++) {
                 final Score score = scores.get(i);
 
-                if (!ScoreFormatUtil.replayPresent(score)) {
+                if (!Scores.replayPresent(score)) {
                     continue;
                 }
 

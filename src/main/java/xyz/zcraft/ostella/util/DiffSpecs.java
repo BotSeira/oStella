@@ -1,9 +1,8 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
-import xyz.zcraft.ostella.util.Colors;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 
-public class DiffSpecFormatUtil {
+public class DiffSpecs {
     public static String getDiffColor(DiffSpec diffSpec) {
         return Colors.getBeatmapDiffColor(diffSpec.getStar());
     }

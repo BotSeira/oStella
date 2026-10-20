@@ -598,12 +598,14 @@
             </div>
 
             <div class="data-sub">
-                <span class="if-local" th:if="${Scores.isLocal(score)}">▣</span>
+                <span class="if-local"
+                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.LOCAL}">▣</span>
                 <span class="if-ranked"
-                      th:if="${!Scores.isLocal(score) && score.getRanked() && score.getBeatmap().getStatus().equalsIgnoreCase('RANKED')}">▲</span>
-                <span class="if-unranked" th:if="${!Scores.isLocal(score) && !(score.getRanked())}">×</span>
+                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.RANKED}">▲</span>
+                <span class="if-unranked"
+                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.UNRANKED}">×</span>
                 <span class="if-loved"
-                      th:if="${!Scores.isLocal(score) && score.getBeatmap().getStatus().equalsIgnoreCase('LOVED') && score.getRanked()}">❤</span>
+                      th:if="${Scores.getRankStatus(score) == Scores.RankStatus.LOVED}">❤</span>
                 <span style="letter-spacing: 2px; margin-left: 10px; font-weight: bold;"
                       th:if="${diff != null}"
                       th:text="${#numbers.formatInteger(score.getTotalScore(), 1, 'COMMA')}">

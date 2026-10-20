@@ -1,4 +1,4 @@
-package xyz.zcraft.ostella.util.format;
+package xyz.zcraft.ostella.util;
 
 import lombok.Setter;
 import xyz.zcraft.ostella.data.ScoreChange;
@@ -15,7 +15,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-public class UserFormatUtil {
+public class Users {
     @Setter
     private static boolean safeFlags = false;
 
@@ -183,7 +183,7 @@ public class UserFormatUtil {
         return Optional.ofNullable(user)
                 .map(UserExtended::getRankHighest)
                 .map(UserExtended.RankHighest::getRank)
-                .map(UserFormatUtil::formatRank)
+                .map(Users::formatRank)
                 .orElse("--");
     }
 
@@ -205,7 +205,7 @@ public class UserFormatUtil {
                 .orElse(List.of());
 
         List<MonthlyPlaycountDate> dated = playcounts.stream()
-                .map(UserFormatUtil::parseMonthlyPlaycount)
+                .map(Users::parseMonthlyPlaycount)
                 .flatMap(Optional::stream)
                 .sorted(Comparator.comparing(MonthlyPlaycountDate::date))
                 .toList();
