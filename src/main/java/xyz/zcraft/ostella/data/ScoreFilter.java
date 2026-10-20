@@ -455,8 +455,13 @@ public final class ScoreFilter {
     }
 
     private boolean compareClient(Score score) {
-        return (Scores.isStable(score) && "STABLE".equalsIgnoreCase(textValues.stream().findFirst().orElseThrow()))
+        final boolean b = (Scores.isStable(score) && "STABLE".equalsIgnoreCase(textValues.stream().findFirst().orElseThrow()))
                 || (!Scores.isStable(score) && "LAZER".equalsIgnoreCase(textValues.stream().findFirst().orElseThrow()));
+        return switch (operator) {
+            case EQUAL -> b;
+            case NOT_EQUAL -> !b;
+            default -> throw new IllegalStateException("Unexpected value: " + operator);
+        };
     }
 
     private boolean compareType(BeatmapPatternAnalysis analysis) {
