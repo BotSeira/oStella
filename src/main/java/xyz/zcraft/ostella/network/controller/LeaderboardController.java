@@ -52,7 +52,7 @@ public class LeaderboardController {
 
         context.future(() -> getPlacementsAsync(leaderboardRequest.uids(), m)
                 .thenApply(p -> {
-                    p.sort((a, b) -> Long.compare(b.getScore().getTotalScore(), a.getScore().getTotalScore()));
+                    p.sort((a, b) -> Double.compare(b.getScore().getPp(), a.getScore().getPp()));
                     return p;
                 })
                 .thenCompose(placements ->
@@ -88,12 +88,10 @@ public class LeaderboardController {
                                 return CompletableFuture.completedFuture(null);
                             }
 
-                            router.ensurePp(score);
+                            Router.ensurePp(score);
 
                             return executor
-                                    .enqueueAsync(() ->
-                                            OsuAPI.getUser(tokenManager.getTokenData(), s)
-                                    )
+                                    .enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), s))
                                     .thenApply(user -> {
                                         if (user == null) return null;
 

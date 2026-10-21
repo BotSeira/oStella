@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/html" xmlns:th="http://www.thymeleaf.org">
+<html lang="en" xmlns="http://www.w3.org/1999/html" xmlns:th="http://www.thymeleaf.org"
+      xmlns="http://www.w3.org/1999/html">
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -247,23 +248,6 @@
         .change-num-same {
             color: #9ca3af;
         }
-
-        .mod-extra {
-            min-height: 30px;
-            grid-area: 1 / 2;
-            z-index: 0;
-            display: flex;
-            align-items: center;
-            padding: 2px 12px;
-            margin-left: -8px;
-            background-color: #591f1d;
-            font-size: 14px;
-            font-weight: bold;
-            font-variant-numeric: tabular-nums;
-            max-width: 280px;
-            overflow-wrap: anywhere;
-            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
-        }
     </style>
     <style>
         .grid-container {
@@ -316,20 +300,6 @@
             align-content: center;
         }
 
-        .mod-badges {
-            display: flex;
-            gap: 8px;
-            position: absolute;
-            top: 0;
-            right: 6px;
-            left: 10px;
-            color: white;
-            font-weight: 900;
-            font-size: 1.1em;
-            justify-content: end;
-            flex-flow: wrap;
-        }
-
         .extra-score-info {
             right: 0;
             bottom: 6px;
@@ -340,11 +310,6 @@
             font-size: 1.1em;
             font-weight: bold;
             max-width: 310px;
-        }
-
-        .mod-badge {
-            display: grid;
-            place-items: center;
         }
 
         .song-cover:has(.mod-extra) {
@@ -367,17 +332,6 @@
             align-self: start;
             margin: 0 6px 0 10px;
             padding-bottom: 58px;
-        }
-
-        .mod-back {
-            grid-area: 1 / 1;
-            z-index: 1;
-        }
-
-        .mod-icon {
-            grid-area: 1 / 1;
-            z-index: 2;
-            filter: brightness(0) saturate(100%) invert(16%) sepia(7%) saturate(5011%) hue-rotate(314deg) brightness(107%) contrast(101%);
         }
 
         .song-title {
@@ -542,6 +496,57 @@
             color: #a0a0b8;
             letter-spacing: 1px;
             margin-top: 15px;
+        }
+    </style>
+    <style>
+        .mod-badges {
+            position: absolute;
+            top: 0;
+            right: 6px;
+            left: 10px;
+        }
+
+        .mod-badges {
+            display: flex;
+            gap: 8px;
+            color: white;
+            font-weight: 900;
+            font-size: 1.1em;
+            justify-content: end;
+            flex-flow: wrap;
+        }
+
+        .mod-back {
+            grid-area: 1 / 1;
+            z-index: 1;
+        }
+
+        .mod-icon {
+            grid-area: 1 / 1;
+            z-index: 2;
+            filter: brightness(0) saturate(100%) invert(16%) sepia(7%) saturate(5011%) hue-rotate(314deg) brightness(107%) contrast(101%);
+        }
+
+        .mod-badge {
+            display: grid;
+            place-items: center;
+        }
+
+        .mod-extra {
+            min-height: 30px;
+            grid-area: 1 / 2;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            padding: 2px 12px;
+            margin-left: -8px;
+            background-color: #591f1d;
+            font-size: 14px;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            max-width: 280px;
+            overflow-wrap: anywhere;
+            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
         }
     </style>
     <title>oStella - Scores</title>
