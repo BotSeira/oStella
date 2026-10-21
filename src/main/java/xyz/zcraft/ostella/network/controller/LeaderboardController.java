@@ -104,7 +104,7 @@ public class LeaderboardController {
                                         .peek(s -> s.setUser(usersMap.get(s.getUserId())))
                                         .sorted(Comparator.comparing(Score::getPp).reversed())
                                         .toList())
-                                .thenApply(_ -> new MapLeaderboardData(beatmap, scores));
+                                .thenApply(scoresSorted -> new MapLeaderboardData(beatmap, scoresSorted));
                     })
                     .thenCompose(data -> ImageResponse.respond(context, data, this::renderMapLeaderboard, renderer.getRenderExecutor())));
         }
