@@ -1,6 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/html" xmlns:th="http://www.thymeleaf.org"
-      xmlns="http://www.w3.org/1999/html">
+<html lang="en" xmlns="http://www.w3.org/1999/html" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -714,7 +713,8 @@
             <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
         </div>
         <div class="diff">
-            <div class="diff-badge" th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
+            <div class="diff-badge"
+                 th:style="'background: ' + ${stars == null ? '#aaaaaa' : Colors.getBeatmapDiffColor(stars)} + ';'"
                  th:with="stars=${scoreStars[iterstat.index]}">
                 <div class="diff-rating"
                      th:style="'color: ' + ${stars == null ? '#000000' : Colors.getBeatmapDiffTextColor(stars)} + ';'"

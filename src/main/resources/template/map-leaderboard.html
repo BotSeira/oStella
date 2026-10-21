@@ -411,15 +411,14 @@
         <div class="pk-list">
             <div class="pk-row"
                  th:classappend="${iterStat.index == 0} ? 'first-place' : ''"
-                 th:each="placement, iterStat : ${placements}"
-                 th:with="user=${placement.user}, score=${placement.score}">
+                 th:each="score, iterStat : ${scores}">
 
                 <div class="pk-rank" th:text="'#' + ${iterStat.count}">#1</div>
-                <img alt="Avatar" class="pk-avatar" th:src="${cache.getImageSrc(user.getAvatarUrl())}">
+                <img alt="Avatar" class="pk-avatar" th:src="${cache.getImageSrc(score.getUser().getAvatarUrl())}">
 
                 <div class="pk-name-box">
                     <div class="pk-name">
-                        <span class="pk-username" th:text="${user.username}">ABCDEFGHIJKLMN</span>
+                        <span class="pk-username" th:text="${score.getUser().getUsername()}">ABCDEFGHIJKLMN</span>
                     </div>
                     <div class="mod-badges" th:if="${score.mods != null and !score.mods.isEmpty()}">
                         <div class="mod-badge" th:each="amod : ${score.getMods()}">
@@ -435,7 +434,7 @@
                                  th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="40">
                         </div>
                     </div>
-                    <div class="pk-uid" th:text="${'U' + user.getId() + ' // S' + score.getId()}">
+                    <div class="pk-uid" th:text="${'U' + score.getUserId() + ' // S' + score.getId()}">
                         U25234487965 // S1234234567896
                     </div>
                 </div>
@@ -445,30 +444,19 @@
                          th:text="${score.getRank()}">XH
                     </div>
                 </div>
-
-                <!--                <div class="pk-stat-box" th:style="${placement.score.accuracy == 1 ? 'color: #ffcc22;' : ''}">-->
-                <!--                    <div class="pk-acc"-->
-                <!--                         th:text="${Osu.formatAccuracy(placement.score.accuracy)}">98.76%-->
-                <!--                    </div>-->
-                <!--                    <div class="pk-combo"-->
-                <!--                         th:text="${placement.score.maxCombo} + 'x' + ${placement.score.isPerfectCombo ? ' FC' : ''}">-->
-                <!--                        432x-->
-                <!--                    </div>-->
-                <!--                </div>-->
-
                 <div class="pk-score-box">
                     <div class="pk-diff"
                          th:if="${iterStat.index != 0}"
-                         th:text="${'-' + #numbers.formatDecimal(placements[iterStat.index - 1].getScore().getPp() - placement.getScore().getPp(), 1, 1)} + ' PP'">
+                         th:text="${'-' + #numbers.formatDecimal(scores[iterStat.index - 1].getPp() - score.getPp(), 1, 1)} + ' PP'">
                         -12.3pp
                     </div>
                     <div class="pk-pp"
-                         th:text="${#numbers.formatDecimal(placement.getScore().getPp(), 1, 1) + 'PP'}">
+                         th:text="${#numbers.formatDecimal(score.getPp(), 1, 1) + 'PP'}">
                         123.4pp
                     </div>
                     <div class="pk-score-sub">
-                        <span th:text="${Osu.formatAccuracy(placement.getScore().getAccuracy())}">98.76%</span>
-                        <span th:text="'x' + ${placement.getScore().getMaxCombo()}">x1234</span>
+                        <span th:text="${Osu.formatAccuracy(score.getAccuracy())}">98.76%</span>
+                        <span th:text="'x' + ${score.getMaxCombo()}">x1234</span>
                     </div>
                 </div>
             </div>

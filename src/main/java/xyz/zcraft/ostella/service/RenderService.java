@@ -233,10 +233,10 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
-    public byte[] renderMapLeaderboard(BeatmapExtended map, List<Placement> placements, double ppMax) {
+    public byte[] renderMapLeaderboard(BeatmapExtended map, List<Score> scores, double ppMax) {
         Context ctx = createContext();
         ctx.setVariable("beatmap", map);
-        ctx.setVariable("placements", placements);
+        ctx.setVariable("scores", scores);
         ctx.setVariable("ppMax", ppMax);
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
