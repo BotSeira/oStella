@@ -7,6 +7,7 @@ import xyz.zcraft.ostella.db.ScoreStore;
 import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.ApiActivity;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.Score;
 
@@ -45,12 +46,16 @@ public final class AutoCacheService implements AutoCloseable {
                 return CacheService.cachedScoreUsers();
             }
 
+            public List<Score> tops(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.FIRSTS, 200, offset);
+            }
+
             public List<Score> recent(long user, int offset) {
-                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.RECENT, 100, offset);
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.RECENT, 200, offset);
             }
 
             public List<Score> best(long user, int offset) {
-                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 100, offset);
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 200, offset);
             }
 
             public void cache(Type type, long id) {
@@ -118,14 +123,23 @@ public final class AutoCacheService implements AutoCloseable {
         }
         if (users.isEmpty()) return;
         ApiActivity.checkBackground();
+
         List<Score> bests = backend.best(users.getFirst(), offset);
         if (bests == null) throw new IllegalStateException("Missing best-score response");
         List<Score> recents = backend.recent(users.getFirst(), offset);
         if (recents == null) throw new IllegalStateException("Missing recent-score response");
+        List<Score> tops = backend.tops(users.getFirst(), offset);
+        if (tops == null) throw new IllegalStateException("Missing top-score response");
+
         List<Score> scores = new ArrayList<>(bests);
         scores.addAll(recents);
+        scores.addAll(tops);
+
+        scores.forEach(Router::ensurePp);
+
         ScoreStore.upsertScores(scores);
         SetMetaStore.upsertBeatmapset(scores.stream().map(Score::getBeatmapset).toList());
+
         Set<Target> unique = new LinkedHashSet<>();
         for (Score score : scores) {
             if (score.getBeatmap() == null) continue;
@@ -180,6 +194,8 @@ public final class AutoCacheService implements AutoCloseable {
         List<Score> recent(long user, int offset);
 
         void cache(Type type, long id);
+
+        List<Score> tops(long user, int offset);
     }
 
     private record Target(Type type, long id) {

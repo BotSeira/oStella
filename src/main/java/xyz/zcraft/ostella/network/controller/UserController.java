@@ -16,8 +16,8 @@ import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.ScoreListRange;
-import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.Scores;
+import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.whatif.RankPpModel;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
@@ -36,6 +36,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.service.CacheService.tryCache;
@@ -524,8 +525,19 @@ public class UserController {
         final int endPosition = range.end();
         final int start = range.start();
 
+        AtomicReference<List<Score>> bestsRef = new AtomicReference<>();
         ctx.future(() -> executor
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
+                .thenCompose((bests) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.RECENT_PASS, 200))
+                        .thenCompose((recents) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.FIRSTS, 200))
+                                .thenApply((firsts) -> {
+                                    bestsRef.set(bests);
+                                    ArrayList<Score> merged = new ArrayList<>(bests);
+                                    merged.addAll(recents);
+                                    merged.addAll(firsts);
+                                    return merged;
+                                })))
+                .thenApply(scores -> scores.stream().peek(Router::ensurePp).toList())
                 .thenCompose(scores -> {
                     ScoreStore.upsertScores(scores);
                     var merged = ScoreStore.getUserBests(u, 200).stream()
@@ -533,7 +545,7 @@ public class UserController {
                             .sorted(Comparator.comparing(Score::getPp).reversed())
                             .toList();
                     if (start > merged.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    return fillDerankedMetadata(merged, scores, start, endPosition)
+                    return fillDerankedMetadata(merged, bestsRef.get(), start, endPosition)
                             .thenApply(_ -> new DerankedScores(scores.stream().map(Score::getPp).toList(), merged));
                 })
                 .thenCompose(data -> {
