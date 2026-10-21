@@ -99,10 +99,11 @@ public class LeaderboardController {
 
                         return executor.enqueueAsync(() -> OsuAPI.getUsers(tokenManager.getTokenData(), scores.stream().map(Score::getUserId).toList()))
                                 .thenApply(users -> users.stream().collect(Collectors.toMap(User::getId, user -> user)))
-                                .thenApply(usersMap -> {
-                                    scores.forEach(s -> s.setUser(usersMap.get(s.getUserId())));
-                                    return scores;
-                                })
+                                .thenApply(usersMap -> scores
+                                        .stream()
+                                        .peek(s -> s.setUser(usersMap.get(s.getUserId())))
+                                        .sorted(Comparator.comparing(Score::getPp).reversed())
+                                        .toList())
                                 .thenApply(_ -> new MapLeaderboardData(beatmap, scores));
                     })
                     .thenCompose(data -> ImageResponse.respond(context, data, this::renderMapLeaderboard, renderer.getRenderExecutor())));
