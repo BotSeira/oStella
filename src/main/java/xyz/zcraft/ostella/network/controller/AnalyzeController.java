@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.network.controller;
 
+import com.google.common.util.concurrent.AtomicDouble;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -366,10 +367,24 @@ public class AnalyzeController {
         } else try (var legacyMods = RosuFFI.Mods.fromBits(ra.replay().mods(), RosuFFI.Mode.Osu)) {
             mods = java.util.Arrays.asList(GSON.fromJson(legacyMods.json(), Mod[].class));
         }
+
+        List<WdPerform> performs = BeatmapAnalyzer
+                .getWindowDifficulties(ra.beatmap(), Duration.ofSeconds(20), mods)
+                .stream()
+                .map(wd -> calculatePerform(ra, wd))
+                .toList();
+
+        double maxWdScore = performs.stream()
+                .mapToDouble(WdPerform::wdScore)
+                .max()
+                .orElse(0);
+
         WeightedRandom<WdPerform> wdPerforms = new WeightedRandom<>();
-        BeatmapAnalyzer.getWindowDifficulties(ra.beatmap(), Duration.ofSeconds(20), mods)
-                .stream().map(wd -> calculatePerform(ra, wd))
+
+        performs.stream()
+                .filter(e -> e.wdScore() > maxWdScore * 0.75)
                 .forEach(e -> wdPerforms.add(e, Math.pow(e.wdScore(), 2)));
+
         return wdPerforms.next();
     }
 
