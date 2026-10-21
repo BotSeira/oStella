@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.network.controller;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import desu.life.RosuFFI;
@@ -20,8 +21,9 @@ import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.snapshot.SnapshotRenderer;
 import xyz.zcraft.ostella.snapshot.SnapshotRequest;
 import xyz.zcraft.ostella.snapshot.SnapshotScene;
-import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.Scores;
+import xyz.zcraft.ostella.util.TokenManager;
+import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.ModSettings;
@@ -30,6 +32,7 @@ import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.PerformanceState;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.data.beatmap.WindowDifficulty;
 import xyz.zcraft.osu.parser.data.replay.HitEvent;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
@@ -38,6 +41,7 @@ import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,6 +54,8 @@ import static xyz.zcraft.ostella.util.RequestUtil.requirePathScoreId;
 public class AnalyzeController {
     private static final Logger LOG = LogManager.getLogger(AnalyzeController.class);
     private static final int PERFORMANCE_GRAPH_MAX_POINTS = 120;
+
+    private static final Gson GSON = new Gson();
 
     final RenderService renderer;
     final AsyncService executor;
@@ -353,6 +359,25 @@ public class AnalyzeController {
         return null;
     }
 
+    private static WdPerform getHighlight(ReplayAnalyze ra) throws AnalyzeException {
+        List<Mod> mods;
+        if (ra.replay().replayInfo() != null && ra.replay().replayInfo().mods() != null) {
+            mods = ra.replay().replayInfo().mods();
+        } else try (var legacyMods = RosuFFI.Mods.fromBits(ra.replay().mods(), RosuFFI.Mode.Osu)) {
+            mods = java.util.Arrays.asList(GSON.fromJson(legacyMods.json(), Mod[].class));
+        }
+        WeightedRandom<WdPerform> wdPerforms = new WeightedRandom<>();
+        BeatmapAnalyzer.getWindowDifficulties(ra.beatmap(), Duration.ofSeconds(20), mods)
+                .stream().map(wd -> calculatePerform(ra, wd))
+                .forEach(e -> wdPerforms.add(e, Math.pow(e.wdScore(), 2)));
+        return wdPerforms.next();
+    }
+
+    private static WdPerform calculatePerform(ReplayAnalyze ra, WindowDifficulty wd) {
+        final double acc = ReplayAnalyzer.calculateWindowAccuracy(ra, wd.start(), wd.end());
+        return new WdPerform(wd.start(), wd.end(), wd.pp(), acc, wd.pp() * Math.pow(acc, 3));
+    }
+
     public void getScoreAnalysisById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
@@ -369,7 +394,7 @@ public class AnalyzeController {
                         osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
                         diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
 
-                        router.ensurePp(score, osuBeatmap);
+                        Router.ensurePp(score, osuBeatmap);
                     } catch (ParseException e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
                     } catch (AnalyzeException e) {
@@ -515,7 +540,7 @@ public class AnalyzeController {
                 .thenApply(analyze -> {
                     final WdPerform highlight;
                     try {
-                        highlight = OsuParser.getHighlight(analyze);
+                        highlight = getHighlight(analyze);
                     } catch (AnalyzeException e) {
                         throw new ApiException(ErrorCode.REPLAY_PARSE_FAILED, e);
                     }
@@ -539,7 +564,7 @@ public class AnalyzeController {
 
         final Path rosuPath = CacheService.getBeatmapPath(beatmap.getId());
 
-        router.ensurePp(score);
+        Router.ensurePp(score);
 
         try {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(rosuPath);
