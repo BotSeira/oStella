@@ -209,7 +209,7 @@ public class RenderService implements AutoCloseable {
     }
 
     public byte[] renderDerankedBest(
-            UserExtended user, List<ScoreEntry> scores, long newRank, double newPp,
+            UserExtended user, List<ScoreEntry> scores, long newRank, double newPp, double bonusPp,
             ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts
     ) {
         Context ctx = createContext();
@@ -225,6 +225,7 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
         ctx.setVariable("newGlobalRank", newRank);
         ctx.setVariable("newPp", newPp);
+        ctx.setVariable("bonusPp", bonusPp);
         ctx.setVariable("counts", counts);
         ctx.setVariable("countsPp", ppCounts);
 

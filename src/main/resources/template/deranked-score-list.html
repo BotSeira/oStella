@@ -143,6 +143,11 @@
             color: #d7d7d7;
         }
 
+        .stat-small {
+            font-size: 0.8em;
+            color: #fff;
+        }
+
         .mod-extra {
             min-height: 30px;
             grid-area: 1 / 2;
@@ -477,6 +482,13 @@
                             <span class="stat-value"
                                   th:text="'#' + ${#numbers.formatInteger(newGlobalRank, 1, 'COMMA')}">#123,456,789</span>
                             <span class="stat-sub" th:text="${'▲ #' + #numbers.formatInteger(user.statistics.globalRank - newGlobalRank, 1, 'COMMA')}">▲ #1,234</span>
+                        </div>
+                        <div class="stat-group">
+                            <span class="stat-label">PP Types</span>
+                            <span class="stat-small" th:text="'Ranked: ' + ${#numbers.formatInteger(countsPp.ranked(), 1, 'COMMA')} + 'pp'">Ranked: 3,000pp</span>
+                            <span class="stat-small" th:text="'Unranked: ' + ${#numbers.formatInteger(countsPp.unranked(), 1, 'COMMA')} + 'pp'">Unranked: 3,000pp</span>
+                            <span class="stat-small" th:text="'Local: ' + ${#numbers.formatInteger(countsPp.local(), 1, 'COMMA')} + 'pp'">Local: 3,000pp</span>
+                            <span class="stat-small" th:text="'Bonus: ' + ${#numbers.formatInteger(bonusPp, 1, 'COMMA')} + 'pp'">Bonus: 3,000pp</span>
                         </div>
                     </div>
                 </div>

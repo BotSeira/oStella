@@ -514,7 +514,8 @@ public class UserController {
 
     private byte[] renderDerankedBest(DerankedBestData data) {
         return renderer.renderDerankedBest(
-                data.user(), data.scores(), data.newGlobalRank(), data.newPp(),
+                data.user(), data.scores(), data.newGlobalRank(),
+                data.newPp(), data.bonusPp(),
                 data.counts(), data.ppCounts()
         );
     }
@@ -617,7 +618,9 @@ public class UserController {
                                 }
                                 putRankPpHeaders(ctx, user);
                                 return new DerankedBestData(
-                                        user, rangedScores, newRank, newPp, scoreCounts, ppCounts
+                                        user, rangedScores, newRank, newPp,
+                                        newPp - ppCounts.ranked() - ppCounts.unranked() - ppCounts.local(),
+                                        scoreCounts, ppCounts
                                 );
                             });
                 })
@@ -679,7 +682,7 @@ public class UserController {
     }
 
     private record DerankedBestData(
-            UserExtended user, List<ScoreEntry> scores, Long newGlobalRank, double newPp,
+            UserExtended user, List<ScoreEntry> scores, Long newGlobalRank, double newPp, double bonusPp,
             ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts
     ) {
     }
