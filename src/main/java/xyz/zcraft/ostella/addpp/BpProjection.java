@@ -18,7 +18,7 @@ public final class BpProjection {
 
     public static Result project(double currentPp, List<Play> best, double pp, int count, Long mapId, int window) {
         if (!Double.isFinite(currentPp) || currentPp < 0 || !Double.isFinite(pp) || pp < 0
-                || count < 1 || count > 100 || window < 1 || (mapId != null && count != 1))
+                || count < 1 || count > 200 || window < 1 || (mapId != null && count != 1))
             throw new IllegalArgumentException("无效的 PP 估算参数。");
         Map<Long, Double> unique = new HashMap<>();
         for (Play play : best) {
