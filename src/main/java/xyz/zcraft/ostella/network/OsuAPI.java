@@ -162,9 +162,10 @@ public class OsuAPI {
                 case RECENT_PASS, RECENT -> "recent";
                 case BEST -> "best";
                 case FIRSTS -> "firsts";
+                case PINNED -> "pinned";
             };
             boolean fail = switch (mode) {
-                case RECENT_PASS, BEST, FIRSTS -> false;
+                case RECENT_PASS, BEST, FIRSTS, PINNED -> false;
                 case RECENT -> true;
             };
             final List<Score> scores = new ArrayList<>(limit);

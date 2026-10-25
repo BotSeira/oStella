@@ -531,13 +531,15 @@ public class UserController {
                 .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
                 .thenCompose((bests) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.RECENT_PASS, 200))
                         .thenCompose((recents) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.FIRSTS, 200))
-                                .thenApply((firsts) -> {
-                                    bestsRef.set(bests);
-                                    ArrayList<Score> merged = new ArrayList<>(bests);
-                                    merged.addAll(recents);
-                                    merged.addAll(firsts);
-                                    return merged;
-                                })))
+                                .thenCompose((firsts) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.PINNED, 200))
+                                        .thenApply((pinned) -> {
+                                            bestsRef.set(bests);
+                                            ArrayList<Score> merged = new ArrayList<>(bests);
+                                            merged.addAll(recents);
+                                            merged.addAll(firsts);
+                                            merged.addAll(pinned);
+                                            return merged;
+                                        }))))
                 .thenApply(scores -> scores.stream().peek(Router::ensurePp).toList())
                 .thenCompose(scores -> {
                     ScoreStore.upsertScores(scores);
@@ -576,7 +578,7 @@ public class UserController {
                         if (current.getRanked() != null
                                 && current.getRanked()
                                 && ("RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())
-                                    || "APPROVED".equalsIgnoreCase(current.getBeatmap().getStatus()))
+                                || "APPROVED".equalsIgnoreCase(current.getBeatmap().getStatus()))
                                 && Scores.isModsRankable(current)
                         ) {
                             entry.setScoreType("Ranked");

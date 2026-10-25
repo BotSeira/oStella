@@ -58,6 +58,10 @@ public final class AutoCacheService implements AutoCloseable {
                 return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 200, offset);
             }
 
+            public List<Score> pinned(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.PINNED, 200, offset);
+            }
+
             public void cache(Type type, long id) {
                 CacheService.prefetch(type, id, tokens.getTokenData());
             }
@@ -130,10 +134,13 @@ public final class AutoCacheService implements AutoCloseable {
         if (recents == null) throw new IllegalStateException("Missing recent-score response");
         List<Score> tops = backend.tops(users.getFirst(), offset);
         if (tops == null) throw new IllegalStateException("Missing top-score response");
+        List<Score> pinned = backend.pinned(users.getFirst(), offset);
+        if (pinned == null) throw new IllegalStateException("Missing pinned-score response");
 
         List<Score> scores = new ArrayList<>(bests);
         scores.addAll(recents);
         scores.addAll(tops);
+        scores.addAll(pinned);
 
         scores.forEach(Router::ensurePp);
 
@@ -194,6 +201,8 @@ public final class AutoCacheService implements AutoCloseable {
         List<Score> recent(long user, int offset);
 
         void cache(Type type, long id);
+
+        List<Score> pinned(long user, int offset);
 
         List<Score> tops(long user, int offset);
     }
