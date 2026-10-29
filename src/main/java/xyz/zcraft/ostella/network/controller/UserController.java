@@ -66,9 +66,6 @@ public class UserController {
         return filters.stream().map(ScoreFilter::getDisplayText).toList();
     }
 
-    /**
-     * These callers fetched /users/{id}/osu; playmode is a preference, not the response ruleset.
-     */
     static void putRankPpHeaders(Context context, UserExtended user) {
         context.header("X-User-Id", String.valueOf(user.getId()));
         var stats = user.getStatistics();
@@ -99,9 +96,8 @@ public class UserController {
 
         double beforePp = 0;
         int weightIndex = 1;
-        // Reweight the same fetched BP window used by currentPp, including its tail.
-        for (int index = 0; index < bestScores.size(); index++) {
-            Score score = bestScores.get(index);
+
+        for (Score score : bestScores) {
             if (!newIds.contains(score.getId())) {
                 beforePp += score.getPp() * Math.pow(0.95, weightIndex - 1);
                 weightIndex++;
@@ -549,7 +545,7 @@ public class UserController {
                             .toList();
                     if (start > merged.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                     return fillDerankedMetadata(merged, bestsRef.get(), start, endPosition)
-                            .thenApply(_ -> new DerankedScores(scores.stream().map(Score::getPp).toList(), merged));
+                            .thenApply(_ -> new DerankedScores(bestsRef.get().stream().map(Score::getPp).toList(), merged));
                 })
                 .thenCompose(data -> {
                     var scores = data.merged().stream()
