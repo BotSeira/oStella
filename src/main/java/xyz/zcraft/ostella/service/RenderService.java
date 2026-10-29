@@ -1,11 +1,9 @@
 package xyz.zcraft.ostella.service;
 
 import com.microsoft.playwright.*;
-import com.microsoft.playwright.options.LoadState;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jspecify.annotations.NonNull;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.templatemode.TemplateMode;
@@ -28,9 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class RenderService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(RenderService.class);
@@ -40,7 +36,7 @@ public class RenderService implements AutoCloseable {
     private final ExecutorService renderExecutor;
     @Getter
     private final ExecutorService rasterExecutor;
-    private final ThreadLocal<RenderWorkerState> workerStateLocal = new ThreadLocal<>();
+    private final xyz.zcraft.image.HtmlRenderer htmlRenderer;
     private final TemplateEngine templateEngine;
     private final TemplateEngine templateEngineLocal;
 
@@ -49,9 +45,8 @@ public class RenderService implements AutoCloseable {
             throw new IllegalArgumentException("maxWorkers must be greater than 0: " + maxWorkers);
         }
 
-        ThreadFactory threadFactory = getThreadFactory();
-
-        this.renderExecutor = Executors.newFixedThreadPool(maxWorkers, threadFactory);
+        this.htmlRenderer = new xyz.zcraft.image.HtmlRenderer(maxWorkers, 256, 30000, RenderService::setupRoutes);
+        this.renderExecutor = htmlRenderer.executor();
         this.rasterExecutor = Executors.newFixedThreadPool(maxWorkers,
                 Thread.ofPlatform().name("ostella-raster-", 0).factory());
 
@@ -84,59 +79,12 @@ public class RenderService implements AutoCloseable {
         }
     }
 
-    private @NonNull ThreadFactory getThreadFactory() {
-        AtomicInteger workerId = new AtomicInteger();
-
-        return executorWorker -> {
-            Thread thread = new Thread(() -> {
-                try (RenderWorkerState state = RenderWorkerState.create()) {
-                    workerStateLocal.set(state);
-                    executorWorker.run();
-                } finally {
-                    workerStateLocal.remove();
-                }
-            });
-
-            thread.setName("ostella-render-" + workerId.incrementAndGet());
-
-            thread.setUncaughtExceptionHandler((t, error) ->
-                    LOG.error(
-                            "Uncaught exception in render worker {}",
-                            t.getName(),
-                            error
-                    )
-            );
-
-            return thread;
-        };
-    }
-
     private byte[] takeScreenshot(String html) {
-        RenderWorkerState workerState = workerStateLocal.get();
-
-        if (workerState == null) {
-            throw new IllegalStateException("Image rendering must run on RenderService's executor");
+        try {
+            return htmlRenderer.screenshot(html);
+        } catch (TimeoutError e) {
+            throw new ApiException(ErrorCode.IMAGE_RENDER_TIMEOUT, e.getMessage());
         }
-
-        var context = workerState.context();
-
-        try (Page page = context.newPage()) {
-            page.setContent(html);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
-            page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
-            return page.locator("body").screenshot();
-        } catch (TimeoutError timeoutError) {
-            throw new ApiException(ErrorCode.IMAGE_RENDER_TIMEOUT, timeoutError.getMessage());
-        }
-
-        // page.waitForFunction("""
-        // () => document.fonts.status === 'loaded'
-        //    && Array.from(document.images).every(img => img.complete)
-        //    && (
-        //        window.__OSTELLA_RENDER_READY__ === undefined
-        //        || window.__OSTELLA_RENDER_READY__ === true
-        //    )
-        // """);
     }
 
     private Context createContext() {
@@ -376,65 +324,24 @@ public class RenderService implements AutoCloseable {
         renderExecutor.close();
     }
 
-    private record RenderWorkerState(
-            Playwright playwright,
-            Browser browser,
-            BrowserContext context
-    ) implements AutoCloseable {
-        static RenderWorkerState create() {
-            Playwright playwright = Playwright.create();
+    private static void setupRoutes(BrowserContext context) {
+        context.route("http://ostella-cache/**", route -> {
+            String url = route.request().url();
+            String filename = url.substring(url.lastIndexOf('/') + 1);
 
-            try {
-                Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            Path imagePath = CacheService.getImagePathFromFilename(filename);
 
-                BrowserContext context = browser.newContext(new Browser.NewContextOptions());
+            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+        });
 
-                setupRoutes(context);
+        context.route("http://local-asset/**", route -> {
+            String url = route.request().url();
+            String filename = url.substring("http://local-asset/".length());
 
-                return new RenderWorkerState(playwright, browser, context);
-            } catch (Exception e) {
-                playwright.close();
-                throw e;
-            }
-        }
+            Path imagePath = LOCAL_ASSETS_PATH.resolve(filename);
 
-        private static void setupRoutes(BrowserContext context) {
-            context.route("http://ostella-cache/**", route -> {
-                String url = route.request().url();
-                String filename = url.substring(url.lastIndexOf('/') + 1);
-
-                Path imagePath = CacheService.getImagePathFromFilename(filename);
-
-                route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-            });
-
-            context.route("http://local-asset/**", route -> {
-                String url = route.request().url();
-                String filename = url.substring("http://local-asset/".length());
-
-                Path imagePath = LOCAL_ASSETS_PATH.resolve(filename);
-
-                route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-            });
-        }
-
-        private static void closeSafely(Runnable action) {
-
-        }
-
-        @Override
-        public void close() {
-            try {
-                playwright.close();
-            } catch (Exception e) {
-                LOG.error("Error closing Playwright", e);
-            }
-
-            LOG.info(
-                    "Playwright closed for render worker {}",
-                    Thread.currentThread().getName()
-            );
-        }
+            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+        });
     }
 
     public record Status(int active, int poolSize, int queued, long completed) {
