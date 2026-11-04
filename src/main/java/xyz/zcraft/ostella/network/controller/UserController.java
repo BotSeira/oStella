@@ -416,6 +416,14 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes)));
     }
 
+    public void getUserCard(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenApplyAsync(renderer::renderUserCard, renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes)));
+    }
+
     public void getUserRank(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
         final CompletableFuture<UserExtended> userFuture = executor.enqueueAsync(() ->

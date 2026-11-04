@@ -127,6 +127,14 @@ public class RenderService implements AutoCloseable {
         return takeScreenshot(finalHtml);
     }
 
+    public byte[] renderUserCard(UserExtended user) {
+        Context ctx = createContext();
+        ctx.setVariable("user", user);
+
+        String finalHtml = templateEngine.process("user-card", ctx);
+        return takeScreenshot(finalHtml);
+    }
+
     public byte[] renderScores(
             UserExtended user, List<ScoreEntry> scores,
             List<String> filters,

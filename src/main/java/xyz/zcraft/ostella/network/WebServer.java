@@ -100,6 +100,7 @@ public class WebServer implements Closeable {
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)
                     .post("/users/scores/recent/batch", router.userController::getRecentScoresBatch)
                     .get("/users/{userId}", router.userController::getUserInfo)
+                    .get("/users/{userId}/card", router.userController::getUserCard)
                     .get("/users/{userId}/rank", router.userController::getUserRank)
                     .post("/users/{userId}/addpp", router.addPpController::addPp)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
