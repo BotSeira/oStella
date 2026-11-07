@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.data;
 
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 
 import java.util.Comparator;
 import java.util.List;
@@ -118,9 +119,15 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
                 && teams.get(1).players().size() == 1;
     }
 
-    public record BeatmapInfo(long id, String title, String titleUnicode, String artist, String creator,
-                              String difficultyName,
-                              Double difficultyRating, Double bpm, Long totalLength, String ruleset, String coverUrl) {
+    public record BeatmapInfo(
+            long id, String title, String titleUnicode, String artist, String creator,
+            String difficultyName, Double difficultyRating, Double bpm, Long totalLength,
+            String ruleset, String coverUrl,
+            DifficultyAttribute attribute
+    ) {
+        public String getAttributeText() {
+            return "CS%.2f / OD%.2f / AR%.2f".formatted(attribute.cs(), attribute.od(), attribute.ar());
+        }
     }
 
     public record UserInfo(long id, String username, String avatarUrl) {

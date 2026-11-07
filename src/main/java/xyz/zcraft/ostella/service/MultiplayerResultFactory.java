@@ -4,6 +4,11 @@ import xyz.zcraft.ostella.data.MultiplayerResultData;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.model.multiplayer.Room;
+import xyz.zcraft.osu.parser.BeatmapAnalyzer;
+import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
 
@@ -20,8 +25,6 @@ public final class MultiplayerResultFactory {
             Integer customBo
     ) {
         BeatmapExtended map = item.getBeatmap();
-        MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map);
-        MultiplayerResultData.UserInfo queuedBy = toUserInfo(owner, item.getOwnerId());
 
         List<MultiplayerRoomScore> sorted = new ArrayList<>(roomScores);
         sorted.sort(Comparator
@@ -31,8 +34,8 @@ public final class MultiplayerResultFactory {
                         Comparator.nullsLast(Comparator.reverseOrder())
                 ));
 
-        List<MultiplayerResultData.PlayerResult> players = new ArrayList<>(sorted.size());
         List<Mod> commonMods = commonMods(sorted);
+        List<MultiplayerResultData.PlayerResult> players = new ArrayList<>(sorted.size());
         MultiplayerDifficultyCalculator difficulties = new MultiplayerDifficultyCalculator(client);
         int fallbackPosition = 1;
         Long previousScore = null;
@@ -119,6 +122,9 @@ public final class MultiplayerResultFactory {
         double teamLeadPercent = higherTeamScore == 0
                 ? 0
                 : Math.min(50, Math.sqrt(Math.abs(redTotal - blueTotal) / (double) roundAverage) * 75.0);
+
+        MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map, commonMods);
+        MultiplayerResultData.UserInfo queuedBy = toUserInfo(owner, item.getOwnerId());
 
         return new MultiplayerResultData(
                 room.getId(),
@@ -223,12 +229,22 @@ public final class MultiplayerResultFactory {
         };
     }
 
-    private static MultiplayerResultData.BeatmapInfo toBeatmapInfo(long beatmapId, BeatmapExtended map) {
+    private static MultiplayerResultData.BeatmapInfo toBeatmapInfo(long beatmapId, BeatmapExtended map, List<Mod> mods) {
         Beatmapset set = map == null ? null : map.getBeatmapset();
         Beatmap.Covers covers = set == null ? null : set.getCovers();
         String coverUrl = covers == null
                 ? null
                 : firstNonBlankOrNull(covers.getCover2x(), covers.getCover(), covers.getCard2x(), covers.getCard());
+        final OsuBeatmap osuBeatmap;
+
+        try {
+            osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+        } catch (ParseException e) {
+            throw new RuntimeException(e);
+        }
+
+        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, mods);
+
         return new MultiplayerResultData.BeatmapInfo(
                 map == null || map.getId() == null ? beatmapId : map.getId(),
                 set == null ? "Beatmap #" + beatmapId : set.getTitle(),
@@ -240,7 +256,8 @@ public final class MultiplayerResultFactory {
                 map == null ? null : map.getBpm(),
                 map == null ? null : map.getTotalLength(),
                 map == null ? "osu!" : ruleset(map.getMode()),
-                coverUrl
+                coverUrl,
+                difficultyAttribute
         );
     }
 

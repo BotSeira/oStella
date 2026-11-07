@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>oStella — Multiplayer Result</title>
     <script>window.__OSTELLA_RENDER_READY__ = false;</script>
+    <!--suppress CssUnusedSymbol, CssUnresolvedCustomProperty -->
     <style>
         :root {
             --page: #0d1020;
@@ -1559,22 +1560,21 @@
             <div class="hero-footer">
                 <div class="map-meta">
                     <span class="pill" th:text="${result.client}">Lazer</span>
-                    <span class="pill" th:text="${result.scoringType}">ScoreV2</span>
+                    <span class="pill" th:if="${result.client != 'Lazer'}" th:text="${result.scoringType}">ScoreV2</span>
                     <span class="pill" th:text="${result.teamType}">Head to Head</span>
                     <span class="pill diff"
                           th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : Osu.formatStarRating(result.beatmap.difficultyRating())) + '★'}">
                         Insane · 5.20★
                     </span>
-                    <span class="pill" th:text="${result.beatmap.ruleset()}">osu!</span>
-                    <span class="pill"
-                          th:text="${'BPM ' + (result.beatmap.bpm() == null ? '--' : #numbers.formatDecimal(result.beatmap.bpm(), 1, 0))}">
-                        BPM 180
+                    <span class="pill diff"
+                          th:text="${result.beatmap.getAttributeText()}">
+                        CS6.78 / OD7.89 / AR9.10
                     </span>
                     <span class="pill"
                           th:text="${result.beatmap.totalLength() == null ? '--:--' : #numbers.formatInteger(result.beatmap.totalLength() / 60, 1) + ':' + #numbers.formatInteger(result.beatmap.totalLength() % 60, 2)}">
                         2:30
                     </span>
-                    <span class="pill" th:text="${'Beatmap #' + result.beatmap.id()}">Beatmap #1</span>
+                    <span class="pill" th:text="${'M' + result.beatmap.id()}">M1234567</span>
                 </div>
                 <div class="queued-by">
                     <img alt="" class="avatar"
