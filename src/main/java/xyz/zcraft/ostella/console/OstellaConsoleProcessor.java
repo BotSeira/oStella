@@ -168,7 +168,8 @@ public final class OstellaConsoleProcessor {
                 case "autocache" -> autoCache(input);
                 case "config" -> config(input);
                 case "log" -> log(input);
-                case "import-set-json" -> importSetJson(input);
+                case "import-set-json" -> importSetJson(input, false);
+                case "import-set-json-override" -> importSetJson(input, true);
                 case "import-score-json" -> importScoreJson(input);
                 case "system" -> exact(input, 1, this::system, "Usage: system");
                 case "stop", "shutdown", "exit", "quit" -> stop(input);
@@ -182,10 +183,10 @@ public final class OstellaConsoleProcessor {
         }
     }
 
-    private Result importSetJson(ConsoleInputParser.ParsedInput input) {
+    private Result importSetJson(ConsoleInputParser.ParsedInput input, boolean override) {
         if (input.size() != 1) return Result.error("Usage: import-set-json");
         try {
-            int count = SetMetaStore.importFromCachedJson();
+            int count = SetMetaStore.importFromCachedJson(override);
             return Result.ok("Imported " + count + " beatmapsets from cache.");
         } catch (IOException e) {
             return Result.error("Failed to import beatmapsets from cache: " + rootMessage(e));

@@ -73,12 +73,12 @@ public class SetMetaStore {
         upsertBeatmapset(List.of(set), System.currentTimeMillis());
     }
 
-    public static void upsertBeatmapset(List<Beatmapset> sets) {
-        upsertBeatmapset(sets, System.currentTimeMillis());
+    public static int upsertBeatmapset(List<Beatmapset> sets) {
+        return upsertBeatmapset(sets, System.currentTimeMillis());
     }
 
-    public static void upsertBeatmapset(List<Beatmapset> sets, long observedAt) {
-        upsertObserved(sets.stream().map(set -> new ObservedSet(set, observedAt)).toList());
+    public static int upsertBeatmapset(List<Beatmapset> sets, long observedAt) {
+        return upsertObserved(sets.stream().map(set -> new ObservedSet(set, observedAt)).toList());
     }
 
     private static int upsertObserved(List<ObservedSet> sets) {
@@ -157,17 +157,34 @@ public class SetMetaStore {
         }
     }
 
-    public static int importFromCachedJson() throws IOException {
-        List<ObservedSet> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+    public static int importFromCachedJson(boolean override) throws IOException {
+        if (override) {
+            return importFromCachedJsonOverride();
+        } else {
+            List<ObservedSet> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
+            int[] count = {0};
+            CacheService.walkBeatmapsetCache((set, modifiedAt) -> {
+                batch.add(new ObservedSet(set, modifiedAt));
+                if (batch.size() == IMPORT_BATCH_SIZE) {
+                    count[0] += upsertObserved(batch);
+                    batch.clear();
+                }
+            });
+            return count[0] + upsertObserved(batch);
+        }
+    }
+
+    private static int importFromCachedJsonOverride() throws IOException {
+        List<Beatmapset> batch = new ArrayList<>(IMPORT_BATCH_SIZE);
         int[] count = {0};
         CacheService.walkBeatmapsetCache((set, modifiedAt) -> {
-            batch.add(new ObservedSet(set, modifiedAt));
+            batch.add(set);
             if (batch.size() == IMPORT_BATCH_SIZE) {
-                count[0] += upsertObserved(batch);
+                count[0] += upsertBeatmapset(batch);
                 batch.clear();
             }
         });
-        return count[0] + upsertObserved(batch);
+        return count[0] + upsertBeatmapset(batch);
     }
 
     public static List<Metadata> candidates(String title, String artist, int limit) {
