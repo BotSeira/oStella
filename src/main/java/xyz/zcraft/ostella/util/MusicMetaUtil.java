@@ -28,6 +28,7 @@ public final class MusicMetaUtil {
         result = result.replaceFirst("\\(.*\\)$", "").trim();
         result = normalize(result);
         result = result.replaceFirst("(tv size|tv edit|short ver|short version)$", "");
+        result = result.replaceFirst(" feat\\. .*$", "");
         return result.trim();
     }
 
