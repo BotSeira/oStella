@@ -38,6 +38,90 @@ public class SetMetaStore {
         }
     }
 
+    public static long migrate() throws SQLException {
+        long sum = 0;
+        final int batchSize = 500;
+        long lastId = -1;
+
+        String selectSql = """
+                SELECT id, artist, artist_unicode, title, title_unicode
+                FROM beatmapsets
+                WHERE id > ?
+                ORDER BY id
+                LIMIT ?
+                """;
+
+        String updateSql = """
+                UPDATE beatmapsets
+                SET artist_normalized = ?,
+                    title_normalized = ?,
+                    artist_romanized = ?,
+                    title_romanized = ?,
+                    title_base = ?,
+                    title_base_romanized = ?
+                WHERE id = ?
+                """;
+        var conn = SqliteDatabase.getConnection();
+        try (var select = conn.prepareStatement(selectSql);
+             var update = conn.prepareStatement(updateSql)) {
+            conn.setAutoCommit(false);
+
+            while (true) {
+                List<Metadata> rows = new ArrayList<>();
+
+                select.setLong(1, lastId);
+                select.setInt(2, batchSize);
+
+                try (ResultSet rs = select.executeQuery()) {
+                    while (rs.next()) {
+                        rows.add(new Metadata(
+                                rs.getLong("id"),
+                                rs.getString("artist"),
+                                rs.getString("artist_unicode"),
+                                rs.getString("title"),
+                                rs.getString("title_unicode"),
+                                null,
+                                null,
+                                null
+                        ));
+                    }
+                }
+
+                if (rows.isEmpty()) break;
+
+                for (Metadata row : rows) {
+                    Metadata.DerivedFields fields = row.getDerivedFields();
+
+                    update.setString(1, fields.artistNormalized());
+                    update.setString(2, fields.titleNormalized());
+                    update.setString(3, fields.artistRomanized());
+                    update.setString(4, fields.titleRomanized());
+                    update.setString(5, fields.titleBase());
+                    update.setString(6, fields.titleBaseRomanized());
+                    update.setLong(7, row.id());
+
+                    update.addBatch();
+                }
+
+                for (int i : update.executeBatch()) {
+                    sum += i;
+                }
+                conn.commit();
+
+                lastId = rows.getLast().id();
+            }
+        } catch (SQLException | RuntimeException e) {
+            conn.rollback();
+            throw e;
+        } finally {
+            conn.setAutoCommit(true);
+            conn.close();
+        }
+
+
+        return sum;
+    }
+
     private static void backfillKeys(Connection connection) throws SQLException {
         long lastId = -1;
         while (true) {
@@ -236,6 +320,32 @@ public class SetMetaStore {
     }
 
     public record Metadata(long id, String artist, String artistUnicode, String title,
-                           String titleUnicode, String status, long playCount, long favouriteCount) {
+                           String titleUnicode, String status, Long playCount, Long favouriteCount) {
+        public DerivedFields getDerivedFields() {
+            String setTitle = MusicMetaUtil.fallback(titleUnicode(), title());
+            String setArtist = MusicMetaUtil.fallback(artistUnicode(), artist());
+
+            String titleNormalized = MusicMetaUtil.normalize(setTitle);
+            String artistNormalized = MusicMetaUtil.normalize(setArtist);
+
+            return new DerivedFields(
+                    artistNormalized,
+                    titleNormalized,
+                    MusicMetaUtil.normalize(artist()), // artist_romanized
+                    MusicMetaUtil.normalize(title()), // title_romanized
+                    MusicMetaUtil.baseTitle(setTitle), // title_base
+                    MusicMetaUtil.baseTitle(title()) // title_base_romanized
+            );
+        }
+
+        public record DerivedFields(
+                String artistNormalized,
+                String titleNormalized,
+                String artistRomanized,
+                String titleRomanized,
+                String titleBase,
+                String titleBaseRomanized
+        ) {
+        }
     }
 }

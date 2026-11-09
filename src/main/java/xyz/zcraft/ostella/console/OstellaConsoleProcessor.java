@@ -24,7 +24,8 @@ public final class OstellaConsoleProcessor {
     private static final long STARTED_AT = System.currentTimeMillis();
     private static final List<String> ROOT = List.of(
             "help", "status", "metrics", "token", "replay", "cache", "autocache",
-            "config", "log", "system", "stop", "import-score-json", "import-set-json"
+            "config", "log", "system", "stop",
+            "import-score-json", "import-set-json", "import-set-json-override", "recalculate-set-meta"
     );
     private static final Map<String, List<String>> SUB = Map.of(
             "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json", "score-json", "score-fetch"),
@@ -169,6 +170,7 @@ public final class OstellaConsoleProcessor {
                 case "config" -> config(input);
                 case "log" -> log(input);
                 case "import-set-json" -> importSetJson(input, false);
+                case "recalculate-set-meta" -> recalculateSetMeta(input);
                 case "import-set-json-override" -> importSetJson(input, true);
                 case "import-score-json" -> importScoreJson(input);
                 case "system" -> exact(input, 1, this::system, "Usage: system");
@@ -190,6 +192,16 @@ public final class OstellaConsoleProcessor {
             return Result.ok("Imported " + count + " beatmapsets from cache.");
         } catch (IOException e) {
             return Result.error("Failed to import beatmapsets from cache: " + rootMessage(e));
+        }
+    }
+
+    private Result recalculateSetMeta(ConsoleInputParser.ParsedInput input) {
+        if (input.size() != 1) return Result.error("Usage: recalculate-set-meta");
+        try {
+            final long count = SetMetaStore.migrate();
+            return Result.ok("Recalculated meta for " + count + " beatmapsets.");
+        } catch (Exception e) {
+            return Result.error("Failed to recalculate beatmapsets meta: " + rootMessage(e));
         }
     }
 
