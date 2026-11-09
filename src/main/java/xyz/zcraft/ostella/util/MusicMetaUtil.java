@@ -26,7 +26,7 @@ public final class MusicMetaUtil {
     public static String baseTitle(String input) {
         String result = input;
         result = result.replaceFirst("\\(.*\\)$", "").trim();
-        result = result.replaceFirst(" feat\\. .*$", "");
+        result = result.replaceFirst(" feat\\. ?.*$", "");
         result = normalize(result);
         result = result.replaceFirst("(tv size|tv edit|short ver|short version)$", "");
         return result.trim();

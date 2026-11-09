@@ -24,12 +24,11 @@ import xyz.zcraft.osu.model.Beatmapset;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
@@ -40,22 +39,31 @@ public class BeatmapsetController {
     public final AsyncService executor;
     public final TokenManager tokenManager;
     public final Router router;
+    public final AtomicBoolean doCacheMeta = new AtomicBoolean(true);
+
+    private final ArrayDeque<String> queryQueue = new ArrayDeque<>();
 
     public BeatmapsetController(Router router) {
         this.router = router;
         this.renderer = router.renderer;
         this.tokenManager = router.tokenManager;
         this.executor = router.executor;
-    }
 
-    public void lookupBeatmapset(@NotNull Context context) {
-        if (context.queryParam("of") != null) {
-            lookupBeatmapsetOfRefAsync(context);
-        } else if (context.queryParam("m") != null) {
-            lookupBeatmapsetOfMapAsync(context);
-        } else {
-            lookupBeatmapsetOfIdAsync(context);
-        }
+        var scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "set-meta-fetch");
+            thread.setDaemon(true);
+            return thread;
+        });
+
+        scheduler.scheduleWithFixedDelay(() -> executor.tryBackground(doCacheMeta::get, () -> {
+            if (queryQueue.isEmpty()) {
+                return;
+            }
+            final String q = queryQueue.removeFirst();
+            SetMetaStore.upsertBeatmapset(OsuAPI.searchBeatmapset(tokenManager.getTokenData(), q));
+        }), 0, 2, TimeUnit.SECONDS);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(scheduler::close));
     }
 
     static List<SearchQuery> parseSearchQueries(String body) {
@@ -83,6 +91,27 @@ public class BeatmapsetController {
             return List.copyOf(queries);
         } catch (JsonParseException | IllegalArgumentException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage());
+        }
+    }
+
+    private static String searchText(JsonElement element, String field) {
+        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+            throw new IllegalArgumentException(field + " must be a string");
+        }
+        String value = element.getAsString().strip();
+        if (value.length() > 256 || MusicMetaUtil.normalize(value).isEmpty()) {
+            throw new IllegalArgumentException(field + " must contain searchable text and be at most 256 characters");
+        }
+        return value;
+    }
+
+    public void lookupBeatmapset(@NotNull Context context) {
+        if (context.queryParam("of") != null) {
+            lookupBeatmapsetOfRefAsync(context);
+        } else if (context.queryParam("m") != null) {
+            lookupBeatmapsetOfMapAsync(context);
+        } else {
+            lookupBeatmapsetOfIdAsync(context);
         }
     }
 
@@ -258,17 +287,6 @@ public class BeatmapsetController {
                 ));
     }
 
-    private static String searchText(JsonElement element, String field) {
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
-            throw new IllegalArgumentException(field + " must be a string");
-        }
-        String value = element.getAsString().strip();
-        if (value.length() > 256 || MusicMetaUtil.normalize(value).isEmpty()) {
-            throw new IllegalArgumentException(field + " must contain searchable text and be at most 256 characters");
-        }
-        return value;
-    }
-
     public void getBeatmapsets(@NotNull Context context) {
         final JsonElement body = JsonParser.parseString(context.body());
         final var idArr = body.getAsJsonObject().getAsJsonArray("ids");
@@ -346,6 +364,22 @@ public class BeatmapsetController {
             return results;
         }).thenAccept(results -> context.status(200).result(
                 new Response(true, "Query successful", GSON.toJsonTree(results)).toString())));
+    }
+
+    public void cacheBeatmapsetMeta(@NotNull Context ctx) {
+        final List<String> queries = parseSearchQueries(ctx.body()).stream()
+                .map(query -> {
+                    if (query instanceof SearchQuery.Meta meta) {
+                        return MusicMetaUtil.baseTitle(meta.title);
+                    } else if (query instanceof SearchQuery.Literal literal) {
+                        return literal.getQuery();
+                    }
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .toList();
+        queryQueue.addAll(queries);
+        putResult(ctx, "count", queries.size());
     }
 
     public static class SearchQuery {

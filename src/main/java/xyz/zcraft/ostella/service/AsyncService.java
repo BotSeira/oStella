@@ -5,6 +5,7 @@ import xyz.zcraft.ostella.network.ApiActivity;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 public class AsyncService {
@@ -83,10 +84,7 @@ public class AsyncService {
         }
     }
 
-    /**
-     * One prefetch step, only when foreground work and the shared rate gate are idle.
-     */
-    public boolean tryBackground(java.util.function.BooleanSupplier allowed, Runnable action) {
+    public boolean tryBackground(BooleanSupplier allowed, Runnable action) {
         if (!ApiActivity.idle() || !allowed.getAsBoolean() || !requestRateGate.tryAcquire()) return false;
         ApiActivity.runBackground(allowed, action);
         return true;

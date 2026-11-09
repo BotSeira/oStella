@@ -454,32 +454,6 @@ public class OsuAPI {
         }
     }
 
-    public static String searchBeatmapsetRaw(TokenData tokenData, String queryString) {
-        LOG.debug("Fetching raw beatmapset for query {}", queryString);
-        try {
-            final var request = newRequestBuilder(tokenData, "/beatmapsets/search?" + queryString)
-                    .GET()
-                    .build();
-
-            final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() == 404) {
-                return null;
-            }
-
-            if (response.statusCode() >= 400) {
-                throw new ApiException(
-                        ErrorCode.BEATMAP_FETCH_FAILED,
-                        "osu! API returned status " + response.statusCode() + " query " + queryString
-                );
-            }
-
-            return response.body();
-        } catch (IOException | InterruptedException e) {
-            throw new ApiException(ErrorCode.BEATMAPSET_FETCH_FAILED, "Failed to search beatmapsets with query " + queryString, e);
-        }
-    }
-
     public static List<Room> getRooms(TokenData tokenData) {
         LOG.debug("Fetching multiplayer rooms");
         try {

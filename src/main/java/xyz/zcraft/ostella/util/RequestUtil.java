@@ -33,7 +33,7 @@ public class RequestUtil {
         context.result(new Response(true, "Success", data).toString());
     }
 
-    public static void putResult(Context context, String key, String val) {
+    public static <T> void putResult(Context context, String key, T val) {
         putResult(context, Map.of(key, val));
     }
 
