@@ -446,7 +446,7 @@ public class ScoreController {
                                 candidates.add(e);
                             }
 
-                            final List<Score> stored = ScoreStore.getUserBests(userId, 200).stream()
+                            final List<Score> stored = ScoreStore.getUserBests(userId, 40).stream()
                                     .map(ScoreRecord::toScore)
                                     .sorted(Comparator.comparing(Score::getPp).reversed())
                                     .toList();
@@ -533,7 +533,7 @@ public class ScoreController {
                     }
                     return candidates;
                 }).thenApply(entries -> {
-                    final List<Score> stored = ScoreStore.getUserBests(userId, 200).stream()
+                    final List<Score> stored = ScoreStore.getUserBests(userId, 40).stream()
                             .map(ScoreRecord::toScore)
                             .sorted(Comparator.comparing(Score::getPp).reversed())
                             .toList();
