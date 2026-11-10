@@ -17,9 +17,9 @@ import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.RequestUtil;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.WeightedRandom;
-import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
@@ -149,7 +149,8 @@ public class ScoreController {
                     return score;
                 })
                 .thenCompose(score -> {
-                    if (score.getUser() != null && score.getUser() instanceof UserExtended) return CompletableFuture.completedFuture(score);
+                    if (score.getUser() != null && score.getUser() instanceof UserExtended)
+                        return CompletableFuture.completedFuture(score);
                     return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), score.getUserId()))
                             .thenApply(user -> {
                                 score.setUser(user);
@@ -437,16 +438,30 @@ public class ScoreController {
         context.future(() ->
                 executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), userId, ScoreType.BEST, 200))
                         .thenApply(scores -> {
+                            ScoreStore.upsertScores(scores);
                             List<ScoreEntry> candidates = new ArrayList<>(scores.size());
-
                             for (int i = 0; i < scores.size(); i++) {
-                                final Score score = scores.get(i);
-                                if (!Scores.replayPresent(score)) {
-                                    continue;
-                                }
+                                final ScoreEntry e = new ScoreEntry(i + 1, scores.get(i));
+                                e.setScoreType("Ranked");
+                                candidates.add(e);
+                            }
 
-                                final ScoreEntry scoreEntry = new ScoreEntry(i + 1, score);
-                                candidates.add(scoreEntry);
+                            final List<Score> stored = ScoreStore.getUserBests(userId, 200).stream()
+                                    .map(ScoreRecord::toScore)
+                                    .sorted(Comparator.comparing(Score::getPp).reversed())
+                                    .toList();
+
+                            for (int i = 0; i < stored.size(); i++) {
+                                final Score current = stored.get(i);
+                                final boolean isUnranked = candidates.stream()
+                                        .map(ScoreEntry::getScore)
+                                        .map(Score::getId)
+                                        .noneMatch(id -> id.equals(current.getId()));
+                                if (isUnranked) {
+                                    final ScoreEntry e = new ScoreEntry(i + 1, current);
+                                    e.setScoreType("Unranked");
+                                    candidates.add(e);
+                                }
                             }
 
                             final Map<ScoreEntry, Double> weights = getWeights(candidates, scoreWeights);
@@ -469,7 +484,10 @@ public class ScoreController {
                             for (int i = 0; i < Math.min(LIMIT, list.size()); i++) {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
                                 final double percentage = (e.getValue() / sum) * 100;
-                                sb.append("__BP").append("%03d".formatted(e.getKey().getBestIndex())).append("__:")
+                                sb.append("__")
+                                        .append(e.getKey().getScoreType().equalsIgnoreCase("Ranked") ? "BP" : "DB")
+                                        .append("%03d".formatted(e.getKey().getBestIndex()))
+                                        .append("__:")
                                         .append(String.format("%05.2f%%", percentage)).append("   ");
                                 showed += percentage;
                             }
@@ -496,55 +514,77 @@ public class ScoreController {
 
         long userId = userIds.getAndRemove();
 
-        return executor.enqueueAsync(() ->
-                OsuAPI.getUserScores(
-                        tokenManager.getTokenData(),
-                        userId,
-                        ScoreType.BEST,
-                        maxLimit
+        return executor
+                .enqueueAsync(() ->
+                        OsuAPI.getUserScores(
+                                tokenManager.getTokenData(),
+                                userId,
+                                ScoreType.BEST,
+                                maxLimit
+                        )
                 )
-        ).thenCompose(scores -> {
-            List<ScoreEntry> candidates = new ArrayList<>(200);
+                .thenApply(scores -> {
+                    ScoreStore.upsertScores(scores);
+                    List<ScoreEntry> candidates = new ArrayList<>(scores.size());
+                    for (int i = 0; i < scores.size(); i++) {
+                        final ScoreEntry e = new ScoreEntry(i + 1, scores.get(i));
+                        e.setScoreType("Ranked");
+                        candidates.add(e);
+                    }
+                    return candidates;
+                }).thenApply(entries -> {
+                    final List<Score> stored = ScoreStore.getUserBests(userId, 200).stream()
+                            .map(ScoreRecord::toScore)
+                            .sorted(Comparator.comparing(Score::getPp).reversed())
+                            .toList();
 
-            for (int i = 0; i < scores.size(); i++) {
-                final Score score = scores.get(i);
-
-                if (!Scores.replayPresent(score)) {
-                    continue;
-                }
-
-                candidates.add(new ScoreEntry(i + 1, score));
-            }
-
-            if (candidates.isEmpty()) {
-                return findAvailableScore(userIds, minRank, weights, maxLimit);
-            }
-
-            return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
-                    .thenCompose(user -> {
-                        if (user == null
-                                || user.getStatistics().getGlobalRank() == null
-                                || user.getStatistics().getGlobalRank() > minRank) {
-                            return findAvailableScore(userIds, minRank, weights, maxLimit);
+                    for (int i = 0; i < stored.size(); i++) {
+                        final Score current = stored.get(i);
+                        final boolean isUnranked = entries.stream()
+                                .map(ScoreEntry::getScore)
+                                .map(Score::getId)
+                                .noneMatch(id -> id.equals(current.getId()));
+                        if (isUnranked) {
+                            final ScoreEntry e = new ScoreEntry(i + 1, current);
+                            e.setScoreType("Unranked");
+                            entries.add(e);
                         }
+                    }
+                    return entries;
+                }).thenCompose(scores -> {
+                    List<ScoreEntry> candidates = scores.stream()
+                            .filter(e -> Scores.replayPresent(e.getScore()))
+                            .toList();
 
-                        WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
+                    if (candidates.isEmpty()) {
+                        return findAvailableScore(userIds, minRank, weights, maxLimit);
+                    }
 
-                        final Map<ScoreEntry, Double> finalWeights = getWeights(candidates, weights);
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                            .thenCompose(user -> {
+                                if (user == null
+                                        || user.getStatistics().getGlobalRank() == null
+                                        || user.getStatistics().getGlobalRank() > minRank) {
+                                    return findAvailableScore(userIds, minRank, weights, maxLimit);
+                                }
 
-                        if (finalWeights.isEmpty()) {
-                            return findAvailableScore(userIds, minRank, weights, maxLimit);
-                        }
+                                WeightedRandom<ScoreEntry> randomScores = new WeightedRandom<>();
 
-                        for (Map.Entry<ScoreEntry, Double> entry : finalWeights.entrySet()) {
-                            randomScores.add(entry.getKey(), entry.getValue());
-                        }
+                                final Map<ScoreEntry, Double> finalWeights = getWeights(candidates, weights);
 
-                        ScoreEntry selected = randomScores.next();
+                                if (finalWeights.isEmpty()) {
+                                    return findAvailableScore(userIds, minRank, weights, maxLimit);
+                                }
 
-                        return CompletableFuture.completedFuture(new TargetScore(selected, user));
-                    });
-        });
+                                for (Map.Entry<ScoreEntry, Double> entry : finalWeights.entrySet()) {
+                                    randomScores.add(entry.getKey(), entry.getValue());
+                                }
+
+                                ScoreEntry selected = randomScores.next();
+
+                                return CompletableFuture.completedFuture(new TargetScore(selected, user));
+                            });
+                });
     }
 
     private Map<ScoreEntry, Double> getWeights(List<ScoreEntry> candidates, Map<Long, Double> weights) {
