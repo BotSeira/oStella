@@ -485,7 +485,7 @@ public class ScoreController {
                                 final Map.Entry<ScoreEntry, Double> e = list.get(i);
                                 final double percentage = (e.getValue() / sum) * 100;
                                 sb.append("__")
-                                        .append(e.getKey().getScoreType().equalsIgnoreCase("Ranked") ? "BP" : "DB")
+                                        .append(e.getKey().getScoreType().equalsIgnoreCase("Ranked") ? "BP" : "BD")
                                         .append("%03d".formatted(e.getKey().getBestIndex()))
                                         .append("__:")
                                         .append(String.format("%05.2f%%", percentage)).append("   ");
