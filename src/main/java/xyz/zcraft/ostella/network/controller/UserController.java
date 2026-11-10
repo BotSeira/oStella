@@ -547,7 +547,7 @@ public class UserController {
                 .thenApply(scores -> scores.stream().peek(Router::ensurePp).toList())
                 .thenCompose(scores -> {
                     ScoreStore.upsertScores(scores);
-                    var merged = ScoreStore.getUserBests(u, 200).stream()
+                    var merged = ScoreStore.getUserBests(u, 40).stream()
                             .map(ScoreRecord::toScore)
                             .sorted(Comparator.comparing(Score::getPp).reversed())
                             .toList();
