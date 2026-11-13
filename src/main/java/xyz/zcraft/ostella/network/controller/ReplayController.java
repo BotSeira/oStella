@@ -245,7 +245,7 @@ public class ReplayController {
                         return id;
                     })
                     .map(Long::parseLong)
-                    .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m)))
+                    .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), userId, m)))
                     .toList());
 
             scoreFutures.addAll(scoreIds.stream().map(router::getScore).toList());

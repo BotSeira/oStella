@@ -541,7 +541,7 @@ public class MultiplayerController {
     }
 
     private MultiplayerResultData getStableResultData(long matchId, long gameId, Integer customBo, Integer customWarmups) {
-        Match match = OsuAPI.getMatch(tokenManager.getTokenData(), matchId);
+        Match match = OsuAPI.getMatchWithHistory(tokenManager.getTokenData(), matchId);
         Match.MatchGame game = findMatchGame(match, gameId);
 
         Room room = new Room();

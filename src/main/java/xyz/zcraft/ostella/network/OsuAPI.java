@@ -23,10 +23,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
@@ -231,8 +228,8 @@ public class OsuAPI {
         );
     }
 
-    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId, String mods) {
-        LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
+    public static Score getUserBeatmapScore(TokenData tokenData, long uid, long beatmapId, String mods) {
+        LOG.debug("Fetching score for user id {} on beatmap {} mod {}", uid, beatmapId, mods);
         try {
             var requestedMods = ModSettings.parse(mods);
             if (requestedMods.stream().anyMatch(mod -> mod.getSettings() != null && !mod.getSettings().isEmpty())) {
@@ -277,8 +274,22 @@ public class OsuAPI {
         }
     }
 
-    public static Score getUserScore(TokenData tokenData, long uid, long beatmapId) {
-        return getUserScore(tokenData, uid, beatmapId, null);
+    public static List<Score> getUserBeatmapScores(TokenData tokenData, long uid, long beatmapId) {
+        LOG.debug("Fetching score for user id {} on beatmap id {}", uid, beatmapId);
+        try {
+            final String url = "/beatmaps/%s/scores/users/%s/all?ruleset=osu&legacy_only=0";
+            var request = newRequestBuilder(tokenData, url.formatted(beatmapId, uid)).GET().build();
+            var response = JsonParser.parseString(send(request, HttpResponse.BodyHandlers.ofString()).body()).getAsJsonObject();
+            if (!response.has("scores")) return null;
+            return response.getAsJsonArray("scores").asList().stream()
+                    .map(value -> GSON.fromJson(value, Score.class)).toList();
+        } catch (JsonSyntaxException | InterruptedException | IOException e) {
+            throw new ApiException(ErrorCode.SCORE_FETCH_FAILED, "Failed to fetch scores for " + uid + " on beatmap " + beatmapId, e);
+        }
+    }
+
+    public static Score getUserBeatmapScore(TokenData tokenData, long uid, long beatmapId) {
+        return getUserBeatmapScore(tokenData, uid, beatmapId, null);
     }
 
     public static Room getCurrentRoom(String auth) {
@@ -670,9 +681,51 @@ public class OsuAPI {
     }
 
     public static Match getMatch(TokenData tokenData, long matchId) {
+        return getMatch(tokenData, matchId, false);
+    }
+
+    public static Match getMatchWithHistory(TokenData tokenData, long matchId) {
+        return getMatch(tokenData, matchId, true);
+    }
+
+    private static Match getMatch(TokenData tokenData, long matchId, boolean includeHistory) {
+        MatchPage latest = getMatchPage(tokenData, matchId, null);
+        Match match = latest.match();
+        if (!includeHistory || match.getEvents() == null || match.getEvents().isEmpty()) {
+            return match;
+        }
+
+        long firstEventId = latest.firstEventId();
+        var events = new LinkedList<>(match.getEvents());
+        if (events.getFirst().getId() == firstEventId) {
+            return match;
+        }
+
+        var users = new LinkedHashMap<Long, User>();
+        match.getUsers().forEach(user -> users.put(user.getId(), user));
+        while (events.getFirst().getId() > firstEventId) {
+            long before = events.getFirst().getId();
+            Match page = getMatchPage(tokenData, matchId, before).match();
+            if (page.getEvents() == null || page.getEvents().isEmpty()
+                    || page.getEvents().getLast().getId() >= before) {
+                throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Incomplete event history for match " + matchId);
+            }
+            events.addAll(0, page.getEvents());
+            page.getUsers().forEach(user -> users.putIfAbsent(user.getId(), user));
+        }
+        match.setEvents(List.copyOf(events));
+        match.setUsers(List.copyOf(users.values()));
+        return match;
+    }
+
+    private static MatchPage getMatchPage(TokenData tokenData, long matchId, Long before) {
         LOG.debug("Fetching stable multiplayer match {}", matchId);
         try {
-            final var request = newRequestBuilder(tokenData, "/matches/" + matchId + "?limit=101")
+            String endpoint = "/matches/" + matchId + "?limit=101";
+            if (before != null) {
+                endpoint += "&before=" + before;
+            }
+            final var request = newRequestBuilder(tokenData, endpoint)
                     .GET()
                     .build();
             final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
@@ -688,14 +741,18 @@ public class OsuAPI {
                 );
             }
 
-            Match match = GSON.fromJson(response.body(), Match.class);
+            JsonObject page = GSON.fromJson(response.body(), JsonObject.class);
+            Match match = GSON.fromJson(page, Match.class);
             if (match == null || match.getMatch() == null || match.getMatch().getId() <= 0) {
                 throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Invalid response for match " + matchId);
             }
-            return match;
+            return new MatchPage(match, page.get("first_event_id").getAsLong());
         } catch (JsonSyntaxException | IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Failed to fetch match " + matchId, e);
         }
+    }
+
+    private record MatchPage(Match match, long firstEventId) {
     }
 
     public static List<MultiplayerRoomScore> getRoomPlaylistScores(

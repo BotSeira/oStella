@@ -227,7 +227,7 @@ public class ScoreController {
         final long u = requireLong(context, "u");
         final String mod = optionalString(context, "mod");
 
-        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), u, m, mod))
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), u, m, mod))
                 .thenCompose(score -> {
                             if (score == null) {
                                 throw new ApiException(ErrorCode.NO_SCORE_FOUND);
@@ -299,7 +299,7 @@ public class ScoreController {
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
                     return executor
                             .enqueueAsync(() ->
-                                    OsuAPI.getUserScore(tokenManager.getTokenData(), u, beatmap.getId(), mod)
+                                    OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), u, beatmap.getId(), mod)
                             )
                             .thenApply(score -> {
                                 score.setBeatmap(beatmap);

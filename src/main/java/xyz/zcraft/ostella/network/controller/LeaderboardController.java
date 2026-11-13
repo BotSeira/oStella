@@ -124,7 +124,7 @@ public class LeaderboardController {
 
     private CompletableFuture<LinkedList<Score>> getPlacementsAsync(List<Long> u, long id) {
         List<CompletableFuture<Score>> placementFutures = u.stream().map(
-                s -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), s, id))
+                s -> executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), s, id))
         ).toList();
 
         CompletableFuture<?>[] futuresArray = placementFutures.toArray(new CompletableFuture[0]);
