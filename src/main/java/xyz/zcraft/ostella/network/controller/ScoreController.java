@@ -75,7 +75,7 @@ public class ScoreController {
         final UserExtended user = targetScore.user();
 
         try {
-            osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmap().getId()));
+            osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmapId()));
             diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
         } catch (Exception e) {
             throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
@@ -92,7 +92,7 @@ public class ScoreController {
                 diffSpec.getDifficulty().hp()
         ));
         result.addProperty("best_index", entry.getBestIndex());
-        result.addProperty("pp_weight", entry.getScore().getWeight().getPercentage());
+        result.addProperty("pp_weight", score.getWeight() == null ? 0.0 : score.getWeight().getPercentage());
         return result;
     }
 
