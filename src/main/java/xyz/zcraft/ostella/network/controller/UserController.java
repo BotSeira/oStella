@@ -113,9 +113,11 @@ public class UserController {
             Score score = scores.get(index);
             if (filters.stream().allMatch(filter -> filter.matches(score, () -> {
                 final Long id = score.getBeatmapset().getId();
-                final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
-                tryCache(beatmapset);
-                return beatmapset;
+                return CacheService.getBeatmapsetJsonCache(id).orElseGet(() -> {
+                    final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                    tryCache(beatmapset);
+                    return beatmapset;
+                });
             }))) {
                 entries.add(new ScoreEntry(index + firstPosition, score));
             }
@@ -675,6 +677,43 @@ public class UserController {
             }));
         }
         return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+    }
+
+    public void getUserBeatmapScores(@NotNull Context ctx) {
+        final long userId = requirePathLong(ctx, "userId");
+        final long beatmapId = requirePathLong(ctx, "beatmapId");
+
+        ctx.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenCompose(user -> {
+                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+
+                    return executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScores(tokenManager.getTokenData(), userId, beatmapId))
+                            .thenCompose(scoresBrief -> {
+                                final var futures = scoresBrief.stream()
+                                        .map(Score::getId)
+                                        .map(router::getScore)
+                                        .toList();
+
+                                return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                                        .thenApply(_ -> futures.stream()
+                                                .map(CompletableFuture::join)
+                                                .filter(Objects::nonNull)
+                                                .toList())
+                                        .thenApply(scores -> {
+                                            router.enrichScoreFields(scores, false);
+
+                                            for (Score score : scores) {
+                                                Router.ensurePp(score);
+                                            }
+
+                                            ScoreStore.upsertScores(scores);
+
+                                            return prepareScoreList(ctx, user, applyFilters(scores, List.of(), 1), List.of(), "Beatmap " + beatmapId, null);
+                                        });
+                            });
+                })
+                .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderScoreList, renderer.getRenderExecutor()))
+        );
     }
 
     record RecentBestData(FilteredScores scores, Double ppChange) {

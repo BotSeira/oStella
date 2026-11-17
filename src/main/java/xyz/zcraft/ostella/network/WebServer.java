@@ -108,6 +108,7 @@ public class WebServer implements Closeable {
                     .get("/users/{userId}/scores/deranked-best", router.userController::getDerankedBest)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
+                    .get("/users/{userId}/scores/beatmaps/{beatmapId}/all", router.userController::getUserBeatmapScores)
 
                     .get("/whatif", router.whatIfController::estimate)
                     .get("/daily", router::getDaily)

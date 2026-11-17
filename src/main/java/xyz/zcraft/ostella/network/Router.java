@@ -229,6 +229,30 @@ public class Router implements Closeable {
         return scoresArr;
     }
 
+    public void enrichScoreFields(List<Score> scores, boolean override) {
+        for (Score score : scores) {
+            if (score.getBeatmap() == null || override) {
+                score.setBeatmap(CacheService.getBeatmapJsonCache(score.getBeatmapId()).orElseGet(
+                        () -> {
+                            var beatmap = executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId())).join();
+                            CacheService.tryCache(beatmap);
+                            return beatmap;
+                        }
+                ));
+            }
+
+            if (score.getBeatmapset() == null || override) {
+                score.setBeatmapset(CacheService.getBeatmapsetJsonCache(score.getBeatmap().getBeatmapsetId()).orElseGet(
+                        () -> {
+                            var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId())).join();
+                            CacheService.tryCache(beatmapset);
+                            return beatmapset;
+                        }
+                ));
+            }
+        }
+    }
+
     public CompletableFuture<Score> getScore(long id) {
         try {
             final Optional<Score> scoreJsonCache = CacheService.getScoreJsonCache(id);
