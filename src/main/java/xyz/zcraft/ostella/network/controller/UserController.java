@@ -689,6 +689,10 @@ public class UserController {
 
                     return executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScores(tokenManager.getTokenData(), userId, beatmapId))
                             .thenCompose(scoresBrief -> {
+                                if (scoresBrief.isEmpty()) {
+                                    throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                                }
+
                                 final var futures = scoresBrief.stream()
                                         .map(Score::getId)
                                         .map(router::getScore)
@@ -701,6 +705,9 @@ public class UserController {
                                                 .toList())
                                         .thenApply(scores -> {
                                             router.enrichScoreFields(scores, false);
+
+                                            ctx.header("X-Beatmap-Id", String.valueOf(scores.getFirst().getBeatmapId()));
+                                            ctx.header("X-Beatmapset-Id", String.valueOf(scores.getFirst().getBeatmapset().getId()));
 
                                             for (Score score : scores) {
                                                 Router.ensurePp(score);
