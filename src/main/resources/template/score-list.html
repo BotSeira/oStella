@@ -703,12 +703,18 @@
                  src="https://assets.ppy.sh/beatmaps/320118/covers/cover.jpg?1650632079"
                  th:src="${cache.getImageSrc(score.getBeatmapset().getCovers().getCover())}"></div>
 
-        <div class="song-title" th:text="${score.beatmapset.title}">This Is An Example Song Title</div>
+        <div style="display: flex; overflow: hidden; white-space: nowrap; align-items: end; gap: 6px;">
+            <div class="song-title" th:text="${score.beatmapset.title}">This Is An Example Song Title</div>
+            <span style="font-family: serif; margin-top: -6px;"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset()) && !Beatmapsets.shouldWarpSubtitle(score.getBeatmapset())}"
+                  th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
+        </div>
         <div class="title-sub">
             <span style="font-family: serif; margin-top: -3px;"
-                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset()) && Beatmapsets.shouldWarpSubtitle(score.getBeatmapset())}"
                   th:text="${score.getBeatmapset().getTitleUnicode()}">标题</span>
-            <span style="color: #a0a0b8; margin: 0 3px;" th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset())}">//</span>
+            <span style="color: #a0a0b8; margin: 0 3px;"
+                  th:if="${Beatmapsets.hasTitleUnicode(score.getBeatmapset()) && Beatmapsets.shouldWarpSubtitle(score.getBeatmapset())}">//</span>
             <span class="song-artist" th:text="${score.beatmapset.artist}">This Is An Example Artist</span>
             <span class="beatmap-id" th:text="${'M' + score.beatmap.id}">M123456789</span>
         </div>
