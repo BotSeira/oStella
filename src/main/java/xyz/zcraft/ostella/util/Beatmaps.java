@@ -19,6 +19,9 @@ public class Beatmaps {
     }
 
     public static String getOwnersString(BeatmapExtended beatmap) {
+        if (beatmap.getOwners() == null) {
+            return "";
+        }
         return beatmap.getOwners().stream()
                 .map(owner -> owner.username)
                 .collect(Collectors.joining(", "));

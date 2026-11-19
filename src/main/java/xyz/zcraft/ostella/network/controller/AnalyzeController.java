@@ -1,6 +1,5 @@
 package xyz.zcraft.ostella.network.controller;
 
-import com.google.common.util.concurrent.AtomicDouble;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -226,7 +225,7 @@ public class AnalyzeController {
 
         validateTargetMiss(beatmap, events, targetMiss);
 
-        PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
+        PerformanceState actual = calculateFinalState(events, objectCount, _ -> false);
         PerformanceState withoutTargetMiss = calculateFinalState(
                 events, objectCount, event -> isSameEvent(event, targetMiss));
 
@@ -246,7 +245,7 @@ public class AnalyzeController {
         final List<HitEvent> events = analyze.events();
         final int objectCount = beatmap.getHitObjects().size();
 
-        PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
+        PerformanceState actual = calculateFinalState(events, objectCount, _ -> false);
         PerformanceState withoutMisses = calculateFinalState(events, objectCount,
                 event -> event.isAnalysisMiss() || (event.isObjectStart()
                         && event.hitResult() == HitEvent.HitResult.MISS));
@@ -398,6 +397,9 @@ public class AnalyzeController {
         context.future(() -> router.getScore(scoreId)
                 .thenCompose(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+
+                    router.enrichScoreFields(List.of(score), false);
+
                     final BeatmapExtended beatmap = score.getBeatmap();
 
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
