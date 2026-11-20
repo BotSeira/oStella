@@ -10,6 +10,8 @@ import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.data.TokenData;
+import xyz.zcraft.ostella.db.ScoreStore;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.OsuAPI;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Beatmapset;
@@ -29,6 +31,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 import java.util.zip.Deflater;
 import java.util.zip.ZipEntry;
@@ -65,6 +68,7 @@ public class CacheService {
         Files.createDirectories(SCORE_JSON_CACHE);
         Files.createDirectories(BEATMAP_JSON_CACHE);
         Files.createDirectories(BEATMAPSET_JSON_CACHE);
+//        LOG.info("Imported {} beatmapset metadata rows from the existing cache", SetMetaStore.importFromCachedJson());
     }
 
     private static String bytesToHex(byte[] bytes) {
@@ -381,6 +385,11 @@ public class CacheService {
     }
 
     public static Path getReplayBlocking(TokenData tokenData, long id) throws IOException {
+        final Optional<Path> replayCache = getReplayCache(id);
+        if (replayCache.isPresent()) {
+            return replayCache.get();
+        }
+
         Path replayPath = REPLAY_CACHE.resolve(id + ".osr");
 
         LOG.debug("Getting replay {}", id);
@@ -402,16 +411,13 @@ public class CacheService {
     }
 
     public static void cacheScoreJson(Score score) throws IOException {
+        ScoreStore.upsertScore(score);
         Files.writeString(SCORE_JSON_CACHE.resolve(score.getId() + ".json"), GSON.toJson(score));
     }
 
     public static Set<Long> cachedScoreUsers() {
-        return cachedScoreUsers(SCORE_JSON_CACHE);
-    }
-
-    static Set<Long> cachedScoreUsers(Path directory) {
-        Set<Long> users = new LinkedHashSet<>();
-        try (Stream<Path> files = Files.list(directory)) {
+        List<Long> users = new ArrayList<>();
+        try (Stream<Path> files = Files.list(CacheService.SCORE_JSON_CACHE)) {
             for (Path path : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
                 try {
                     var score = JsonParser.parseString(Files.readString(path)).getAsJsonObject();
@@ -426,7 +432,8 @@ public class CacheService {
         } catch (IOException e) {
             LOG.warn("Unable to discover auto cache users", e);
         }
-        return users;
+        Collections.shuffle(users);
+        return new LinkedHashSet<>(users);
     }
 
     static void prefetch(AutoCacheService.Type type, long id, TokenData token) {
@@ -438,8 +445,13 @@ public class CacheService {
                 case BEATMAPSET_JSON -> {
                     if (getBeatmapsetJsonCache(id).isEmpty()) {
                         var value = OsuAPI.getBeatmapset(token, id);
-                        if (value != null) publishPrefetch(BEATMAPSET_JSON_CACHE.resolve(id + ".json"),
-                                GSON.toJson(value).getBytes(StandardCharsets.UTF_8));
+                        if (value != null) cacheBeatmapsetJson(value);
+                    }
+                }
+                case SCORE_JSON -> {
+                    if (getScoreJsonCache(id).isEmpty()) {
+                        var value = OsuAPI.getScore(token, id);
+                        if (value != null) cacheScoreJson(value);
                     }
                 }
                 case BEATMAP_JSON -> {
@@ -486,8 +498,20 @@ public class CacheService {
         return Optional.of(GSON.fromJson(jsonElement, Score.class));
     }
 
-    public static void cacheBeatmapsetJson(Beatmapset beatmapset) throws IOException {
-        Files.writeString(BEATMAPSET_JSON_CACHE.resolve(beatmapset.getId() + ".json"), GSON.toJson(beatmapset));
+    public static synchronized void cacheBeatmapsetJson(Beatmapset beatmapset) throws IOException {
+        Path destination = BEATMAPSET_JSON_CACHE.resolve(beatmapset.getId() + ".json");
+        Path temporary = Files.createTempFile(BEATMAPSET_JSON_CACHE, "metadata-", ".tmp");
+        try {
+            Files.writeString(temporary, GSON.toJson(beatmapset));
+            try {
+                Files.move(temporary, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
+            }
+            SetMetaStore.upsertBeatmapset(List.of(beatmapset), Files.getLastModifiedTime(destination).toMillis());
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
     }
 
     public static boolean tryCache(Object obj) {
@@ -500,7 +524,7 @@ public class CacheService {
                 cacheScoreJson(score);
             }
             return true;
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             LOG.error("Failed to cache object", e);
             return false;
         }
@@ -512,9 +536,14 @@ public class CacheService {
         }
 
         try {
-            final var json = JsonParser.parseString(Files.readString(BEATMAPSET_JSON_CACHE.resolve(id + ".json")));
-            return Optional.of(GSON.fromJson(json, Beatmapset.class));
-        } catch (IOException e) {
+            Path path = BEATMAPSET_JSON_CACHE.resolve(id + ".json");
+            final var json = JsonParser.parseString(Files.readString(path));
+            Beatmapset set = GSON.fromJson(json, Beatmapset.class);
+            if (set == null) return Optional.empty();
+            long ttl = "ranked".equals(set.getStatus()) ? Duration.ofDays(1).toMillis() : Duration.ofHours(1).toMillis();
+            if (System.currentTimeMillis() - Files.getLastModifiedTime(path).toMillis() >= ttl) return Optional.empty();
+            return Optional.of(set);
+        } catch (IOException | com.google.gson.JsonParseException e) {
             LOG.error("Failed to read beatmapset JSON cache", e);
             return Optional.empty();
         }
@@ -596,7 +625,8 @@ public class CacheService {
             if (area == CacheArea.SCORE_JSON || area == CacheArea.ALL) removed += clearChildren(SCORE_JSON_CACHE);
             if (area == CacheArea.BEATMAPSETS || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_CACHE);
             if (area == CacheArea.BEATMAP_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAP_JSON_CACHE);
-            if (area == CacheArea.BEATMAPSET_JSON || area == CacheArea.ALL) removed += clearChildren(BEATMAPSET_JSON_CACHE);
+            if (area == CacheArea.BEATMAPSET_JSON || area == CacheArea.ALL)
+                removed += clearChildren(BEATMAPSET_JSON_CACHE);
             return removed;
         } catch (IOException e) {
             throw new IllegalStateException("Failed to clear oStella cache", e);
@@ -645,7 +675,8 @@ public class CacheService {
             CacheControlResult current = control(new CacheControlRequest("GET", type, request.id()));
             Path existingPath = existingCachePath(type, request.id());
             boolean reusable = existingPath != null
-                    && (!"BEATMAPSET".equals(type) || Files.isRegularFile(existingPath));
+                    && (!"BEATMAPSET".equals(type) || Files.isRegularFile(existingPath))
+                    && (!"BEATMAPSET-JSON".equals(type) || getBeatmapsetJsonCache(request.id()).isPresent());
             if (reusable && !current.nodes().isEmpty()
                     && "PRESENT".equals(current.nodes().getFirst().status())) {
                 CacheControlResult.CacheNodeResult node = current.nodes().getFirst();
@@ -685,6 +716,53 @@ public class CacheService {
                     .orElse(existing.isEmpty() ? null : existing.getFirst());
         } catch (IOException e) {
             throw new IllegalStateException("Failed to locate fetched cache entry", e);
+        }
+    }
+
+    public static void walkBeatmapsetCache(BiConsumer<Beatmapset, Long> consumer) throws IOException {
+        if (!Files.exists(BEATMAPSET_JSON_CACHE)) return;
+        try (var stream = Files.list(BEATMAPSET_JSON_CACHE)) {
+            for (Path path : (Iterable<Path>) stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".json"))::iterator) {
+                Beatmapset set;
+                long modifiedAt;
+                try (var reader = Files.newBufferedReader(path)) {
+                    set = GSON.fromJson(reader, Beatmapset.class);
+                    if (set == null || set.getId() == null || set.getId() <= 0 || set.getTitle() == null
+                            || set.getArtist() == null || set.getStatus() == null) {
+                        LOG.warn("Skipping incomplete beatmapset cache file {}", path);
+                        continue;
+                    }
+                    modifiedAt = Files.getLastModifiedTime(path).toMillis();
+                } catch (IOException | com.google.gson.JsonParseException e) {
+                    LOG.warn("Skipping unreadable beatmapset cache file {}", path, e);
+                    continue;
+                }
+                consumer.accept(set, modifiedAt);
+            }
+        }
+    }
+
+    public static void walkScoreCache(BiConsumer<Score, Long> consumer) throws IOException {
+        if (!Files.exists(SCORE_JSON_CACHE)) return;
+        try (var stream = Files.list(SCORE_JSON_CACHE)) {
+            for (Path path : (Iterable<Path>) stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".json"))::iterator) {
+                Score score;
+                long modifiedAt;
+                try (var reader = Files.newBufferedReader(path)) {
+                    score = GSON.fromJson(reader, Score.class);
+                    if (score == null || score.getId() == null) {
+                        LOG.warn("Skipping incomplete score cache file {}", path);
+                        continue;
+                    }
+                    modifiedAt = Files.getLastModifiedTime(path).toMillis();
+                } catch (IOException | com.google.gson.JsonParseException e) {
+                    LOG.warn("Skipping unreadable score cache file {}", path, e);
+                    continue;
+                }
+                consumer.accept(score, modifiedAt);
+            }
         }
     }
 

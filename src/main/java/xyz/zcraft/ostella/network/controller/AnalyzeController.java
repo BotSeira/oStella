@@ -1,35 +1,38 @@
 package xyz.zcraft.ostella.network.controller;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import desu.life.RosuFFI;
 import io.javalin.http.Context;
-import xyz.zcraft.ostella.network.ImageResponse;
-import xyz.zcraft.ostella.data.ScoreAnalysisData;
-import xyz.zcraft.ostella.data.PerformanceGraphData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
+import xyz.zcraft.ostella.data.PerformanceGraphData;
+import xyz.zcraft.ostella.data.ScoreAnalysisData;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.PerfPlusApi;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.MissVisualizeService;
 import xyz.zcraft.ostella.service.RenderService;
+import xyz.zcraft.ostella.snapshot.SnapshotRenderer;
+import xyz.zcraft.ostella.snapshot.SnapshotRequest;
+import xyz.zcraft.ostella.snapshot.SnapshotScene;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
+import xyz.zcraft.ostella.util.WeightedRandom;
 import xyz.zcraft.osu.model.BeatmapExtended;
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.PerformanceState;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.data.beatmap.WindowDifficulty;
 import xyz.zcraft.osu.parser.data.replay.HitEvent;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
@@ -38,6 +41,7 @@ import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,6 +54,8 @@ import static xyz.zcraft.ostella.util.RequestUtil.requirePathScoreId;
 public class AnalyzeController {
     private static final Logger LOG = LogManager.getLogger(AnalyzeController.class);
     private static final int PERFORMANCE_GRAPH_MAX_POINTS = 120;
+
+    private static final Gson GSON = new Gson();
 
     final RenderService renderer;
     final AsyncService executor;
@@ -86,19 +92,16 @@ public class AnalyzeController {
             final long windowEnd = windowStart + windowDurationMs;
             if (windowEnd > lastObjectTime) break;
 
-            windowDifficulties.add(calculatePerformancePoint(beatmap, windowStart, windowEnd));
+            windowDifficulties.add(calculatePerformancePoint(beatmap, windowStart, windowEnd, score.getMods()));
         }
 
         if (windowDifficulties.isEmpty()) {
             windowDifficulties.add(calculatePerformancePoint(beatmap, firstObjectTime,
-                    Math.max(firstObjectTime + 1, lastObjectTime)));
+                    Math.max(firstObjectTime + 1, lastObjectTime), score.getMods()));
         }
 
-        final String mods = score.getMods().stream()
-                .map(Mod::getAcronym)
-                .reduce("", String::concat);
         final List<double[]> realtimePp = calculateRealtimePp(
-                beatmap, analyze, mods, score.getMaxCombo());
+                beatmap, analyze, score.getMods(), score.getMaxCombo());
 
         final List<Long> misses = objectResultTimes(analyze.events(), HitEvent.HitResult.MISS);
         final List<Long> hit50s = objectResultTimes(analyze.events(), HitEvent.HitResult.MEH);
@@ -121,6 +124,12 @@ public class AnalyzeController {
     public static List<double[]> calculateRealtimePp(
             OsuBeatmap beatmap, ReplayAnalyze analyze, String mods, Long finalMaxCombo
     ) throws AnalyzeException {
+        return calculateRealtimePp(beatmap, analyze, ModSettings.parse(mods), finalMaxCombo);
+    }
+
+    public static List<double[]> calculateRealtimePp(
+            OsuBeatmap beatmap, ReplayAnalyze analyze, List<Mod> mods, Long finalMaxCombo
+    ) throws AnalyzeException {
         final List<HitEvent> events = analyze.events();
         final List<double[]> realtimePp = new ArrayList<>();
 
@@ -131,7 +140,7 @@ public class AnalyzeController {
         PerformanceState state = new PerformanceState();
 
         try (var rosuBeatmap = new RosuFFI.Beatmap(beatmap.toBeatmapString().getBytes());
-             var rosuMods = RosuFFI.Mods.fromAcronyms(mods, RosuFFI.Mode.Osu);
+             var rosuMods = OsuParser.toRosuMods(mods);
              var performance = new RosuFFI.Performance()) {
 
             performance.mods(rosuMods);
@@ -199,8 +208,8 @@ public class AnalyzeController {
         PerformanceState actual = calculateStateAtEvent(events, targetMiss, false);
         PerformanceState withoutMiss = calculateStateAtEvent(events, targetMiss, true);
 
-        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, passedObjects);
-        double withoutMissPp = ReplayAnalyzer.calculatePp(beatmap, modBits, withoutMiss, passedObjects);
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, passedObjects);
+        double withoutMissPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, withoutMiss, passedObjects);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
@@ -216,19 +225,19 @@ public class AnalyzeController {
 
         validateTargetMiss(beatmap, events, targetMiss);
 
-        PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
+        PerformanceState actual = calculateFinalState(events, objectCount, _ -> false);
         PerformanceState withoutTargetMiss = calculateFinalState(
                 events, objectCount, event -> isSameEvent(event, targetMiss));
 
-        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, objectCount);
         double withoutMissPp = ReplayAnalyzer.calculatePp(
-                beatmap, modBits, withoutTargetMiss, objectCount);
+                beatmap, analyze.replay(), modBits, withoutTargetMiss, objectCount);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
 
     /**
-     * Calculates the final PP lost to all object-start misses while preserving 100s and 50s.
+     * Calculates the final PP lost to misses and slider breaks while preserving 100s and 50s.
      */
     public static PPLoss calculateTotalMissPpLoss(
             OsuBeatmap beatmap, ReplayAnalyze analyze, int modBits
@@ -236,14 +245,14 @@ public class AnalyzeController {
         final List<HitEvent> events = analyze.events();
         final int objectCount = beatmap.getHitObjects().size();
 
-        PerformanceState actual = calculateFinalState(events, objectCount, event -> false);
+        PerformanceState actual = calculateFinalState(events, objectCount, _ -> false);
         PerformanceState withoutMisses = calculateFinalState(events, objectCount,
-                event -> event.isObjectStart()
-                        && event.hitResult() == HitEvent.HitResult.MISS);
+                event -> event.isAnalysisMiss() || (event.isObjectStart()
+                        && event.hitResult() == HitEvent.HitResult.MISS));
 
-        double actualPp = ReplayAnalyzer.calculatePp(beatmap, modBits, actual, objectCount);
+        double actualPp = ReplayAnalyzer.calculatePp(beatmap, analyze.replay(), modBits, actual, objectCount);
         double withoutMissPp = ReplayAnalyzer.calculatePp(
-                beatmap, modBits, withoutMisses, objectCount);
+                beatmap, analyze.replay(), modBits, withoutMisses, objectCount);
 
         return new PPLoss(withoutMissPp, actualPp);
     }
@@ -285,7 +294,7 @@ public class AnalyzeController {
             OsuBeatmap beatmap, List<HitEvent> events, HitEvent targetMiss
     ) {
         int passedObjects = targetMiss.objectIndex() + 1;
-        if (!targetMiss.isObjectStart() || targetMiss.hitResult() != HitEvent.HitResult.MISS
+        if (!targetMiss.isAnalysisMiss()
                 || passedObjects <= 0 || passedObjects > beatmap.getHitObjects().size()) {
             throw new IllegalArgumentException("Target event is not a valid miss");
         }
@@ -299,10 +308,10 @@ public class AnalyzeController {
         return event == targetEvent || event.equals(targetEvent);
     }
 
-    private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end)
+    private static double[] calculatePerformancePoint(OsuBeatmap beatmap, long start, long end, List<Mod> mods)
             throws AnalyzeException {
         try {
-            final var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end);
+            final var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end, mods);
             return new double[]{start + (end - start) / 2.0, difficulty.getValue()};
         } catch (RuntimeException e) {
             throw new AnalyzeException("Failed to calculate window difficulty around " + start, e);
@@ -318,11 +327,79 @@ public class AnalyzeController {
                 .toList();
     }
 
+    private static java.awt.image.BufferedImage snapshotBackground(SnapshotScene scene) {
+        // Prefer the original extracted beatmap background; remote cover art is a fallback.
+        try {
+            var beatmap = scene.analyze().beatmap();
+            for (var event : beatmap.getBgAndVideoEvents()) {
+                if (!(event instanceof OsuBeatmap.Event.BackgroundEvent background)) continue;
+                String filename = background.getFileName().replace("\"", "");
+                Path directory = CacheService.getBeatmapPath(beatmap.getBeatmapId()).toAbsolutePath().getParent();
+                Path file = directory.resolve(filename).normalize();
+                if (file.startsWith(directory) && java.nio.file.Files.isRegularFile(file)) {
+                    return javax.imageio.ImageIO.read(file.toFile());
+                }
+                if (beatmap.getBeatmapSetId() != null && CacheService.existingCachePath("BEATMAPSET", beatmap.getBeatmapSetId()) != null) {
+                    var bytes = CacheService.extractFile(beatmap.getBeatmapSetId(), filename);
+                    if (bytes.isPresent())
+                        return javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(bytes.get()));
+                }
+            }
+            Long setId = beatmap.getBeatmapSetId();
+            if (setId != null && setId > 0) {
+                String cached = CacheService.getImageSrc("https://assets.ppy.sh/beatmaps/" + setId + "/covers/raw.jpg");
+                if (!cached.isBlank()) {
+                    Path file = Path.of(cached.substring("http://ostella-cache/".length()));
+                    return javax.imageio.ImageIO.read(file.toFile());
+                }
+            }
+        } catch (Exception e) {
+            LOG.debug("Snapshot background unavailable: {}", e.getMessage());
+        }
+        return null;
+    }
+
+    private static WdPerform getHighlight(ReplayAnalyze ra) throws AnalyzeException {
+        List<Mod> mods;
+        if (ra.replay().replayInfo() != null && ra.replay().replayInfo().mods() != null) {
+            mods = ra.replay().replayInfo().mods();
+        } else try (var legacyMods = RosuFFI.Mods.fromBits(ra.replay().mods(), RosuFFI.Mode.Osu)) {
+            mods = java.util.Arrays.asList(GSON.fromJson(legacyMods.json(), Mod[].class));
+        }
+
+        List<WdPerform> performs = BeatmapAnalyzer
+                .getWindowDifficulties(ra.beatmap(), Duration.ofSeconds(20), mods)
+                .stream()
+                .map(wd -> calculatePerform(ra, wd))
+                .toList();
+
+        double maxWdScore = performs.stream()
+                .mapToDouble(WdPerform::wdScore)
+                .max()
+                .orElse(0);
+
+        WeightedRandom<WdPerform> wdPerforms = new WeightedRandom<>();
+
+        performs.stream()
+                .filter(e -> e.wdScore() > maxWdScore * 0.75)
+                .forEach(e -> wdPerforms.add(e, Math.pow(e.wdScore(), 2)));
+
+        return wdPerforms.next();
+    }
+
+    private static WdPerform calculatePerform(ReplayAnalyze ra, WindowDifficulty wd) {
+        final double acc = ReplayAnalyzer.calculateWindowAccuracy(ra, wd.start(), wd.end());
+        return new WdPerform(wd.start(), wd.end(), wd.pp(), acc, wd.pp() * Math.pow(acc, 3));
+    }
+
     public void getScoreAnalysisById(@NotNull Context context) {
         final long scoreId = requirePathScoreId(context, "scoreId");
         context.future(() -> router.getScore(scoreId)
                 .thenCompose(score -> {
                     if (score == null) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+
+                    router.enrichScoreFields(List.of(score), false);
+
                     final BeatmapExtended beatmap = score.getBeatmap();
 
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()))
@@ -332,9 +409,9 @@ public class AnalyzeController {
                     final DiffSpec diffSpec;
                     try {
                         osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-                        diffSpec = OsuParser.getDiffSpecForMap(osuBeatmap, score.getMods().stream().map(Mod::getAcronym).reduce("", String::concat));
+                        diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
 
-                        router.ensurePp(score, osuBeatmap);
+                        Router.ensurePp(score, osuBeatmap);
                     } catch (ParseException e) {
                         throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
                     } catch (AnalyzeException e) {
@@ -429,10 +506,10 @@ public class AnalyzeController {
                     String simHitResult = simGreat + " / " + simOk + " / " + simMeh + " / " + simMiss;
 
                     boolean doSimMatch =
-                            simGreat == ScoreFormatUtil.getGreatCount(score)
-                                    && simOk == ScoreFormatUtil.getOkCount(score)
-                                    && simMeh == ScoreFormatUtil.getMehCount(score)
-                                    && simMiss == ScoreFormatUtil.getMissCount(score);
+                            simGreat == Scores.getGreatCount(score)
+                                    && simOk == Scores.getOkCount(score)
+                                    && simMeh == Scores.getMehCount(score)
+                                    && simMiss == Scores.getMissCount(score);
 
                     return perfPlusApi.calculate(score)
                             .exceptionally(error -> {
@@ -454,10 +531,7 @@ public class AnalyzeController {
         context.future(() -> router.getScore(scoreId)
                 .thenApply(score -> getReplayAnalyze(context, score))
                 .thenApply(analyze -> {
-                    var misses = analyze.events().stream()
-                            .filter(hitEvent -> !hitEvent.wasHit())
-                            .filter(e -> e.eventType() == HitEvent.EventType.SLIDER_HEAD || e.eventType() == HitEvent.EventType.HIT_CIRCLE)
-                            .toList();
+                    var misses = analyze.misses();
                     return getMissArr(misses);
                 })
                 .thenAccept(arr -> context.status(200).result(new Response(true, "Success", arr).toString())));
@@ -468,8 +542,9 @@ public class AnalyzeController {
         for (int i = 0; i < misses.size(); i++) {
             JsonObject object = new JsonObject();
             object.addProperty("index", i + 1);
-            object.addProperty("time", misses.get(i).hitObject().getTime());
-            object.addProperty("type", misses.get(i).hitObject().getObjectType().name());
+            object.addProperty("time", misses.get(i).analysisTime());
+            object.addProperty("type", misses.get(i).isObjectStart()
+                    ? misses.get(i).hitObject().getObjectType().name() : "SLIDER_BREAK");
             arr.add(object);
         }
         return arr;
@@ -482,7 +557,7 @@ public class AnalyzeController {
                 .thenApply(analyze -> {
                     final WdPerform highlight;
                     try {
-                        highlight = OsuParser.getHighlight(analyze);
+                        highlight = getHighlight(analyze);
                     } catch (AnalyzeException e) {
                         throw new ApiException(ErrorCode.REPLAY_PARSE_FAILED, e);
                     }
@@ -506,7 +581,7 @@ public class AnalyzeController {
 
         final Path rosuPath = CacheService.getBeatmapPath(beatmap.getId());
 
-        router.ensurePp(score);
+        Router.ensurePp(score);
 
         try {
             final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(rosuPath);
@@ -530,12 +605,55 @@ public class AnalyzeController {
                         MissVisualizeService::renderMiss, Runnable::run)));
     }
 
+    public void snapshotReplay(@NotNull Context context) {
+        replayImage(context, false);
+    }
+
+    public void clipReplay(@NotNull Context context) {
+        replayImage(context, true);
+    }
+
+    private void replayImage(Context context, boolean animated) {
+        long scoreId = requirePathScoreId(context, "scoreId");
+        final SnapshotRequest request;
+        final xyz.zcraft.ostella.snapshot.ReplayClip.Window window;
+        try {
+            request = SnapshotRequest.fromQuery(context.queryParam("time"), context.queryParam("object"),
+                    context.queryParam("miss"), context.queryParam("offset"));
+            window = animated ? xyz.zcraft.ostella.snapshot.ReplayClip.Window.parse(
+                    context.queryParam("before"), context.queryParam("after")) : null;
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
+        context.future(() -> router.getScore(scoreId)
+                .thenApply(score -> getReplayAnalyze(context, score))
+                .thenApply(analyze -> {
+                    try {
+                        return new SnapshotScene(analyze, request, true);
+                    } catch (IllegalArgumentException | ArithmeticException e) {
+                        throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+                    }
+                })
+                .thenCompose(scene -> {
+                    context.header("X-Snapshot-Time", Long.toString(scene.time()));
+                    if (animated) {
+                        var clip = new xyz.zcraft.ostella.snapshot.ReplayClip(scene, window.before(), window.after());
+                        context.header("X-Clip-Start", Double.toString(clip.start()));
+                        context.header("X-Clip-End", Double.toString(clip.end()));
+                        return java.util.concurrent.CompletableFuture.supplyAsync(
+                                        () -> clip.render(snapshotBackground(scene)), renderer.getRasterExecutor())
+                                .thenAccept(bytes -> context.status(200).contentType("image/gif").result(bytes));
+                    }
+                    return ImageResponse.respond(context, scene, SnapshotScene::responseData,
+                            data -> SnapshotRenderer.render(data, snapshotBackground(data)), renderer.getRasterExecutor());
+                }));
+    }
+
     public record PPLoss(
             double withoutMiss,
             double actual
     ) {
     }
-
 
 
 }

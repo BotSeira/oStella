@@ -325,7 +325,9 @@
         <div class="banner-overlay">
             <div class="set-title">
                 <div class="title-main" th:text="${beatmapset.getTitle()}">Example Title Here</div>
-                <div class="title-sub" th:if="${Beatmapsets.hasTitleUnicode(beatmapset)}" th:text="${beatmapset.getTitleUnicode()}">小标题</div>
+                <div class="title-sub" th:if="${Beatmapsets.hasTitleUnicode(beatmapset)}"
+                     th:text="${beatmapset.getTitleUnicode()}">小标题
+                </div>
             </div>
             <div class="set-subtitle">
                 <div class="set-artist" th:text="${beatmapset.artist}">Reol</div>
@@ -394,7 +396,9 @@
 
             <div class="diff-info">
                 <div class="diff-version" th:text="${bm.version}">Example Name</div>
-                <div class="diff-mapper" th:text="${'Mapped by ' + Beatmaps.getOwnersString(bm)}">Mapped by Example Mapper</div>
+                <div class="diff-mapper" th:text="${'Mapped by ' + Beatmaps.getOwnersString(bm)}">Mapped by Example
+                    Mapper
+                </div>
             </div>
 
             <div class="diff-stats">

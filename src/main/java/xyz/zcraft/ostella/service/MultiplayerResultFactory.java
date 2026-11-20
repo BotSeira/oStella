@@ -1,40 +1,18 @@
 package xyz.zcraft.ostella.service;
 
 import xyz.zcraft.ostella.data.MultiplayerResultData;
-import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.ostella.data.MultiplayerRoomScore;
 import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.model.multiplayer.Room;
+import xyz.zcraft.osu.parser.BeatmapAnalyzer;
+import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.exception.ParseException;
 
 import java.util.*;
 
 public final class MultiplayerResultFactory {
-    private MultiplayerResultFactory() {
-    }
-
-    public static MultiplayerResultData create(
-            Room room,
-            Room.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores,
-            User owner
-    ) {
-        return create(room, item, roomScores, owner, "lazer", "scorev2", room.getType(),
-                MultiplayerResultData.SeriesScore.empty(), null);
-    }
-
-    public static MultiplayerResultData create(
-            Room room,
-            Room.PlaylistItem item,
-            List<MultiplayerRoomScore> roomScores,
-            User owner,
-            String client,
-            String scoringType,
-            String teamType,
-            Integer customBo
-    ) {
-        return create(room, item, roomScores, owner, client, scoringType, teamType,
-                MultiplayerResultData.SeriesScore.empty(), customBo);
-    }
-
     public static MultiplayerResultData create(
             Room room,
             Room.PlaylistItem item,
@@ -47,8 +25,6 @@ public final class MultiplayerResultFactory {
             Integer customBo
     ) {
         BeatmapExtended map = item.getBeatmap();
-        MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map);
-        MultiplayerResultData.UserInfo queuedBy = toUserInfo(owner, item.getOwnerId());
 
         List<MultiplayerRoomScore> sorted = new ArrayList<>(roomScores);
         sorted.sort(Comparator
@@ -58,7 +34,9 @@ public final class MultiplayerResultFactory {
                         Comparator.nullsLast(Comparator.reverseOrder())
                 ));
 
+        List<Mod> commonMods = commonMods(sorted);
         List<MultiplayerResultData.PlayerResult> players = new ArrayList<>(sorted.size());
+        MultiplayerDifficultyCalculator difficulties = new MultiplayerDifficultyCalculator(client);
         int fallbackPosition = 1;
         Long previousScore = null;
         for (MultiplayerRoomScore roomScore : sorted) {
@@ -87,8 +65,8 @@ public final class MultiplayerResultFactory {
                     profileCoverUrl(user),
                     user == null ? null : user.getCountryCode(),
                     playerMap == null || playerMap.getVersion() == null ? "Unknown Diff" : playerMap.getVersion(),
-                    playerMap == null ? null : playerMap.getDifficultyRating(),
-                    modString(score.getMods()),
+                    difficulties.rating(score, playerMap, item.getBeatmapId()),
+                    individualMods(score.getMods(), commonMods),
                     score.getAccuracy(),
                     score.getMaxCombo(),
                     totalScore,
@@ -145,6 +123,9 @@ public final class MultiplayerResultFactory {
                 ? 0
                 : Math.min(50, Math.sqrt(Math.abs(redTotal - blueTotal) / (double) roundAverage) * 75.0);
 
+        MultiplayerResultData.BeatmapInfo mapInfo = toBeatmapInfo(item.getBeatmapId(), map, commonMods);
+        MultiplayerResultData.UserInfo queuedBy = toUserInfo(owner, item.getOwnerId());
+
         return new MultiplayerResultData(
                 room.getId(),
                 room.getName() == null ? "MP #" + room.getId() : room.getName(),
@@ -163,6 +144,7 @@ public final class MultiplayerResultFactory {
                 players,
                 teams,
                 unassignedPlayers,
+                commonMods,
                 customBo
         );
     }
@@ -247,12 +229,22 @@ public final class MultiplayerResultFactory {
         };
     }
 
-    private static MultiplayerResultData.BeatmapInfo toBeatmapInfo(long beatmapId, BeatmapExtended map) {
+    private static MultiplayerResultData.BeatmapInfo toBeatmapInfo(long beatmapId, BeatmapExtended map, List<Mod> mods) {
         Beatmapset set = map == null ? null : map.getBeatmapset();
         Beatmap.Covers covers = set == null ? null : set.getCovers();
         String coverUrl = covers == null
                 ? null
                 : firstNonBlankOrNull(covers.getCover2x(), covers.getCover(), covers.getCard2x(), covers.getCard());
+        final OsuBeatmap osuBeatmap;
+
+        try {
+            osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
+        } catch (ParseException e) {
+            throw new RuntimeException(e);
+        }
+
+        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, mods);
+
         return new MultiplayerResultData.BeatmapInfo(
                 map == null || map.getId() == null ? beatmapId : map.getId(),
                 set == null ? "Beatmap #" + beatmapId : set.getTitle(),
@@ -264,7 +256,8 @@ public final class MultiplayerResultFactory {
                 map == null ? null : map.getBpm(),
                 map == null ? null : map.getTotalLength(),
                 map == null ? "osu!" : ruleset(map.getMode()),
-                coverUrl
+                coverUrl,
+                difficultyAttribute
         );
     }
 
@@ -281,12 +274,41 @@ public final class MultiplayerResultFactory {
         );
     }
 
-    private static String modString(List<Mod> mods) {
+    static List<Mod> commonMods(List<MultiplayerRoomScore> scores) {
+        List<Mod> common = null;
+        for (MultiplayerRoomScore entry : scores) {
+            if (entry.score() == null) continue;
+            List<Mod> mods = validMods(entry.score().getMods());
+            if (common == null) common = new ArrayList<>(mods);
+            else common.removeIf(mod -> mods.stream().noneMatch(other -> sameMod(mod, other)));
+        }
+        return common == null ? List.of() : List.copyOf(common);
+    }
+
+    private static boolean sameMod(Mod a, Mod b) {
+        return a.getAcronym().equals(b.getAcronym())
+                && Objects.equals(a.getSettings() == null ? Map.of() : a.getSettings(),
+                b.getSettings() == null ? Map.of() : b.getSettings());
+    }
+
+    static List<Mod> validMods(List<Mod> mods) {
+        return mods == null ? List.of() : mods.stream().filter(Objects::nonNull)
+                .filter(mod -> mod.getAcronym() != null && !mod.getAcronym().isBlank()
+                        && !"NM".equals(mod.getAcronym())).toList();
+    }
+
+    static String individualMods(List<Mod> mods, List<Mod> common) {
+        List<Mod> remaining = validMods(mods).stream()
+                .filter(mod -> common.stream().noneMatch(shared -> sameMod(mod, shared))).toList();
+        return remaining.isEmpty() && !common.isEmpty() ? "" : modString(remaining);
+    }
+
+    public static String modString(List<Mod> mods) {
         if (mods == null || mods.isEmpty()) {
             return "NM";
         }
         String result = mods.stream()
-                .map(Mod::getAcronym)
+                .map(ModSettings::format)
                 .filter(value -> value != null && !value.isBlank())
                 .reduce("", String::concat);
         return result.isEmpty() ? "NM" : result;

@@ -4,9 +4,10 @@ import xyz.zcraft.ostella.network.PerfPlusApi;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
+
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.LinkedHashMap;
 
 public record ScoreAnalysisData(
         Score score,
@@ -25,7 +26,9 @@ public record ScoreAnalysisData(
         boolean doSimMatch,
         String simHitResult
 ) {
-    /** Public analysis data excludes the parser's full beatmap and replay object graph. */
+    /**
+     * Public analysis data excludes the parser's full beatmap and replay object graph.
+     */
     public Map<String, Object> responseData() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("score", score);

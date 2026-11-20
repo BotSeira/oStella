@@ -3,39 +3,28 @@ package xyz.zcraft.ostella.service;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.db.ScoreStore;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.ApiActivity;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.Score;
 
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BooleanSupplier;
 
-/** Bounded, resumable prefetch: at most one page or file per idle tick. */
+/**
+ * Bounded, resumable prefetch: at most one page or file per idle tick.
+ */
 public final class AutoCacheService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(AutoCacheService.class);
-    public enum Type {
-        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON;
-
-        public static Type parse(String text) {
-            try {
-                return valueOf(text.toUpperCase(Locale.ROOT).replace('-', '_'));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("Auto cache type must be beatmapset, beatmapset-json, beatmap, or beatmap-json.");
-            }
-        }
-    }
-
-    interface Backend {
-        Set<Long> users();
-        List<Score> best(long user, int offset);
-        void cache(Type type, long id);
-    }
-
-    private record Target(Type type, long id) {}
     private final Set<Type> enabled = ConcurrentHashMap.newKeySet();
     private final AtomicLong revision = new AtomicLong();
     private final AsyncService executor;
@@ -53,10 +42,26 @@ public final class AutoCacheService implements AutoCloseable {
 
     public AutoCacheService(AsyncService executor, TokenManager tokens) {
         this(executor, tokens::isValid, new Backend() {
-            public Set<Long> users() { return CacheService.cachedScoreUsers(); }
-            public List<Score> best(long user, int offset) {
-                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 100, offset);
+            public Set<Long> users() {
+                return CacheService.cachedScoreUsers();
             }
+
+            public List<Score> tops(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.FIRSTS, 200, offset);
+            }
+
+            public List<Score> recent(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.RECENT, 200, offset);
+            }
+
+            public List<Score> best(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.BEST, 200, offset);
+            }
+
+            public List<Score> pinned(long user, int offset) {
+                return OsuAPI.getUserScores(tokens.getTokenData(), user, ScoreType.PINNED, 200, offset);
+            }
+
             public void cache(Type type, long id) {
                 CacheService.prefetch(type, id, tokens.getTokenData());
             }
@@ -116,20 +121,47 @@ public final class AutoCacheService implements AutoCloseable {
             nextScan = now + Duration.ofMinutes(5).toMillis();
             Set<Long> currentUsers = backend.users();
             refreshed.keySet().retainAll(currentUsers);
-            currentUsers.stream().filter(id -> now >= refreshed.getOrDefault(id, 0L)).forEach(users::addLast);
+            currentUsers.stream()
+                    .filter(id -> now >= refreshed.getOrDefault(id, 0L) && !users.contains(id))
+                    .forEach(users::addLast);
         }
         if (users.isEmpty()) return;
         ApiActivity.checkBackground();
-        List<Score> scores = backend.best(users.getFirst(), offset);
-        if (scores == null) throw new IllegalStateException("Missing best-score response");
+
+        List<Score> bests = backend.best(users.getFirst(), offset);
+        if (bests == null) throw new IllegalStateException("Missing best-score response");
+        List<Score> recents = backend.recent(users.getFirst(), offset);
+        if (recents == null) throw new IllegalStateException("Missing recent-score response");
+        List<Score> tops = backend.tops(users.getFirst(), offset);
+        if (tops == null) throw new IllegalStateException("Missing top-score response");
+        List<Score> pinned = backend.pinned(users.getFirst(), offset);
+        if (pinned == null) throw new IllegalStateException("Missing pinned-score response");
+
+        List<Score> scores = new ArrayList<>(bests);
+        scores.addAll(recents);
+        scores.addAll(tops);
+        scores.addAll(pinned);
+
+        scores.forEach(Router::ensurePp);
+
+        ScoreStore.upsertScores(scores);
+        SetMetaStore.upsertBeatmapset(scores.stream().map(Score::getBeatmapset).toList());
+
         Set<Target> unique = new LinkedHashSet<>();
         for (Score score : scores) {
             if (score.getBeatmap() == null) continue;
             Long map = score.getBeatmap().getId();
             Long set = score.getBeatmap().getBeatmapsetId();
+            Long s = score.getId();
             if (score.getBeatmapset() != null) set = score.getBeatmapset().getId();
             for (Type type : enabled) {
-                Long id = type == Type.BEATMAP || type == Type.BEATMAP_JSON ? map : set;
+                if (type == Type.SCORE_FETCH) continue;
+                Long id = switch (type) {
+                    case BEATMAP, BEATMAP_JSON -> map;
+                    case BEATMAPSET, BEATMAPSET_JSON -> set;
+                    case SCORE_JSON -> s;
+                    default -> throw new IllegalStateException("Unexpected value: " + type);
+                };
                 if (id != null && id > 0) unique.add(new Target(type, id));
             }
         }
@@ -143,8 +175,38 @@ public final class AutoCacheService implements AutoCloseable {
         offset = 0;
     }
 
-    @Override public void close() {
+    @Override
+    public void close() {
         closed = true;
         worker.shutdownNow();
+    }
+
+    public enum Type {
+        BEATMAPSET, BEATMAPSET_JSON, BEATMAP, BEATMAP_JSON, SCORE_JSON, SCORE_FETCH;
+
+        public static Type parse(String text) {
+            try {
+                return valueOf(text.toUpperCase(Locale.ROOT).replace('-', '_'));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Auto cache type must be beatmapset, beatmapset-json, beatmap, or beatmap-json.");
+            }
+        }
+    }
+
+    interface Backend {
+        Set<Long> users();
+
+        List<Score> best(long user, int offset);
+
+        List<Score> recent(long user, int offset);
+
+        void cache(Type type, long id);
+
+        List<Score> pinned(long user, int offset);
+
+        List<Score> tops(long user, int offset);
+    }
+
+    private record Target(Type type, long id) {
     }
 }

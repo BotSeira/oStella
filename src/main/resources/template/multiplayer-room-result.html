@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>oStella — Multiplayer Result</title>
     <script>window.__OSTELLA_RENDER_READY__ = false;</script>
+    <!--suppress CssUnusedSymbol, CssUnresolvedCustomProperty -->
     <style>
         :root {
             --page: #0d1020;
@@ -230,6 +231,37 @@
             min-width: 0;
         }
 
+        .summary-heading {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .common-mod-badges {
+            display: flex;
+            flex-wrap: wrap;
+            min-width: 0;
+            margin-right: auto;
+            gap: 10px;
+        }
+
+        .common-mod-badge {
+            display: grid;
+            place-items: center;
+        }
+
+        .mod-back {
+            grid-area: 1 / 1;
+            z-index: 1;
+        }
+
+        .mod-icon {
+            grid-area: 1 / 1;
+            z-index: 2;
+            filter: brightness(0) saturate(100%) invert(16%) sepia(7%) saturate(5011%) hue-rotate(314deg) brightness(107%) contrast(101%);
+        }
+
         .summary-title {
             font-size: 26px;
             font-weight: 850;
@@ -396,6 +428,7 @@
 
         .difficulty-sub {
             display: flex;
+            flex-wrap: wrap;
             gap: 9px;
             margin-top: 7px;
             color: var(--muted);
@@ -405,6 +438,7 @@
 
         .mod {
             color: #f5d0fe;
+            overflow-wrap: anywhere;
         }
 
         .metric {
@@ -856,7 +890,8 @@
             font-size: 18px;
             font-weight: 750;
             text-overflow: ellipsis;
-            white-space: nowrap;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
 
         .duel-diff span {
@@ -1211,7 +1246,8 @@
             font-size: 13px;
             font-weight: 750;
             text-overflow: ellipsis;
-            white-space: nowrap;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
 
         .team-diff .mod {
@@ -1469,6 +1505,23 @@
             font-weight: bolder;
             font-size: 3em;
         }
+
+        .mod-extra {
+            min-height: 30px;
+            grid-area: 1 / 2;
+            z-index: 0;
+            display: flex;
+            align-items: center;
+            padding: 2px 12px;
+            margin-left: -8px;
+            background-color: #591f1d;
+            font-size: 14px;
+            font-weight: bold;
+            font-variant-numeric: tabular-nums;
+            max-width: 280px;
+            overflow-wrap: anywhere;
+            clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+        }
     </style>
 </head>
 <body>
@@ -1507,22 +1560,21 @@
             <div class="hero-footer">
                 <div class="map-meta">
                     <span class="pill" th:text="${result.client}">Lazer</span>
-                    <span class="pill" th:text="${result.scoringType}">ScoreV2</span>
+                    <span class="pill" th:if="${result.client != 'Lazer'}" th:text="${result.scoringType}">ScoreV2</span>
                     <span class="pill" th:text="${result.teamType}">Head to Head</span>
                     <span class="pill diff"
                           th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : Osu.formatStarRating(result.beatmap.difficultyRating())) + '★'}">
                         Insane · 5.20★
                     </span>
-                    <span class="pill" th:text="${result.beatmap.ruleset()}">osu!</span>
-                    <span class="pill"
-                          th:text="${'BPM ' + (result.beatmap.bpm() == null ? '--' : #numbers.formatDecimal(result.beatmap.bpm(), 1, 0))}">
-                        BPM 180
+                    <span class="pill diff"
+                          th:text="${result.beatmap.getAttributeText()}">
+                        CS6.78 / OD7.89 / AR9.10
                     </span>
                     <span class="pill"
                           th:text="${result.beatmap.totalLength() == null ? '--:--' : #numbers.formatInteger(result.beatmap.totalLength() / 60, 1) + ':' + #numbers.formatInteger(result.beatmap.totalLength() % 60, 2)}">
                         2:30
                     </span>
-                    <span class="pill" th:text="${'Beatmap #' + result.beatmap.id()}">Beatmap #1</span>
+                    <span class="pill" th:text="${'M' + result.beatmap.id()}">M1234567</span>
                 </div>
                 <div class="queued-by">
                     <img alt="" class="avatar"
@@ -1537,11 +1589,31 @@
     <section class="results">
         <div class="summary-line">
             <div class="summary-copy">
-                <div class="summary-title"
-                     th:text="${result.isTeamVs() ? 'Team VS' : (result.isDuel() ? 'Duel result' : 'Leaderboard')}">
-                    Leaderboard
+                <div class="summary-heading">
+                    <div class="summary-title"
+                         th:text="${result.isTeamVs() ? 'Team VS' : (result.isDuel() ? 'Duel result' : 'Leaderboard')}">
+                        Leaderboard
+                    </div>
                 </div>
                 <div class="summary-count" th:text="${result.players.size() + ' players'}">8 players</div>
+            </div>
+            <div class="common-mod-badges">
+                <div class="common-mod-badge"
+                     th:each="amod : ${result.commonMods()}"
+                     th:if="${!#strings.isEmpty(result.getCommonModString())}">
+                    <svg class="mod-back" fill="#ff6666" height="55" th:style="'fill: ' + ${Mods.getColorHex(amod)}"
+                         viewBox="0 -14 100 100" width="55">
+                        <path d="M25.5678 70C25.1561 69.9742 24.7572 69.9742 24.3455 69.9354C23.535 69.8579 22.7244 69.7029 21.9396 69.4704C20.7688 69.1216 19.6367 68.6049 18.6074 67.9461C17.5781 67.2873 16.6389 66.4735 15.8412 65.5435C15.1336 64.7167 15.005 64.4584 14.426 63.5412L1.72742 41.4523C1.22565 40.4835 1.07126 40.251 0.71102 39.2176C0.31218 38.055 0.0805947 36.8407 0.0162656 35.6136C-0.0480635 34.3864 0.0805947 33.1463 0.363643 31.9579C0.55663 31.157 0.826813 30.382 1.16132 29.6328C1.32858 29.2582 1.53443 28.9094 1.72742 28.5348L14.426 6.45876C15.0178 5.54161 15.1336 5.28326 15.8412 4.45654C16.6389 3.52648 17.5781 2.71268 18.6074 2.05388C19.6367 1.39509 20.7688 0.878391 21.9396 0.529618C22.7244 0.297103 23.5221 0.142093 24.3455 0.0645876C24.7572 0.025835 25.1561 0.025835 25.5678 0H74.4451C75.5258 0.05167 75.8088 0.025835 76.8767 0.232515C78.0861 0.46503 79.244 0.865473 80.3376 1.43384C81.4312 2.00221 82.4347 2.71268 83.3225 3.56523C83.9143 4.1336 84.4547 4.75364 84.9179 5.42535C85.1494 5.76121 85.3553 6.10998 85.574 6.45876L98.2726 28.5348C98.4656 28.8965 98.6586 29.2582 98.8387 29.6328C99.1732 30.382 99.4434 31.157 99.6364 31.9579C99.9194 33.1593 100.048 34.3864 99.9837 35.6136C99.9194 36.8407 99.6878 38.0679 99.289 39.2176C98.9287 40.251 98.7743 40.4835 98.2726 41.4523L85.574 63.5283C84.9822 64.4455 84.8664 64.7038 84.1588 65.5305C83.3611 66.4606 82.4219 67.2744 81.3926 67.9332C80.3633 68.592 79.2312 69.1087 78.0604 69.4575C77.2756 69.69 76.4779 69.845 75.6545 69.9225C75.2428 69.9612 74.8439 69.9612 74.4322 69.9871C58.1569 70 41.8559 70 25.5678 70Z"/>
+                    </svg>
+                    <div class="mod-extra" th:if="${!#strings.isEmpty(Mods.getSettingsText(amod))}"
+                         th:style="'color: ' + ${Mods.getColorHex(amod)}"
+                         th:text="${Mods.getSettingsText(amod)}"></div>
+                    <img alt="mod"
+                         class="mod-icon"
+                         height="50"
+                         src="https://osu.ppy.sh/assets/images/mod-double-time.895bdda1.svg"
+                         th:src="${cache.getImageSrc(Mods.getModIcon(amod))}" width="50">
+                </div>
             </div>
             <div class="round-stats">
                 <div class="round-stat">
@@ -1589,7 +1661,8 @@
                     <div class="difficulty-name" th:text="${player.difficultyName}">Insane</div>
                     <div class="difficulty-sub">
                         <span th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">5.20★</span>
-                        <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
+                        <span class="mod" th:if="${!#strings.isEmpty(player.mods)}"
+                              th:text="${'+' + player.mods}">+HDDT</span>
                     </div>
                 </div>
                 <div class="metric performance">
@@ -1662,7 +1735,7 @@
                             th:text="${left.difficultyRating == null ? '--★' : Osu.formatStarRating(left.difficultyRating) + '★'}">
                         5.20★
                     </th:block>
-                    <span th:text="${'+' + left.mods}">+HDDT</span>
+                    <span th:if="${!#strings.isEmpty(left.mods)}" th:text="${'+' + left.mods}">+HDDT</span>
                 </div>
                 <div class="duel-metrics">
                     <div class="duel-metric"><span>Accuracy</span><strong
@@ -1725,23 +1798,27 @@
                             th:text="${right.difficultyRating == null ? '--★' : Osu.formatStarRating(right.difficultyRating) + '★'}">
                         5.20★
                     </th:block>
-                    <span th:text="${'+' + right.mods}">+HD</span>
+                    <span th:if="${!#strings.isEmpty(right.mods)}" th:text="${'+' + right.mods}">+HD</span>
                 </div>
                 <div class="duel-metrics">
                     <div class="duel-metric"><span>Accuracy</span><strong
                             th:text="${right.accuracy == null ? '--' : Osu.formatAccuracy(right.accuracy)}">97.80%</strong>
                     </div>
-                    <div class="duel-metric"><span>Combo</span><strong
-                            th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong></div>
-                    <div class="duel-metric"><span>Miss</span><strong th:text="${right.misses}">1</strong></div>
-                    <div class="duel-metric"><span>PP</span><strong
-                            th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong>
+                    <div class="duel-metric">
+                        <span>Combo</span>
+                        <strong th:text="${right.maxCombo == null ? '--' : right.maxCombo + 'x'}">820x</strong>
                     </div>
-                    <div class="duel-metric"><span>Rank</span><strong
-                            th:text="${right.grade == null ? '--' : right.grade}">A</strong></div>
-                    <!--                    <div class="duel-metric"><span>Score gap</span><strong-->
-                    <!--                            th:text="${right.scoreGap == null ? '—' : 'Δ' + #numbers.formatInteger(right.scoreGap, 1, 'COMMA')}">Δ15,000</strong>-->
-                    <!--                    </div>-->
+                    <div class="duel-metric"><span>Miss</span>
+                        <strong th:text="${right.misses}">1</strong>
+                    </div>
+                    <div class="duel-metric">
+                        <span>PP</span>
+                        <strong th:text="${right.pp == null ? '--' : #numbers.formatDecimal(right.pp, 1, 1) + 'pp'}">118.7pp</strong>
+                    </div>
+                    <div class="duel-metric">
+                        <span>Rank</span>
+                        <strong th:text="${right.grade == null ? '--' : right.grade}">A</strong>
+                    </div>
                 </div>
             </article>
         </div>
@@ -1785,7 +1862,8 @@
                                         th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">
                                     5.20★
                                 </th:block>
-                                <span class="mod" th:text="${'+' + player.mods}">+HDDT</span>
+                                <span class="mod" th:if="${!#strings.isEmpty(player.mods)}"
+                                      th:text="${'+' + player.mods}">+HDDT</span>
                             </div>
                             <div class="team-metrics">
                                 <div class="team-metric score"><strong
@@ -1847,7 +1925,8 @@
                                         th:text="${player.difficultyRating == null ? '--★' : Osu.formatStarRating(player.difficultyRating) + '★'}">
                                     5.20★
                                 </th:block>
-                                <span class="mod" th:text="${'+' + player.mods}">+HD</span>
+                                <span class="mod" th:if="${!#strings.isEmpty(player.mods)}"
+                                      th:text="${'+' + player.mods}">+HD</span>
                             </div>
                             <div class="team-metrics">
                                 <div class="team-metric score"><strong
@@ -1909,7 +1988,8 @@
                     </div>
                     <div class="team-diff">
                         <th:block th:text="${player.difficultyName}">Insane</th:block>
-                        <span class="mod" th:text="${'+' + player.mods}">+NM</span>
+                        <span class="mod" th:if="${!#strings.isEmpty(player.mods)}"
+                              th:text="${'+' + player.mods}">+NM</span>
                     </div>
                     <div class="team-metrics">
                         <div class="team-metric"><span>Score</span><strong
@@ -1935,30 +2015,34 @@
                 <span th:text="${leftScore.name}">Left side</span>
                 <div style="display: flex; flex-direction: row; align-items: center; gap: 10px;">
                     <div class="win-count"
-                         th:text="${leftScore.wins}"
-                         style="transform: translateY(-2px)">3</div>
+                         style="transform: translateY(-2px)"
+                         th:text="${leftScore.wins}">3
+                    </div>
                     <div class="win-indicator red"
-                         th:if="${leftScore.wins > 0}"
-                         th:each="i : ${#numbers.sequence(1, leftScore.wins)}"></div>
+                         th:each="i : ${#numbers.sequence(1, leftScore.wins)}"
+                         th:if="${leftScore.wins > 0}"></div>
                     <div class="lose-indicator red"
-                         th:if="${MPs.getLeftLoseIndicatorCount(result) > 0}"
-                         th:each="i : ${#numbers.sequence(1, MPs.getLeftLoseIndicatorCount(result))}"></div>
+                         th:each="i : ${#numbers.sequence(1, MPs.getLeftLoseIndicatorCount(result))}"
+                         th:if="${MPs.getLeftLoseIndicatorCount(result) > 0}"></div>
                 </div>
             </div>
-            <div class="versus-total-separator" th:text="${result.customBo() == null ? '|' : 'BO' + result.customBo()}">BO11</div>
+            <div class="versus-total-separator" th:text="${result.customBo() == null ? '|' : 'BO' + result.customBo()}">
+                BO11
+            </div>
 
             <div class="versus-total right" th:classappend="${rightScore.key}">
                 <span th:text="${rightScore.name}">Right side</span>
                 <div style="display: flex; flex-direction: row; justify-content: right; align-items: center; gap: 10px;">
                     <div class="lose-indicator blue"
-                         th:if="${MPs.getRightLoseIndicatorCount(result) > 0}"
-                         th:each="i : ${#numbers.sequence(1, MPs.getRightLoseIndicatorCount(result))}"></div>
+                         th:each="i : ${#numbers.sequence(1, MPs.getRightLoseIndicatorCount(result))}"
+                         th:if="${MPs.getRightLoseIndicatorCount(result) > 0}"></div>
                     <div class="win-indicator blue"
-                         th:if="${rightScore.wins > 0}"
-                         th:each="i : ${#numbers.sequence(1, rightScore.wins)}"></div>
+                         th:each="i : ${#numbers.sequence(1, rightScore.wins)}"
+                         th:if="${rightScore.wins > 0}"></div>
                     <div class="win-count"
-                         th:text="${rightScore.wins}"
-                         style="transform: translateY(-2px)">2</div>
+                         style="transform: translateY(-2px)"
+                         th:text="${rightScore.wins}">2
+                    </div>
                 </div>
             </div>
         </div>

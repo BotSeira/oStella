@@ -6,31 +6,37 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.network.ImageResponse;
-import xyz.zcraft.ostella.data.ScoreFilter;
-import xyz.zcraft.ostella.data.ScoreType;
+import xyz.zcraft.ostella.addpp.BpProjection;
+import xyz.zcraft.ostella.data.*;
+import xyz.zcraft.ostella.db.ScoreStore;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.exception.ApiException;
-import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.network.OsuAPI;
-import xyz.zcraft.ostella.network.Headers;
-import xyz.zcraft.ostella.network.Response;
-import xyz.zcraft.ostella.network.Router;
+import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
+import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.RenderService;
+import xyz.zcraft.ostella.util.ScoreListRange;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.ostella.util.TokenManager;
-import xyz.zcraft.osu.model.Mod;
-import xyz.zcraft.osu.model.Score;
-import xyz.zcraft.osu.model.User;
-import xyz.zcraft.osu.model.UserExtended;
+import xyz.zcraft.ostella.whatif.RankPpModel;
+import xyz.zcraft.ostella.whatif.WhatIfEstimates;
+import xyz.zcraft.ostella.whatif.WhatIfService;
+import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.parser.*;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.data.replay.OsuReplay;
+import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.service.CacheService.tryCache;
@@ -44,6 +50,7 @@ public class UserController {
 
     public final RenderService renderer;
     public final AsyncService executor;
+    public final WhatIfService whatIfService;
     public final TokenManager tokenManager;
     public final Router router;
 
@@ -51,81 +58,100 @@ public class UserController {
         this.router = router;
         this.renderer = router.renderer;
         this.executor = router.executor;
+        this.whatIfService = router.whatIf;
         this.tokenManager = router.tokenManager;
     }
 
-    private static List<ScoreFilter> requireScoreFilters(Context context) {
-        try {
-            return ScoreFilter.parseList(context.queryParam("filters"));
-        } catch (IllegalArgumentException e) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
-        }
+    private static List<String> filterLabels(List<ScoreFilter> filters) {
+        return filters.stream().map(ScoreFilter::getDisplayText).toList();
     }
 
-    private static int requireScoreListLimit(Context context) {
-        int limit = requirePositiveInt(context, "n");
-        if (limit > OsuAPI.MAX_USER_SCORES_LIMIT) {
-            throw new ApiException(
-                    ErrorCode.ILLEGAL_ARGUMENT,
-                    "Score limit must not exceed " + OsuAPI.MAX_USER_SCORES_LIMIT
-            );
-        }
-        return limit;
+    static void putRankPpHeaders(Context context, UserExtended user) {
+        context.header("X-User-Id", String.valueOf(user.getId()));
+        var stats = user.getStatistics();
+        if (stats == null || stats.getGlobalRank() == null || stats.getGlobalRank() <= 0
+                || stats.getPp() == null || !Double.isFinite(stats.getPp()) || stats.getPp() <= 0) return;
+        context.header("X-Osu-Ruleset", "osu");
+        context.header("X-Osu-Global-Rank", String.valueOf(stats.getGlobalRank()));
+        context.header("X-Osu-Total-Pp", String.valueOf(stats.getPp()));
+        context.header("X-Osu-Observed-At", String.valueOf(System.currentTimeMillis()));
     }
 
-    private static int requireScoreListStart(Context context, int endPosition) {
-        String startParam = context.queryParam("start");
-        int start = startParam == null ? 1 : requirePositiveInt(context, "start");
-        if (start > endPosition) {
-            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Score range start must not exceed its end");
-        }
-        return start;
-    }
-
-    static FilteredScores filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
-        List<Score> result = new ArrayList<>();
-        List<Integer> bestPositions = new ArrayList<>();
+    static RecentBestData filterBestScoresSince(List<Score> bestScores, Instant cutoff) {
+        double currentPp = 0;
+        List<ScoreEntry> entries = new ArrayList<>();
+        Set<Long> newIds = new HashSet<>();
         for (int index = 0; index < bestScores.size(); index++) {
             Score bestScore = bestScores.get(index);
+            currentPp += bestScore.getWeight().getPp();
             try {
                 if (bestScore.getEndedAt() != null && !Instant.parse(bestScore.getEndedAt()).isBefore(cutoff)) {
-                    result.add(bestScore);
-                    bestPositions.add(index + 1);
+                    entries.add(new ScoreEntry(index + 1, bestScore));
+                    newIds.add(bestScore.getId());
                 }
             } catch (DateTimeParseException e) {
                 LOG.warn("Ignoring best score {} with invalid ended_at: {}", bestScore.getId(), bestScore.getEndedAt());
             }
         }
-        return new FilteredScores(List.copyOf(result), List.copyOf(bestPositions));
-    }
 
-    private static List<String> filterLabels(List<ScoreFilter> filters) {
-        return filters.stream().map(ScoreFilter::displayText).toList();
-    }
+        double beforePp = 0;
+        int weightIndex = 1;
 
-    private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters) {
-        return applyFilters(scores, filters, 1);
+        for (Score score : bestScores) {
+            if (!newIds.contains(score.getId())) {
+                beforePp += score.getPp() * Math.pow(0.95, weightIndex - 1);
+                weightIndex++;
+            }
+        }
+
+        return new RecentBestData(new FilteredScores(entries), currentPp - beforePp);
     }
 
     private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
-        List<Score> result = new ArrayList<>();
-        List<Integer> originalPositions = new ArrayList<>();
+        List<ScoreEntry> entries = new ArrayList<>();
         for (int index = 0; index < scores.size(); index++) {
             Score score = scores.get(index);
             if (filters.stream().allMatch(filter -> filter.matches(score, () -> {
                 final Long id = score.getBeatmapset().getId();
-                final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
-                tryCache(beatmapset);
-                return beatmapset;
+                return CacheService.getBeatmapsetJsonCache(id).orElseGet(() -> {
+                    final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
+                    tryCache(beatmapset);
+                    return beatmapset;
+                });
             }))) {
-                result.add(score);
-                originalPositions.add(index + firstPosition);
+                entries.add(new ScoreEntry(index + firstPosition, score));
             }
         }
-        if (!filters.isEmpty() && result.isEmpty()) {
+        if (!filters.isEmpty() && entries.isEmpty()) {
             throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No scores matched the filters");
         }
-        return new FilteredScores(List.copyOf(result), List.copyOf(originalPositions));
+        return new FilteredScores(entries);
+    }
+
+    public void getRecentScores(@NotNull Context context) {
+        final long u = requirePathLong(context, "userId");
+        final var range = ScoreListRange.from(context);
+        final boolean fail = requireBoolean(context, "fail", false);
+        final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
+
+        final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
+                        tokenManager.getTokenData(), u, type, range.count(), range.offset())
+                )
+                .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
+                        .thenApply(user -> {
+                            if (user == null) {
+                                throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
+                            }
+
+                            for (Score score : scores) {
+                                Router.ensurePp(score);
+                            }
+
+                            FilteredScores filteredScores = applyFilters(scores, filters, range.start());
+                            return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Recent Scores", null);
+                        }))
+                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getUsers(@NotNull Context context) {
@@ -197,29 +223,77 @@ public class UserController {
         );
     }
 
-    public void getRecentScores(@NotNull Context context) {
+    public void getBestOfN(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
-        final int n = requireScoreListLimit(context);
-        final int start = requireScoreListStart(context, n);
-        final boolean fail = requireBoolean(context, "fail", false);
-        final List<ScoreFilter> filters = requireScoreFilters(context);
-
-        final ScoreType type = fail ? ScoreType.RECENT : ScoreType.RECENT_PASS;
+        final var range = ScoreListRange.from(context);
+        final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
+        final boolean hasUrFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.UR);
+        final boolean hasTypeFilter = filters.stream().anyMatch(f -> f.getField() == ScoreFilter.Field.TYPE);
+        final AtomicInteger filteredForNoReplay = new AtomicInteger(0);
+        final AtomicInteger filteredForError = new AtomicInteger(0);
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, type, n - start + 1, start - 1)
-                )
-                .thenCompose(scores -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
-                        .thenApply(user -> {
-                            if (user == null) {
-                                throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found");
-                            }
-                            for (Score score : scores) {
-                                router.ensurePp(score);
-                            }
+                        tokenManager.getTokenData(), u, ScoreType.BEST, range.count(), range.offset()
+                ))
+                .thenCompose(scores -> {
+                    if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
+                            .thenApply(user -> {
+                                if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                for (Score score : scores) {
+                                    Router.ensurePp(score);
+                                }
+                                FilteredScores filteredScores = applyFilters(scores, filters, range.start());
 
-                            FilteredScores filteredScores = applyFilters(scores, filters, start);
-                            return prepareScoreList(context, user, filteredScores, type, filterLabels(filters), null);
-                        }))
+                                filteredScores.entries()
+                                        .forEach(e -> {
+                                            try {
+                                                final Score score = e.getScore();
+                                                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(score.getBeatmapId()));
+                                                final OsuReplay osuReplay;
+                                                final ReplayAnalyze analyze;
+                                                final Optional<Path> replayCache = CacheService.getReplayCache(score.getId());
+
+                                                if (replayCache.isPresent()) {
+                                                    osuReplay = ReplayParser.parseReplay(replayCache.get());
+                                                    analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
+                                                } else {
+                                                    analyze = null;
+                                                }
+
+                                                if (hasUrFilter) {
+                                                    if (analyze != null) {
+                                                        e.addExtra("UR: %.2f".formatted(analyze.unstableRate()));
+                                                    } else {
+                                                        filteredForNoReplay.incrementAndGet();
+                                                    }
+                                                }
+
+                                                if (hasTypeFilter) {
+                                                    var diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
+                                                    var pattern = BeatmapPatternAnalyzer.analyze(osuBeatmap, diffSpec.getDifficulty());
+
+                                                    var primary = pattern.primaryType();
+                                                    e.addExtra("%s: %d%%".formatted(primary.type().name(), (int) primary.percentage()));
+                                                }
+                                            } catch (Exception ex) {
+                                                LOG.error("Failed to get extra info for score entry", ex);
+                                                filteredForError.incrementAndGet();
+                                            }
+                                        });
+
+                                StringBuilder extraTitle = new StringBuilder();
+
+                                if (filteredForError.get() > 0) {
+                                    extraTitle.append(filteredForError.get()).append(" filtered due to error.");
+                                }
+
+                                if (filteredForNoReplay.get() > 0) {
+                                    extraTitle.append(filteredForNoReplay.get()).append(" filtered for no replay.");
+                                }
+
+                                return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Best Scores", extraTitle.toString());
+                            });
+                })
                 .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
@@ -265,24 +339,37 @@ public class UserController {
         );
     }
 
-    public void getBestOfN(@NotNull Context context) {
-        final long u = requirePathLong(context, "userId");
-        final int n = requireScoreListLimit(context);
-        final int start = requireScoreListStart(context, n);
-        final List<ScoreFilter> filters = requireScoreFilters(context);
-        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), u, ScoreType.BEST, n - start + 1, start - 1
-                ))
-                .thenCompose(scores -> {
-                    if (scores == null || scores.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
+    public void getTodayBestScores(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+        final String daysParam = context.queryParam("days");
+        final int days = daysParam == null ? 1 : requirePositiveInt(context, "days");
+        final Instant cutoff = Instant.now().minus(days, ChronoUnit.DAYS);
+        final CompletableFuture<List<Score>> bestScoresFuture = executor.enqueueAsync(() ->
+                OsuAPI.getUserScores(
+                        tokenManager.getTokenData(), userId, ScoreType.BEST, OsuAPI.MAX_USER_SCORES_LIMIT
+                ));
+
+        context.future(() -> bestScoresFuture
+                .thenApply(bestScores -> filterBestScoresSince(bestScores, cutoff))
+                .thenCompose(data -> {
+                    if (data.scores().entries().isEmpty()) {
+                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No best scores found in the last " + days + " days");
+                    }
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
                             .thenApply(user -> {
                                 if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
-                                for (Score score : scores) {
-                                    router.ensurePp(score);
+
+                                for (ScoreEntry entry : data.scores().entries()) {
+                                    Router.ensurePp(entry.getScore());
                                 }
-                                FilteredScores filteredScores = applyFilters(scores, filters, start);
-                                return prepareScoreList(context, user, filteredScores, ScoreType.BEST, filterLabels(filters), null);
+
+                                String extraTitle = "Date range: " + days + (days == 1 ? " Day" : " Days");
+
+                                if (data.ppChange() != null) {
+                                    extraTitle += " | Estimated PP Change: %+.2fpp".formatted(data.ppChange());
+                                }
+
+                                return prepareScoreList(context, user, data.scores(), List.of(), "Recent Bests", extraTitle);
                             });
                 })
                 .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
@@ -315,10 +402,10 @@ public class UserController {
                             .limit(USER_INFO_DISPLAY_SCORE_COUNT)
                             .toList();
                     for (Score score : displayScores) {
-                        router.ensurePp(score);
+                        Router.ensurePp(score);
                     }
 
-                    context.header("X-User-Id", String.valueOf(data.user().getId()));
+                    putRankPpHeaders(context, data.user());
                     context.header(
                             "X-Score-Ids",
                             displayScores.stream()
@@ -331,13 +418,12 @@ public class UserController {
                 .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes)));
     }
 
-    private void getUserInfoJson(@NotNull Context context, long userId) {
+    public void getUserCard(@NotNull Context context) {
+        final long userId = requirePathLong(context, "userId");
+
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
-                .thenAccept(user -> {
-                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
-                    context.header("X-User-Id", String.valueOf(user.getId()));
-                    putResult(context, user);
-                }));
+                .thenApplyAsync(renderer::renderUserCard, renderer.getRenderExecutor())
+                .thenAccept(bytes -> context.status(200).contentType("image/png").result(bytes)));
     }
 
     public void getUserRank(@NotNull Context context) {
@@ -357,33 +443,13 @@ public class UserController {
                 .thenAccept(json -> putResult(context, json)));
     }
 
-    public void getTodayBestScores(@NotNull Context context) {
-        final long userId = requirePathLong(context, "userId");
-        final String daysParam = context.queryParam("days");
-        final int days = daysParam == null ? 1 : requirePositiveInt(context, "days");
-        final Instant cutoff = Instant.now().minus(days, ChronoUnit.DAYS);
-        final CompletableFuture<List<Score>> bestScoresFuture = executor.enqueueAsync(() ->
-                OsuAPI.getUserScores(
-                        tokenManager.getTokenData(), userId, ScoreType.BEST, OsuAPI.MAX_USER_SCORES_LIMIT
-                ));
-
-        context.future(() -> bestScoresFuture
-                .thenApply(bestScores -> filterBestScoresSince(bestScores, cutoff))
-                .thenCompose(recentBestScores -> {
-                    if (recentBestScores.scores().isEmpty()) {
-                        throw new ApiException(ErrorCode.NO_SCORE_FOUND, "No best scores found in the last " + days + " days");
-                    }
-                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
-                            .thenApply(user -> {
-                                if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
-                                for (Score score : recentBestScores.scores()) {
-                                    router.ensurePp(score);
-                                }
-                                return prepareScoreList(context, user, recentBestScores, ScoreType.BEST, List.of(),
-                                        "Best Scores Achieved in the Last " + days + (days == 1 ? " Day" : " Days"));
-                            });
-                })
-                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
+    private ScoreListData prepareScoreList(
+            Context context, UserExtended user, FilteredScores scores, List<String> filters, String title, String extraTitle
+    ) {
+        putRankPpHeaders(context, user);
+        context.header("X-Score-Ids", scores.entries().stream().map(ScoreEntry::getScore).map(Score::getId)
+                .map(String::valueOf).collect(Collectors.joining(",")));
+        return new ScoreListData(user, scores.entries(), filters, title, extraTitle);
     }
 
     public void getFriends(@NotNull Context context) {
@@ -432,25 +498,248 @@ public class UserController {
         );
     }
 
-    private ScoreListData prepareScoreList(Context context, UserExtended user, FilteredScores scores,
-                                           ScoreType type, List<String> filters, String title) {
-        context.header("X-User-Id", String.valueOf(user.getId()));
-        context.header("X-Score-Ids", scores.scores().stream().map(Score::getId)
-                .map(String::valueOf).collect(Collectors.joining(",")));
-        return new ScoreListData(user, scores.scores(), type, filters, scores.originalPositions(), title);
+    private void getUserInfoJson(@NotNull Context context, long userId) {
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenAccept(user -> {
+                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                    putRankPpHeaders(context, user);
+                    putResult(context, user);
+                }));
     }
 
     private byte[] renderScoreList(ScoreListData data) {
-        return data.title() == null
-                ? renderer.renderScores(data.user(), data.scores(), data.type(), data.filters(), data.positions())
-                : renderer.renderScores(data.user(), data.scores(), data.type(), data.filters(), data.positions(), data.title());
+        SetMetaStore.upsertBeatmapset(
+                data.scores().stream()
+                        .map(ScoreEntry::getScore)
+                        .map(Score::getBeatmapset)
+                        .filter(Objects::nonNull)
+                        .toList()
+        );
+        return renderer.renderScores(data.user(), data.scores(), data.filters(), data.title(), data.extraTitle());
     }
 
-    private record ScoreListData(UserExtended user, List<Score> scores, ScoreType type,
-                                 List<String> filters, List<Integer> positions, String title) {
+    private byte[] renderDerankedBest(DerankedBestData data) {
+        return renderer.renderDerankedBest(
+                data.user(), data.scores(), data.newGlobalRank(),
+                data.newPp(), data.bonusPp(),
+                data.counts(), data.ppCounts()
+        );
     }
 
-    record FilteredScores(List<Score> scores, List<Integer> originalPositions) {
+    public void getDerankedBest(@NotNull Context ctx) {
+        final long u = requirePathLong(ctx, "userId");
+        final var range = ScoreListRange.from(ctx);
+        final int endPosition = range.end();
+        final int start = range.start();
+
+        AtomicReference<List<Score>> bestsRef = new AtomicReference<>();
+        ctx.future(() -> executor
+                .enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.BEST, 200))
+                .thenCompose((bests) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.RECENT_PASS, 200))
+                        .thenCompose((recents) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.FIRSTS, 200))
+                                .thenCompose((firsts) -> executor.enqueueAsync(() -> OsuAPI.getUserScores(tokenManager.getTokenData(), u, ScoreType.PINNED, 200))
+                                        .thenApply((pinned) -> {
+                                            bestsRef.set(bests);
+                                            ArrayList<Score> merged = new ArrayList<>(bests);
+                                            merged.addAll(recents);
+                                            merged.addAll(firsts);
+                                            merged.addAll(pinned);
+                                            return merged;
+                                        }))))
+                .thenApply(scores -> scores.stream().peek(Router::ensurePp).toList())
+                .thenCompose(scores -> {
+                    ScoreStore.upsertScores(scores);
+                    var merged = ScoreStore.getUserBests(u, 200).stream()
+                            .map(ScoreRecord::toScore)
+                            .sorted(Comparator.comparing(Score::getPp).reversed())
+                            .toList();
+                    if (start > merged.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    return fillDerankedMetadata(merged, bestsRef.get(), start, endPosition)
+                            .thenApply(_ -> new DerankedScores(bestsRef.get().stream().map(Score::getPp).toList(), merged));
+                })
+                .thenCompose(data -> {
+                    var scores = data.merged().stream()
+                            .sorted(Comparator.comparing(Score::getPp).reversed()).toList();
+                    List<ScoreEntry> entries = new ArrayList<>(scores.size());
+
+                    int rankedCount = 0;
+                    int unrankedCount = 0;
+                    int localCount = 0;
+
+                    double rankedPp = 0;
+                    double unrankedPp = 0;
+                    double localPp = 0;
+
+                    for (int i = 0; i < scores.size(); i++) {
+                        final Score current = scores.get(i);
+                        final ScoreEntry entry = new ScoreEntry(i + 1, current);
+                        entries.add(entry);
+                        final Score.Weight weight = new Score.Weight();
+                        final double percentage = Math.pow(0.95, i);
+                        final double scorePp = current.getPp() * percentage;
+                        weight.setPercentage(percentage * 100.0);
+                        weight.setPp(scorePp);
+                        current.setWeight(weight);
+
+                        if (current.getRanked() != null
+                                && current.getRanked()
+                                && ("RANKED".equalsIgnoreCase(current.getBeatmap().getStatus())
+                                || "APPROVED".equalsIgnoreCase(current.getBeatmap().getStatus()))
+                                && Scores.isModsRankable(current)
+                        ) {
+                            entry.setScoreType("Ranked");
+                            rankedCount++;
+                            rankedPp += scorePp;
+                        } else if (current.getId() < 0) {
+                            entry.setScoreType("Local");
+                            localCount++;
+                            localPp += scorePp;
+                        } else {
+                            entry.setScoreType("Unranked");
+                            unrankedCount++;
+                            unrankedPp += scorePp;
+                        }
+                    }
+
+                    final var scoreCounts = new ScoreCategoryTotals<>(rankedCount, unrankedCount, localCount);
+                    final var ppCounts = new ScoreCategoryTotals<>(rankedPp, unrankedPp, localPp);
+
+                    if (start > scores.size()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                    final int end = Math.min(scores.size(), endPosition);
+                    final List<ScoreEntry> rangedScores = entries.subList(start - 1, end);
+                    ctx.header("X-Score-Ids", rangedScores.stream().map(ScoreEntry::getScore).map(Score::getId)
+                            .map(String::valueOf).collect(Collectors.joining(",")));
+
+                    return executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), u))
+                            .thenApply(user -> {
+                                if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+                                final double currentPp = user.getStatistics().getPp();
+                                final double newPp = BpProjection.projectBests(currentPp, data.officialPp(),
+                                        scores.stream().map(Score::getPp).toList(), 200);
+                                Long newRank = user.getStatistics().getGlobalRank();
+                                if (newPp > currentPp) {
+                                    var samples = new HashSet<>(whatIfService.getModelAround(newPp, null).samples());
+                                    if (currentPp > 0)
+                                        samples.addAll(whatIfService.getModelAround(currentPp, null).samples());
+                                    newRank = WhatIfEstimates.project(RankPpModel.from(samples),
+                                            currentPp, newPp, newRank).rank();
+                                }
+                                putRankPpHeaders(ctx, user);
+                                return new DerankedBestData(
+                                        user, rangedScores, newRank, newPp,
+                                        newPp - ppCounts.ranked() - ppCounts.unranked() - ppCounts.local(),
+                                        scoreCounts, ppCounts
+                                );
+                            });
+                })
+                .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderDerankedBest, renderer.getRenderExecutor())));
+    }
+
+    private CompletableFuture<Void> fillDerankedMetadata(
+            List<Score> scores, List<Score> official, int start, int end
+    ) {
+        Map<Long, CompletableFuture<BeatmapExtended>> beatmaps = new HashMap<>();
+        Map<Long, CompletableFuture<Beatmapset>> sets = new ConcurrentHashMap<>();
+        for (Score score : official) {
+            if (score.getBeatmap() != null) {
+                beatmaps.put(score.getBeatmap().getId(), CompletableFuture.completedFuture(score.getBeatmap()));
+            }
+            if (score.getBeatmapset() != null) {
+                sets.put(score.getBeatmapset().getId(), CompletableFuture.completedFuture(score.getBeatmapset()));
+            }
+        }
+
+        List<CompletableFuture<?>> futures = new ArrayList<>();
+        for (int i = 0; i < scores.size(); i++) {
+            Score score = scores.get(i);
+            boolean displayed = i >= start - 1 && i < end;
+            // Off-page scores only need map status for the ranked/unranked totals.
+            if (!displayed && !Boolean.TRUE.equals(score.getRanked())) continue;
+            var beatmap = beatmaps.computeIfAbsent(score.getBeatmapId(), id ->
+                    CacheService.getBeatmapJsonCache(id).map(CompletableFuture::completedFuture)
+                            .orElseGet(() -> executor.enqueueAsync(() -> {
+                                var fetched = OsuAPI.getBeatmap(tokenManager.getTokenData(), id);
+                                if (fetched == null) throw new ApiException(ErrorCode.NO_BEATMAP_FOUND);
+                                tryCache(fetched);
+                                return fetched;
+                            })));
+            futures.add(beatmap.thenCompose(map -> {
+                score.setBeatmap(map);
+                if (!displayed) return CompletableFuture.completedFuture(null);
+                return sets.computeIfAbsent(map.getBeatmapsetId(), id ->
+                        CacheService.getBeatmapsetJsonCache(id).map(CompletableFuture::completedFuture)
+                                .orElseGet(() -> executor.enqueueAsync(() -> {
+                                    var fetched = OsuAPI.getBeatmapset(tokenManager.getTokenData(), id);
+                                    if (fetched == null) throw new ApiException(ErrorCode.NO_BEATMAPSET_FOUND);
+                                    tryCache(fetched);
+                                    return fetched;
+                                }))).thenAccept(score::setBeatmapset);
+            }));
+        }
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+    }
+
+    public void getUserBeatmapScores(@NotNull Context ctx) {
+        final long userId = requirePathLong(ctx, "userId");
+        final long beatmapId = requirePathLong(ctx, "beatmapId");
+
+        ctx.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenCompose(user -> {
+                    if (user == null) throw new ApiException(ErrorCode.NO_USER_FOUND);
+
+                    return executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScores(tokenManager.getTokenData(), userId, beatmapId))
+                            .thenCompose(scoresBrief -> {
+                                if (scoresBrief.isEmpty()) {
+                                    throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                                }
+
+                                final var futures = scoresBrief.stream()
+                                        .map(Score::getId)
+                                        .map(router::getScore)
+                                        .toList();
+
+                                return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                                        .thenApply(_ -> futures.stream()
+                                                .map(CompletableFuture::join)
+                                                .filter(Objects::nonNull)
+                                                .toList())
+                                        .thenApply(scores -> {
+                                            router.enrichScoreFields(scores, false);
+
+                                            ctx.header("X-Beatmap-Id", String.valueOf(scores.getFirst().getBeatmapId()));
+                                            ctx.header("X-Beatmapset-Id", String.valueOf(scores.getFirst().getBeatmapset().getId()));
+
+                                            for (Score score : scores) {
+                                                Router.ensurePp(score);
+                                            }
+
+                                            ScoreStore.upsertScores(scores);
+
+                                            return prepareScoreList(ctx, user, applyFilters(scores, List.of(), 1), List.of(), "Beatmap " + beatmapId, null);
+                                        });
+                            });
+                })
+                .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderScoreList, renderer.getRenderExecutor()))
+        );
+    }
+
+    record RecentBestData(FilteredScores scores, Double ppChange) {
+    }
+
+    private record DerankedScores(List<Double> officialPp, List<Score> merged) {
+    }
+
+    private record ScoreListData(UserExtended user, List<ScoreEntry> scores,
+                                 List<String> filters, String title, String extraTitle) {
+    }
+
+    private record DerankedBestData(
+            UserExtended user, List<ScoreEntry> scores, Long newGlobalRank, double newPp, double bonusPp,
+            ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts
+    ) {
+    }
+
+    record FilteredScores(List<ScoreEntry> entries) {
     }
 
     private record UserInfoData(UserExtended user, List<Score> topScores) {
@@ -497,7 +786,7 @@ public class UserController {
                     score.getAccuracy(),
                     score.getMaxCombo(),
                     score.getPp() != null ? score.getPp() : 0.0,
-                    score.getMods().stream().map(Mod::getAcronym).collect(Collectors.joining(""))
+                    ModSettings.format(score.getMods())
             );
         }
     }

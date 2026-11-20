@@ -245,7 +245,7 @@ public class ReplayController {
                         return id;
                     })
                     .map(Long::parseLong)
-                    .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserScore(tokenManager.getTokenData(), userId, m)))
+                    .map(userId -> executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), userId, m)))
                     .toList());
 
             scoreFutures.addAll(scoreIds.stream().map(router::getScore).toList());
@@ -350,7 +350,7 @@ public class ReplayController {
                             .filter(Objects::nonNull)
                             .filter(score -> CacheService.hasReplayCache(score.getId()) || score.getHasReplay())
                             .filter(score -> seenIds.add(score.getId()))
-                            .peek(router::ensurePp)
+                            .peek(Router::ensurePp)
                             .collect(Collectors.toCollection(LinkedList::new));
                 })
                 .thenCompose(validScores ->

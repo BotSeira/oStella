@@ -1,6 +1,6 @@
 package xyz.zcraft.ostella.data;
 
-import xyz.zcraft.ostella.util.format.ScoreFormatUtil;
+import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.model.UserExtended;
 
@@ -53,7 +53,7 @@ public record UserPerformanceSummary(
                 : Math.max(0.0, totalPp - weightedPp);
 
         String favoriteMods = sample.stream()
-                .map(ScoreFormatUtil::getModString)
+                .map(Scores::getModString)
                 .collect(Collectors.groupingBy(
                         Function.identity(),
                         LinkedHashMap::new,

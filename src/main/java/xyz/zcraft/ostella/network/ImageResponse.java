@@ -8,7 +8,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
-/** Content negotiation shared by endpoints offering data and rendered images. */
+/**
+ * Content negotiation shared by endpoints offering data and rendered images.
+ */
 public final class ImageResponse {
     private ImageResponse() {
     }

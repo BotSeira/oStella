@@ -1,11 +1,9 @@
 package xyz.zcraft.ostella.service;
 
 import com.microsoft.playwright.*;
-import com.microsoft.playwright.options.LoadState;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jspecify.annotations.NonNull;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 import org.thymeleaf.templatemode.TemplateMode;
@@ -14,10 +12,7 @@ import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
-import xyz.zcraft.ostella.data.ScoreAnalysisData;
-import xyz.zcraft.ostella.util.Colors;
-import xyz.zcraft.ostella.util.MiscUtil;
-import xyz.zcraft.ostella.util.format.*;
+import xyz.zcraft.ostella.util.*;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
 
@@ -31,10 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.IntStream;
 
 public class RenderService implements AutoCloseable {
     private static final Logger LOG = LogManager.getLogger(RenderService.class);
@@ -42,7 +34,9 @@ public class RenderService implements AutoCloseable {
     private static final Path LOCAL_ASSETS_PATH = LOCAL_TEMPLATES_PATH.resolve("assets");
     @Getter
     private final ExecutorService renderExecutor;
-    private final ThreadLocal<RenderWorkerState> workerStateLocal = new ThreadLocal<>();
+    @Getter
+    private final ExecutorService rasterExecutor;
+    private final xyz.zcraft.image.HtmlRenderer htmlRenderer;
     private final TemplateEngine templateEngine;
     private final TemplateEngine templateEngineLocal;
 
@@ -51,9 +45,10 @@ public class RenderService implements AutoCloseable {
             throw new IllegalArgumentException("maxWorkers must be greater than 0: " + maxWorkers);
         }
 
-        ThreadFactory threadFactory = getThreadFactory();
-
-        this.renderExecutor = Executors.newFixedThreadPool(maxWorkers, threadFactory);
+        this.htmlRenderer = new xyz.zcraft.image.HtmlRenderer(maxWorkers, 256, 30000, RenderService::setupRoutes);
+        this.renderExecutor = htmlRenderer.executor();
+        this.rasterExecutor = Executors.newFixedThreadPool(maxWorkers,
+                Thread.ofPlatform().name("ostella-raster-", 0).factory());
 
         LOG.info("Initializing template resolver");
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver();
@@ -84,73 +79,12 @@ public class RenderService implements AutoCloseable {
         }
     }
 
-    private static String scoreListTitle(ScoreType type, List<String> filters, int scoreCount) {
-        return filters.isEmpty()
-                ? switch (type) {
-            case BEST -> "Best of " + scoreCount + " Scores";
-            case RECENT -> "Most recent " + scoreCount + " Scores";
-            case RECENT_PASS -> "Most recent " + scoreCount + " Passed Scores";
-        }
-                : switch (type) {
-            case BEST -> "Filtered Scores From Best Scores";
-            case RECENT -> "Filtered Scores From Recent Scores";
-            case RECENT_PASS -> "Filtered Scores From Recent Passed Scores";
-        };
-    }
-
-    private @NonNull ThreadFactory getThreadFactory() {
-        AtomicInteger workerId = new AtomicInteger();
-
-        return executorWorker -> {
-            Thread thread = new Thread(() -> {
-                try (RenderWorkerState state = RenderWorkerState.create()) {
-                    workerStateLocal.set(state);
-                    executorWorker.run();
-                } finally {
-                    workerStateLocal.remove();
-                }
-            });
-
-            thread.setName("ostella-render-" + workerId.incrementAndGet());
-
-            thread.setUncaughtExceptionHandler((t, error) ->
-                    LOG.error(
-                            "Uncaught exception in render worker {}",
-                            t.getName(),
-                            error
-                    )
-            );
-
-            return thread;
-        };
-    }
-
     private byte[] takeScreenshot(String html) {
-        RenderWorkerState workerState = workerStateLocal.get();
-
-        if (workerState == null) {
-            throw new IllegalStateException("Image rendering must run on RenderService's executor");
+        try {
+            return htmlRenderer.screenshot(html);
+        } catch (TimeoutError e) {
+            throw new ApiException(ErrorCode.IMAGE_RENDER_TIMEOUT, e.getMessage());
         }
-
-        var context = workerState.context();
-
-        try (Page page = context.newPage()) {
-            page.setContent(html);
-            page.waitForLoadState(LoadState.NETWORKIDLE);
-            page.waitForFunction("() => Array.from(document.images).every(img => img.complete)");
-            return page.locator("body").screenshot();
-        } catch (TimeoutError timeoutError) {
-            throw new ApiException(ErrorCode.IMAGE_RENDER_TIMEOUT, timeoutError.getMessage());
-        }
-
-        // page.waitForFunction("""
-        // () => document.fonts.status === 'loaded'
-        //    && Array.from(document.images).every(img => img.complete)
-        //    && (
-        //        window.__OSTELLA_RENDER_READY__ === undefined
-        //        || window.__OSTELLA_RENDER_READY__ === true
-        //    )
-        // """);
     }
 
     private Context createContext() {
@@ -158,30 +92,26 @@ public class RenderService implements AutoCloseable {
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("Colors", new Colors());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Beatmaps", new BeatmapFormatUtil());
+        ctx.setVariable("Beatmaps", new Beatmaps());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Beatmapsets", new BeatmapsetFormatUtil());
+        ctx.setVariable("Beatmapsets", new Beatmapsets());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Scores", new ScoreFormatUtil());
+        ctx.setVariable("Scores", new Scores());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Users", new UserFormatUtil());
+        ctx.setVariable("Users", new Users());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Mods", new ModFormatUtil());
+        ctx.setVariable("Mods", new Mods());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("DiffSpecs", new DiffSpecFormatUtil());
+        ctx.setVariable("DiffSpecs", new DiffSpecs());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("Osu", new OsuFormatUtil());
+        ctx.setVariable("Osu", new Formats());
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("cache", new CacheService());
         //noinspection InstantiationOfUtilityClass
         ctx.setVariable("MiscUtil", new MiscUtil());
         //noinspection InstantiationOfUtilityClass
-        ctx.setVariable("MPs", new MultiplayerFormatUtil());
+        ctx.setVariable("MPs", new Multiplayers());
         return ctx;
-    }
-
-    public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type) {
-        return renderScores(user, scores, type, List.of());
     }
 
     public byte[] renderUserInfo(UserExtended user, List<Score> topScores) {
@@ -189,64 +119,81 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("user", user);
         ctx.setVariable("scores", topScores.stream().limit(5).toList());
         ctx.setVariable("performance", UserPerformanceSummary.from(user, topScores));
-        ctx.setVariable("activity", UserFormatUtil.getRecentMonthlyActivity(user));
-        ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
+        ctx.setVariable("activity", Users.getRecentMonthlyActivity(user));
+        ctx.setVariable("change", Users.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
         String finalHtml = templateEngine.process("user-info", ctx);
         return takeScreenshot(finalHtml);
     }
 
-    public byte[] renderScores(UserExtended user, List<Score> scores, ScoreType type, List<String> filters) {
-        return renderScores(
-                user,
-                scores,
-                type,
-                filters,
-                IntStream.rangeClosed(1, scores.size()).boxed().toList()
-        );
-    }
-
-    public byte[] renderScores(
-            UserExtended user,
-            List<Score> scores,
-            ScoreType type,
-            List<String> filters,
-            List<Integer> scorePositions
-    ) {
-        return renderScores(user, scores, type, filters, scorePositions, scoreListTitle(type, filters, scores.size()));
-    }
-
-    public byte[] renderScores(
-            UserExtended user,
-            List<Score> scores,
-            ScoreType type,
-            List<String> filters,
-            List<Integer> scorePositions,
-            String title
-    ) {
-        if (scores.size() != scorePositions.size()) {
-            throw new IllegalArgumentException("Each rendered score must have a display position");
-        }
+    public byte[] renderUserCard(UserExtended user) {
         Context ctx = createContext();
         ctx.setVariable("user", user);
-        ctx.setVariable("scores", scores);
-        ctx.setVariable("scorePositions", List.copyOf(scorePositions));
+
+        String finalHtml = templateEngine.process("user-card", ctx);
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderScores(
+            UserExtended user, List<ScoreEntry> scores,
+            List<String> filters,
+            String title, String extraTitle
+    ) {
+        Context ctx = createContext();
+        ctx.setVariable("user", user);
+        ctx.setVariable("scores", scores.stream().map(ScoreEntry::getScore).toList());
+        var lazerDifficulties = new MultiplayerDifficultyCalculator("lazer");
+        var stableDifficulties = new MultiplayerDifficultyCalculator("stable");
+        ctx.setVariable("scoreStars", scores.stream().map(ScoreEntry::getScore).map(score -> {
+            var calculator = score.getLegacyScoreId() != null && score.getLegacyScoreId() > 0
+                    ? stableDifficulties : lazerDifficulties;
+            return calculator.rating(score, score.getBeatmap(), 0);
+        }).toList());
+        ctx.setVariable("scorePositions", scores.stream().map(ScoreEntry::getBestIndex).toList());
+        ctx.setVariable("scoreExtras", scores.stream().map(ScoreEntry::getExtraString).toList());
         ctx.setVariable("filters", List.copyOf(filters));
         ctx.setVariable("filtered", !filters.isEmpty());
         ctx.setVariable("type", title);
-        ctx.setVariable("change", UserFormatUtil.getScoreChange(user));
+        ctx.setVariable("change", Users.getScoreChange(user));
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        ctx.setVariable("extraTitle", extraTitle);
 
         String finalHtml = templateEngine.process("score-list", ctx);
 
         return takeScreenshot(finalHtml);
     }
 
-    public byte[] renderMapLeaderboard(BeatmapExtended map, List<Placement> placements, double ppMax) {
+    public byte[] renderDerankedBest(
+            UserExtended user, List<ScoreEntry> scores, long newRank, double newPp, double bonusPp,
+            ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts
+    ) {
+        Context ctx = createContext();
+        ctx.setVariable("user", user);
+        ctx.setVariable("scores", scores);
+        var lazerDifficulties = new MultiplayerDifficultyCalculator("lazer");
+        var stableDifficulties = new MultiplayerDifficultyCalculator("stable");
+        ctx.setVariable("scoreStars", scores.stream().map(ScoreEntry::getScore).map(score -> {
+            var calculator = score.getLegacyScoreId() != null && score.getLegacyScoreId() > 0
+                    ? stableDifficulties : lazerDifficulties;
+            return calculator.rating(score, score.getBeatmap(), 0);
+        }).toList());
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+        ctx.setVariable("newGlobalRank", newRank);
+        ctx.setVariable("newPp", newPp);
+        ctx.setVariable("bonusPp", bonusPp);
+        ctx.setVariable("counts", counts);
+        ctx.setVariable("countsPp", ppCounts);
+
+        String finalHtml = templateEngine.process("deranked-score-list", ctx);
+
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderMapLeaderboard(BeatmapExtended map, List<Score> scores, double ppMax) {
         Context ctx = createContext();
         ctx.setVariable("beatmap", map);
-        ctx.setVariable("placements", placements);
+        ctx.setVariable("scores", scores);
         ctx.setVariable("ppMax", ppMax);
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
@@ -371,9 +318,9 @@ public class RenderService implements AutoCloseable {
     }
 
     public Status status() {
-        if (renderExecutor instanceof ThreadPoolExecutor pool) {
-            return new Status(pool.getActiveCount(), pool.getMaximumPoolSize(), pool.getQueue().size(),
-                    pool.getCompletedTaskCount());
+        if (renderExecutor instanceof ThreadPoolExecutor pool && rasterExecutor instanceof ThreadPoolExecutor raster) {
+            return new Status(pool.getActiveCount() + raster.getActiveCount(), pool.getMaximumPoolSize() + raster.getMaximumPoolSize(),
+                    pool.getQueue().size() + raster.getQueue().size(), pool.getCompletedTaskCount() + raster.getCompletedTaskCount());
         }
         return new Status(0, 0, 0, 0);
     }
@@ -381,70 +328,28 @@ public class RenderService implements AutoCloseable {
     @Override
     public void close() {
         LOG.info("Shutting down RenderService executor");
+        rasterExecutor.close();
         renderExecutor.close();
     }
 
-    private record RenderWorkerState(
-            Playwright playwright,
-            Browser browser,
-            BrowserContext context
-    ) implements AutoCloseable {
-        static RenderWorkerState create() {
-            Playwright playwright = Playwright.create();
+    private static void setupRoutes(BrowserContext context) {
+        context.route("http://ostella-cache/**", route -> {
+            String url = route.request().url();
+            String filename = url.substring(url.lastIndexOf('/') + 1);
 
-            try {
-                Browser browser = playwright.chromium().launch(new BrowserType.LaunchOptions().setHeadless(true));
+            Path imagePath = CacheService.getImagePathFromFilename(filename);
 
-                BrowserContext context = browser.newContext(new Browser.NewContextOptions());
+            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+        });
 
-                setupRoutes(context);
+        context.route("http://local-asset/**", route -> {
+            String url = route.request().url();
+            String filename = url.substring("http://local-asset/".length());
 
-                return new RenderWorkerState(playwright, browser, context);
-            } catch (Exception e) {
-                playwright.close();
-                throw e;
-            }
-        }
+            Path imagePath = LOCAL_ASSETS_PATH.resolve(filename);
 
-        private static void setupRoutes(BrowserContext context) {
-            context.route("http://ostella-cache/**", route -> {
-                String url = route.request().url();
-                String filename = url.substring(url.lastIndexOf('/') + 1);
-
-                Path imagePath = CacheService.getImagePathFromFilename(filename);
-
-                route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-            });
-
-            context.route("http://local-asset/**", route -> {
-                String url = route.request().url();
-                String filename = url.substring("http://local-asset/".length());
-
-                Path imagePath = LOCAL_ASSETS_PATH.resolve(filename);
-
-                route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-            });
-        }
-
-        private static void closeSafely(String resource, Runnable action) {
-            try {
-                action.run();
-            } catch (Exception e) {
-                LOG.error("Error closing {}", resource, e);
-            }
-        }
-
-        @Override
-        public void close() {
-//            closeSafely("BrowserContext", context::close);
-//            closeSafely("Browser", browser::close);
-            closeSafely("Playwright", playwright::close);
-
-            LOG.info(
-                    "Playwright closed for render worker {}",
-                    Thread.currentThread().getName()
-            );
-        }
+            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+        });
     }
 
     public record Status(int active, int poolSize, int queued, long completed) {

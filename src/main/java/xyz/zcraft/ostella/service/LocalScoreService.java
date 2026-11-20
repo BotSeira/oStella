@@ -4,6 +4,7 @@ import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.OsuAPI;
+import xyz.zcraft.ostella.network.Router;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public final class LocalScoreService {
     private static final long LOCAL_ID_FLOOR = 100_000_000_000_000L;
@@ -70,6 +72,8 @@ public final class LocalScoreService {
         }
 
         Score score = buildScore(internalId, replay);
+        Router.ensurePp(score);
+
         try {
             CacheService.transferReplay(internalId, replayBytes);
             CacheService.cacheScoreJson(score);

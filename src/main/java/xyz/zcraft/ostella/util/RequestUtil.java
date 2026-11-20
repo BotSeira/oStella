@@ -4,14 +4,18 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import io.javalin.http.Context;
+import xyz.zcraft.ostella.data.ScoreFilter;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.Response;
 
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 
 public class RequestUtil {
     private final static Gson GSON = new GsonBuilder().serializeSpecialFloatingPointValues().create();
@@ -29,8 +33,16 @@ public class RequestUtil {
         context.result(new Response(true, "Success", data).toString());
     }
 
-    public static void putResult(Context context, String key, String val) {
+    public static <T> void putResult(Context context, String key, T val) {
         putResult(context, Map.of(key, val));
+    }
+
+    public static List<ScoreFilter> requireScoreFilters(Context context, Function<Long, Path> replayProvider) {
+        try {
+            return ScoreFilter.parseList(context.queryParam("filters"), replayProvider);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, e.getMessage(), e);
+        }
     }
 
     public static int requireInt(Context context, String param) throws ApiException {
@@ -71,11 +83,21 @@ public class RequestUtil {
         }
     }
 
-    public static long optionalLong(Context context, String param, long fallback) throws ApiException {
+    public static Long optionalLong(Context context, String param, Long fallback) throws ApiException {
         try {
             final String obj = context.queryParam(param);
             if (obj == null) return fallback;
             return Long.parseLong(obj);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
+        }
+    }
+
+    public static Integer optionalInteger(Context context, String param, Integer fallback) throws ApiException {
+        try {
+            final String obj = context.queryParam(param);
+            if (obj == null) return fallback;
+            return Integer.parseInt(obj);
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Invalid parameter: " + param);
         }

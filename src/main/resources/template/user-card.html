@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>oStella — Player Card</title>
+    <style>
+        body {
+            background-color: #f1effb;
+            width: fit-content;
+            min-width: 200px;
+        }
+
+        .root {
+            display: flex;
+            width: fit-content;
+            min-width: 200px;
+            height: 240px;
+
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 12px;
+
+            padding: 24px;
+        }
+
+        .player-name {
+            font-size: 32px;
+            font-family: "DejaVu Sans", "Microsoft YaHei UI", sans-serif;
+        }
+
+        .player-avatar {
+            width: 160px;
+            height: 160px;
+
+            border: 4px solid #ffffff;
+        }
+
+        .player-flag {
+            width: 24px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<div class="root">
+    <img alt="Avatar" class="player-avatar"
+         src="https://a.ppy.sh/2" th:src="${cache.getImageSrc(user.getAvatarUrl())}">
+
+    <span class="player-name" th:text="${user.getUsername()}">ExampleName</span>
+
+    <img alt="flag" class="player-flag"
+         src="https://osu.ppy.sh/images/flags/AU.png"
+         th:src="${cache.getImageSrc(Users.getFlagUrl(user))}">
+</div>
+</body>
+</html>

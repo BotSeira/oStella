@@ -1,7 +1,9 @@
 package xyz.zcraft.ostella.network;
 
+import com.google.gson.JsonObject;
 import io.javalin.Javalin;
 import io.javalin.http.UnauthorizedResponse;
+import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
@@ -21,6 +23,7 @@ public class WebServer implements Closeable {
 
     private final AppConfig conf;
     private final Javalin app;
+    @Getter
     private final Router router;
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
@@ -57,6 +60,7 @@ public class WebServer implements Closeable {
 
             cfg.routes
                     .get("/beatmaps/lookup", router.beatmapController::lookupBeatmap)
+                    .post("/beatmaps/pp", router.addPpController::calculatePp)
                     .get("/beatmaps/{beatmapId}/analysis", router.beatmapController::getBeatmapAnalysisById)
                     .get("/beatmaps/{beatmapId}", router.beatmapController::getBeatmapById)
                     .post("/beatmaps/{beatmapId}/leaderboards", router.leaderboardController::getMapLeaderboard)
@@ -65,6 +69,8 @@ public class WebServer implements Closeable {
                     .post("/beatmapsets", router.beatmapsetController::getBeatmapsets)
                     .get("/beatmapsets/lookup", router.beatmapsetController::lookupBeatmapset)
                     .get("/beatmapsets/search", router.beatmapsetController::searchBeatmapset)
+                    .post("/beatmapsets/search/batch", router.beatmapsetController::searchBeatmapsetBatch)
+                    .post("/beatmapsets/search/update", router.beatmapsetController::cacheBeatmapsetMeta)
                     .get("/beatmapsets/{beatmapsetId}", router.beatmapsetController::getBeatmapsetById)
                     .get("/beatmapsets/{beatmapsetId}/background", router.beatmapsetController::getBeatmapsetBg)
                     .get("/beatmapsets/{beatmapsetId}/download", router.beatmapsetController::downloadBeatmapset)
@@ -79,6 +85,8 @@ public class WebServer implements Closeable {
                     .get("/scores/{scoreId}/highlight", router.analyzeController::getScoreHighlight)
                     .get("/scores/{scoreId}/misses", router.analyzeController::getMisses)
                     .get("/scores/{scoreId}/misses/{missIndex}/visualize", router.analyzeController::visualizeMiss)
+                    .get("/scores/{scoreId}/snapshot", router.analyzeController::snapshotReplay)
+                    .get("/scores/{scoreId}/clip", router.analyzeController::clipReplay)
 
                     .get("/multiplayer/rooms/current", router.multiplayerController::getCurrentRoom)
                     .get("/multiplayer/rooms/current/item", router.multiplayerController::getCurrentRoomItem)
@@ -93,12 +101,21 @@ public class WebServer implements Closeable {
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)
                     .post("/users/scores/recent/batch", router.userController::getRecentScoresBatch)
                     .get("/users/{userId}", router.userController::getUserInfo)
+                    .get("/users/{userId}/card", router.userController::getUserCard)
                     .get("/users/{userId}/rank", router.userController::getUserRank)
+                    .post("/users/{userId}/addpp", router.addPpController::addPp)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
+                    .get("/users/{userId}/scores/deranked-best", router.userController::getDerankedBest)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)
+                    .get("/users/{userId}/scores/beatmaps/{beatmapId}/all", router.userController::getUserBeatmapScores)
 
+                    .get("/whatif", router.whatIfController::estimate)
                     .get("/daily", router::getDaily)
+                    .get("/challenges/beatmapsets/{beatmapsetId}", router.challengeController::beatmapset)
+                    .get("/challenges/beatmaps/{beatmapId}", router.challengeController::beatmap)
+                    .get("/challenges/users/{userId}/skill", router.challengeController::skill)
+                    .get("/challenges/scores/{scoreId}", router.challengeController::score)
                     .get("/health", router::getServerStatus)
                     .post("/cache/control", router::controlCache)
 
@@ -146,7 +163,12 @@ public class WebServer implements Closeable {
                     })
                     .exception(Exception.class, (e, ctx) -> {
                         failures.incrementAndGet();
-                        ctx.status(500).contentType("application/json").result(new Response(false, "An error occurred while processing the request!", null).toString());
+                        JsonObject obj = new JsonObject();
+                        obj.addProperty("message", e.getMessage());
+                        obj.addProperty("error", e.toString());
+                        ctx.status(500).contentType("application/json").result(
+                                new Response(false, "An error occurred while processing the request!", obj).toString()
+                        );
                         LOG.error("An error occurred while processing request: {}", ctx.queryString(), e);
                     });
         });
@@ -156,6 +178,7 @@ public class WebServer implements Closeable {
         app.start(conf.webserver().port());
         running.set(true);
         router.autoCache.start();
+        router.whatIf.start();
         LOG.info("Started web server on port {}", conf.webserver().port());
     }
 

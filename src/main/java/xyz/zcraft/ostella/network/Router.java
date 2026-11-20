@@ -5,11 +5,11 @@ import io.javalin.http.Context;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import xyz.zcraft.ostella.network.ImageResponse;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.data.ScoreId;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
 import xyz.zcraft.ostella.service.AsyncService;
@@ -19,6 +19,7 @@ import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.VersionInfo;
 import xyz.zcraft.osu.model.BeatmapExtended;
+import xyz.zcraft.osu.model.Beatmapset;
 import xyz.zcraft.osu.model.Mod;
 import xyz.zcraft.osu.model.Score;
 import xyz.zcraft.osu.parser.BeatmapParser;
@@ -43,6 +44,7 @@ public class Router implements Closeable {
     public final AppConfig conf;
     public final ReplayController replayController;
     public final ScoreController scoreController;
+    public final xyz.zcraft.ostella.whatif.WhatIfService whatIf;
     final Gson GSON = new Gson();
     final BeatmapController beatmapController;
     final BeatmapsetController beatmapsetController;
@@ -50,6 +52,21 @@ public class Router implements Closeable {
     final AnalyzeController analyzeController;
     final MultiplayerController multiplayerController;
     final UserController userController;
+    final ChallengeController challengeController;
+    final AddPpController addPpController;
+    final WhatIfController whatIfController;
+    private final Runnable detachWhatIfObserver;
+
+    public Path getReplayBlocking(Long id) {
+        return executor.enqueueAsync(() -> {
+            try {
+                final Path replay = CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+                return replay;
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).join();
+    }
 
     public Router(AppConfig conf, TokenManager tokenManager) throws IOException {
         this.conf = conf;
@@ -64,6 +81,9 @@ public class Router implements Closeable {
 
         this.renderer = new RenderService(conf.ostella().renderWorkers());
 
+        this.whatIf = xyz.zcraft.ostella.whatif.WhatIfService.create(tokenManager, executor);
+        this.whatIfController = new WhatIfController(whatIf);
+
         this.beatmapController = new BeatmapController(this);
         this.scoreController = new ScoreController(this);
         this.beatmapsetController = new BeatmapsetController(this);
@@ -71,10 +91,13 @@ public class Router implements Closeable {
         this.analyzeController = new AnalyzeController(this);
         this.multiplayerController = new MultiplayerController(this);
         this.userController = new UserController(this);
+        this.challengeController = new ChallengeController(this);
+        this.addPpController = new AddPpController(this);
 
         this.replayService = new ReplayService(conf);
         this.replayController = new ReplayController(this);
 
+        this.detachWhatIfObserver = OsuAPI.addUserStatObserver(whatIf::observe);
         LOG.info("Router created");
     }
 
@@ -124,19 +147,25 @@ public class Router implements Closeable {
         return new CacheControlResult(local.operation(), local.type(), local.id(), nodes);
     }
 
-    public void ensurePp(Score score) {
+    public static void ensurePp(Score score) {
         if (score.getPp() == null) {
+            Long beatmapId;
+            if ((beatmapId = score.getBeatmapId()) == null) {
+                beatmapId = score.getBeatmap().getId();
+            }
             try {
-                final Path beatmapPath = CacheService.getBeatmapPath(score.getBeatmap().getId());
+                final Path beatmapPath = CacheService.getBeatmapPath(beatmapId);
                 final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
                 ensurePp(score, osuBeatmap);
             } catch (ParseException e) {
                 LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
             }
         }
+
+        CacheService.tryCache(score);
     }
 
-    public void ensurePp(Score score, OsuBeatmap osuBeatmap) {
+    public static void ensurePp(Score score, OsuBeatmap osuBeatmap) {
         if (score.getPp() == null) {
             try {
                 score.setPp(OsuParser.estimatePp(score, osuBeatmap));
@@ -178,6 +207,8 @@ public class Router implements Closeable {
 
     @Override
     public void close() {
+        detachWhatIfObserver.run();
+        whatIf.close();
         autoCache.close();
         executor.close();
         renderer.close();
@@ -198,6 +229,30 @@ public class Router implements Closeable {
         return scoresArr;
     }
 
+    public void enrichScoreFields(List<Score> scores, boolean override) {
+        for (Score score : scores) {
+            if (score.getBeatmap() == null || override) {
+                score.setBeatmap(CacheService.getBeatmapJsonCache(score.getBeatmapId()).orElseGet(
+                        () -> {
+                            var beatmap = executor.enqueueAsync(() -> OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId())).join();
+                            CacheService.tryCache(beatmap);
+                            return beatmap;
+                        }
+                ));
+            }
+
+            if (score.getBeatmapset() == null || override) {
+                score.setBeatmapset(CacheService.getBeatmapsetJsonCache(score.getBeatmap().getBeatmapsetId()).orElseGet(
+                        () -> {
+                            var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId())).join();
+                            CacheService.tryCache(beatmapset);
+                            return beatmapset;
+                        }
+                ));
+            }
+        }
+    }
+
     public CompletableFuture<Score> getScore(long id) {
         try {
             final Optional<Score> scoreJsonCache = CacheService.getScoreJsonCache(id);
@@ -214,7 +269,14 @@ public class Router implements Closeable {
             return CompletableFuture.completedFuture(null);
         }
 
-        return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id));
+        return executor.enqueueAsync(() -> OsuAPI.getScore(tokenManager.getTokenData(), id))
+                .thenApply(s -> {
+                    Optional.ofNullable(s)
+                            .map(Score::getBeatmapset)
+                            .map(List::of)
+                            .ifPresent(SetMetaStore::upsertBeatmapset);
+                    return s;
+                });
     }
 
     public void renderCustomTemplate(@NotNull Context context) {
@@ -296,5 +358,27 @@ public class Router implements Closeable {
                 .thenCompose(variables -> ImageResponse.respond(context, variables,
                         values -> renderer.renderCustomTemplate(templateName, values), renderer.getRenderExecutor()))
         );
+    }
+
+    public Score fillBeatmaps(Score score) {
+        score.setBeatmap(
+                CacheService.getBeatmapJsonCache(score.getBeatmapId())
+                        .orElseGet(() -> {
+                            final BeatmapExtended beatmap = OsuAPI.getBeatmap(tokenManager.getTokenData(), score.getBeatmapId());
+                            CacheService.tryCache(beatmap);
+                            return beatmap;
+                        })
+        );
+
+        score.setBeatmapset(
+                CacheService.getBeatmapsetJsonCache(score.getBeatmap().getBeatmapsetId())
+                        .orElseGet(() -> {
+                            final Beatmapset beatmapset = OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId());
+                            CacheService.tryCache(beatmapset);
+                            return beatmapset;
+                        })
+        );
+
+        return score;
     }
 }

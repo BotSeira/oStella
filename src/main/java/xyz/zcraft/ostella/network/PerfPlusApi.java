@@ -3,6 +3,7 @@ package xyz.zcraft.ostella.network;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.model.Score;
 
 import java.net.URI;
@@ -11,7 +12,10 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public final class PerfPlusApi {
@@ -33,16 +37,7 @@ public final class PerfPlusApi {
     }
 
     public static List<String> parseModAcronyms(String mods) {
-        if (mods == null || mods.isBlank()) return List.of();
-        String normalized = mods.toUpperCase(Locale.ROOT).replaceAll("[+,\\s]", "");
-        if ("NM".equals(normalized)) return List.of();
-        if (!normalized.matches("(?:[A-Z0-9]{2})+")) {
-            throw new IllegalArgumentException("Mods must be two-character acronyms, for example HDDT");
-        }
-
-        return java.util.stream.IntStream.range(0, normalized.length() / 2)
-                .mapToObj(index -> normalized.substring(index * 2, index * 2 + 2))
-                .toList();
+        return ModSettings.parse(mods).stream().map(Mod::getAcronym).toList();
     }
 
     private static ScoreRequest toRequest(Score score) {
@@ -107,8 +102,8 @@ public final class PerfPlusApi {
 
     public CompletableFuture<PerformancePlus> calculateBeatmap(long beatmapId, String mods) {
         if (beatmapId <= 0) throw new IllegalArgumentException("beatmapId must be positive");
-        List<ModRequest> modRequests = parseModAcronyms(mods).stream()
-                .map(acronym -> new ModRequest(acronym, Map.of()))
+        List<ModRequest> modRequests = ModSettings.parse(mods).stream()
+                .map(PerfPlusApi::toRequest)
                 .toList();
         return calculate(new ScoreRequest(String.valueOf(beatmapId), modRequests, null, 0, 0, 0));
     }

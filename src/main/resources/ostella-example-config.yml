@@ -1,5 +1,6 @@
 # === Config for oStella ===
 ostella:
+  sqlitePath: "./data/ostella.db"
   # Bearer token for authenticating when calling oStella's API
   token:
   # Maximum number of requests per second to send to the osu! API

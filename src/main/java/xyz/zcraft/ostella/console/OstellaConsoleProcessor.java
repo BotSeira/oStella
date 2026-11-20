@@ -7,11 +7,14 @@ import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.config.ConfigLoader;
+import xyz.zcraft.ostella.db.ScoreStore;
+import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.network.WebServer;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.service.ReplayService;
 import xyz.zcraft.ostella.util.VersionInfo;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -20,9 +23,12 @@ import java.util.concurrent.TimeUnit;
 public final class OstellaConsoleProcessor {
     private static final long STARTED_AT = System.currentTimeMillis();
     private static final List<String> ROOT = List.of(
-            "help", "status", "metrics", "token", "replay", "cache", "autocache", "config", "log", "system", "stop");
+            "help", "status", "metrics", "token", "replay", "cache", "autocache",
+            "config", "log", "system", "stop",
+            "import-score-json", "import-set-json", "import-set-json-override", "recalculate-set-meta"
+    );
     private static final Map<String, List<String>> SUB = Map.of(
-            "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json"),
+            "autocache", List.of("beatmapset", "beatmapset-json", "beatmap", "beatmap-json", "score-json", "score-fetch"),
             "token", List.of("status", "renew"),
             "replay", List.of("status", "job", "delete"),
             "cache", List.of("query", "delete", "get", "fetch", "status", "clear"),
@@ -163,6 +169,10 @@ public final class OstellaConsoleProcessor {
                 case "autocache" -> autoCache(input);
                 case "config" -> config(input);
                 case "log" -> log(input);
+                case "import-set-json" -> importSetJson(input, false);
+                case "recalculate-set-meta" -> recalculateSetMeta(input);
+                case "import-set-json-override" -> importSetJson(input, true);
+                case "import-score-json" -> importScoreJson(input);
                 case "system" -> exact(input, 1, this::system, "Usage: system");
                 case "stop", "shutdown", "exit", "quit" -> stop(input);
                 default -> Result.error("Unknown console command: " + input.value(0) + ". Run 'help'.");
@@ -172,6 +182,36 @@ public final class OstellaConsoleProcessor {
         } catch (Exception e) {
             LogManager.getLogger(OstellaConsoleProcessor.class).error("Console command failed", e);
             return Result.error("Command failed: " + rootMessage(e));
+        }
+    }
+
+    private Result importSetJson(ConsoleInputParser.ParsedInput input, boolean override) {
+        if (input.size() != 1) return Result.error("Usage: import-set-json");
+        try {
+            int count = SetMetaStore.importFromCachedJson(override);
+            return Result.ok("Imported " + count + " beatmapsets from cache.");
+        } catch (IOException e) {
+            return Result.error("Failed to import beatmapsets from cache: " + rootMessage(e));
+        }
+    }
+
+    private Result recalculateSetMeta(ConsoleInputParser.ParsedInput input) {
+        if (input.size() != 1) return Result.error("Usage: recalculate-set-meta");
+        try {
+            final long count = SetMetaStore.migrate();
+            return Result.ok("Recalculated meta for " + count + " beatmapsets.");
+        } catch (Exception e) {
+            return Result.error("Failed to recalculate beatmapsets meta: " + rootMessage(e));
+        }
+    }
+
+    private Result importScoreJson(ConsoleInputParser.ParsedInput input) {
+        if (input.size() != 1) return Result.error("Usage: import-score-json");
+        try {
+            int count = ScoreStore.importFromCachedJson();
+            return Result.ok("Imported " + count + " scores from cache.");
+        } catch (IOException e) {
+            return Result.error("Failed to import scores from cache: " + rootMessage(e));
         }
     }
 
@@ -188,6 +228,7 @@ public final class OstellaConsoleProcessor {
                   cache <query|delete|get|fetch> <type> <id>
                                                    Inspect or delete cache across oStella and workers
                   autocache <type> <on|off>        Toggle idle background caching until restart
+                  import-set-json                 Import cached beatmapset metadata into SQLite
                   cache status                    Show each local cache area and total size
                   cache clear <area|all> confirm  Clear a selected cache area
                   config <show|check>             Show redacted config or validate config.yml
@@ -208,7 +249,10 @@ public final class OstellaConsoleProcessor {
                     "replay status\nreplay job <uuid>\nreplay delete <uuid> confirm\nCommands contact configured osuRenderer workers.";
             case "cache" ->
                     "cache <query|delete|get|fetch> <score|beatmap|beatmapset|replay|beatmap-json|beatmapset-json> <id>\nQueries oStella followed by every configured osuRenderer worker (beatmap-json and beatmapset-json are local only). get includes metadata; fetch downloads into oStella and pushes beatmapsets/replays to workers; delete removes all reachable copies.\ncache status\ncache clear <beatmaps|images|replays|score-json|beatmapsets|beatmap-json|beatmapset-json|all> confirm";
-            case "autocache" -> "autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>\nEach type defaults to off. Prefetches missing files for cached-score users and their best 200 osu! scores, only while idle. Changes last until restart.";
+            case "autocache" ->
+                    "autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>\nEach type defaults to off. Prefetches missing files for cached-score users and their best 200 osu! scores, only while idle. Beatmapset JSON also refreshes after 24 hours for ranked sets or 1 hour otherwise. Changes last until restart.";
+            case "import-set-json" ->
+                    "import-set-json\nImports cached beatmapset JSON in batches of 250, preserving file observation times. Invalid files are skipped with warnings; older observations do not replace newer metadata. Also runs at startup.";
             case "config" -> "config show\nconfig check\nSecrets are redacted. Runtime changes require restart.";
             case "log" -> "log show\nlog level <trace|debug|info|warn|error>";
             case "system" -> "system\nShows local runtime information and process uptime.";
@@ -288,7 +332,7 @@ public final class OstellaConsoleProcessor {
 
     private Result autoCache(ConsoleInputParser.ParsedInput input) {
         if (input.size() != 3 || !("on".equalsIgnoreCase(input.value(2)) || "off".equalsIgnoreCase(input.value(2)))) {
-            return Result.error("Usage: autocache <beatmapset|beatmapset-json|beatmap|beatmap-json> <on|off>");
+            return Result.error("Usage: autocache <beatmapset|beatmapset-json|beatmap|beatmap-json|score-json> <on|off>");
         }
         var type = xyz.zcraft.ostella.service.AutoCacheService.Type.parse(input.value(1));
         boolean enabled = "on".equalsIgnoreCase(input.value(2));

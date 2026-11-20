@@ -1,15 +1,22 @@
 package xyz.zcraft.ostella.data;
 
+import xyz.zcraft.osu.model.Mod;
+import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+
+import static xyz.zcraft.ostella.service.MultiplayerResultFactory.modString;
 
 public record MultiplayerResultData(long roomId, String roomName, long playlistItemId, String playedAt,
                                     String client, String scoringType, String teamType,
                                     long totalScore, long averageScore, double teamLeadPercent, String winningTeam,
                                     SeriesScore seriesScore,
                                     BeatmapInfo beatmap, UserInfo queuedBy, List<PlayerResult> players,
-                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, Integer customBo) {
+                                    List<TeamResult> teams, List<PlayerResult> unassignedPlayers, List<Mod> commonMods,
+                                    Integer customBo
+) {
     public MultiplayerResultData(
             long roomId,
             String roomName,
@@ -28,6 +35,7 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
             List<PlayerResult> players,
             List<TeamResult> teams,
             List<PlayerResult> unassignedPlayers,
+            List<Mod> commonMods,
             Integer customBo
     ) {
         this.roomId = roomId;
@@ -47,6 +55,7 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
         this.players = List.copyOf(players);
         this.teams = List.copyOf(teams);
         this.unassignedPlayers = List.copyOf(unassignedPlayers);
+        this.commonMods = List.copyOf(commonMods);
         this.customBo = customBo;
     }
 
@@ -56,6 +65,10 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
             case "blue" -> 1;
             default -> 2;
         };
+    }
+
+    public String getCommonModString() {
+        return modString(commonMods).equals("NM") ? "" : modString(commonMods);
     }
 
     public boolean isTeamVs() {
@@ -106,9 +119,15 @@ public record MultiplayerResultData(long roomId, String roomName, long playlistI
                 && teams.get(1).players().size() == 1;
     }
 
-    public record BeatmapInfo(long id, String title, String titleUnicode, String artist, String creator,
-                              String difficultyName,
-                              Double difficultyRating, Double bpm, Long totalLength, String ruleset, String coverUrl) {
+    public record BeatmapInfo(
+            long id, String title, String titleUnicode, String artist, String creator,
+            String difficultyName, Double difficultyRating, Double bpm, Long totalLength,
+            String ruleset, String coverUrl,
+            DifficultyAttribute attribute
+    ) {
+        public String getAttributeText() {
+            return "CS%.2f / OD%.2f / AR%.2f".formatted(attribute.cs(), attribute.od(), attribute.ar());
+        }
     }
 
     public record UserInfo(long id, String username, String avatarUrl) {

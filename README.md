@@ -123,12 +123,48 @@ the player credential must not replace the oStella service header.
 
 ### Beatmapsets
 
-| Method | Path                                   | Purpose                | Params / POST Body   | Response |
-|--------|----------------------------------------|------------------------|----------------------|----------|
-| GET    | `/beatmapsets/lookup`                  | Resolve beatmapset IDs | See section below    | JSON     |
-| GET    | `/beatmapsets/search`                  | Search beatmapsets     | `q` (search keyword) | JSON     |
-| GET    | `/beatmapsets/{beatmapsetId}`          | Beatmapset card image  | path `beatmapsetId`  | PNG      |
-| GET    | `/beatmapsets/{beatmapsetId}/download` | Download beatmapset    | path `beatmapsetId`  | OSZ      |
+| Method | Path                                   | Purpose                  | Params / POST Body                                        | Response |
+|--------|----------------------------------------|--------------------------|-----------------------------------------------------------|----------|
+| GET    | `/beatmapsets/lookup`                  | Resolve beatmapset IDs   | See section below                                         | JSON     |
+| GET    | `/beatmapsets/search`                  | Search beatmapsets       | `q` (search keyword)                                      | JSON     |
+| POST   | `/beatmapsets/search/batch`            | Match cached ranked sets | `{"queries":[{"title":"Song","artist":"Artist"},"Song"]}` | JSON     |
+| GET    | `/beatmapsets/{beatmapsetId}`          | Beatmapset card image    | path `beatmapsetId`                                       | PNG      |
+| GET    | `/beatmapsets/{beatmapsetId}/download` | Download beatmapset      | path `beatmapsetId`                                       | OSZ      |
+
+#### Local music matching
+
+`POST /beatmapsets/search/batch` searches SQLite without calling osu!'s search API.
+The existing `GET /beatmapsets/search` remains an online keyword search.
+
+- Supply 1–100 queries. Each query is a title string or an object with `title` and optional `artist`.
+  Present fields must be nonblank strings with at most 256 characters and nonempty normalized text.
+  Literal strings are titles, not osu! search expressions.
+- Results are under `data.result`, in input order (including duplicates and unmatched queries).
+  Each result contains `title`, optional `artist`, `status`, `matches`, and `truncated`.
+  A match contains `beatmapset` metadata, a heuristic `score` (not a probability), `reason`, and `exact`.
+- Only cached `ranked` sets are eligible. Both ordinary and Unicode title/artist forms are indexed.
+  `matched` means at least one exact normalized title-and-artist pair; multiple sets can represent the same song.
+  `ambiguous` means candidates require review; `no_match` means none qualified within the searched cache.
+- Title-only queries, similar artist spellings, shared artist credits, and TV-size/short-version variants require review.
+  A complete artist phrase may occur inside a longer credit in either direction, for example
+  `ABC` and `ABC DEFG`. These return `shared_artist_credit_requires_review`, below exact pairs
+  but above spelling-only matches. Matching requires phrase boundaries; arbitrary substrings do not qualify.
+  Remix, live, cover, and other qualifiers remain significant. This version does not perform arbitrary fuzzy title search.
+  Popularity orders otherwise equal matches; it is not evidence that two songs are identical.
+- Retrieval examines at most 500 candidates and returns at most 50 matches per query.
+  `truncated` signals that either bound was exceeded, so the response may be incomplete.
+
+The existing JSON cache is imported at startup, and `import-set-json` repeats the import manually.
+Imports process 250 sets per transaction, skip malformed/incomplete files with log warnings, and use
+file modification times as observation times. Earlier batches remain committed if a later database write fails;
+rerunning is safe. Older observations cannot overwrite newer rows. `updated_at` records local observation time,
+not osu!'s upstream modification time. Existing schemas and normalized keys migrate automatically at startup.
+
+New beatmapset JSON cache writes also update SQLite. Cached JSON is reused for 24 hours for ranked sets,
+or 1 hour for other statuses; normal cache fetches and enabled `autocache beatmapset-json on` refresh expired entries.
+Automatic caching still discovers sets through cached users' best scores; it does not download the entire ranked
+catalogue. SQLite metadata remains available when JSON cache files are cleared, and matching itself does not
+refresh stale rows. A missing match may indicate incomplete catalogue coverage.
 
 ### Scores
 
@@ -158,9 +194,51 @@ the player credential must not replace the oStella service header.
 | GET    | `/users/me`                         | User data                     | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
 | GET    | `/users/me/friends`                 | Friends list for user         | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
 | POST   | `/users/leaderboards`               | User PP leaderboard image     | `{"uids":[user ids]}`                                   | PNG      |
-| GET    | `/users/{userId}/scores/bestof`     | Best-of-N scores image        | path `userId`, query `n` (count)                        | PNG      |
-| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n` (count)                        | PNG      |
+| GET    | `/users/{userId}/scores/bestof`     | Best scores image             | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/deranked-best` | Deranked best scores image  | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
 | GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1)        | PNG      |
+
+All three score-list endpoints accept `n=10` (positions 1 through 10),
+`start=21&end=30` (inclusive positions 21 through 30), or `start=21&n=10`
+(10 scores starting at position 21). Positions must satisfy
+`1 <= start <= end <= 200`; `n` must be between 1 and 200, and `start+n-1`
+must not exceed 200. Do not combine `n` and `end`, or supply `start` alone. Fewer available scores
+produce a shorter list. Filters apply after selecting the range and preserve
+the original position numbers.
+
+### Hypothetical PP updates
+
+`POST /beatmaps/pp` calculates a single map's PP without a user ID or BP lookup. It accepts
+`{"beatmapId":1234567,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
+The regular `success`, `message`, `data` envelope contains `data.pp`, `data.map`
+(`id`, `title`, `difficulty`, `mods`, `stars`, `maxCombo`, `hits`) and `data.ranked`.
+`hits` contains `great`, `ok`, `meh`, `misses`, `combo` and `accuracy`.
+Only osu!standard maps are supported. `beatmapId` must be positive; `conditions` may be omitted.
+`pp` must be omitted and `count` may be omitted or set to 1. This endpoint shares the request validation
+and map calculation with addpp, including its condition syntax and defaults described below.
+
+`POST /users/{userId}/addpp` accepts `{"pp":200,"count":4,"conditions":[]}` or
+`{"beatmapId":1234567,"count":1,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
+It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgments.
+oStella returns `rankProjection` (rank, status, updatedAt, stale) from its shared `/whatif` model; the bot only formats the response. Map calculations pass only supplied parameters to rosu-pp (lazer by default, stable with CL).
+Missing values are left to rosu-pp; actual accuracy and hit state are read back from it. Only duplicate,
+unsupported, obviously conflicting or out-of-bounds conditions return HTTP 400. Up to 200 BP are used,
+preserving the unobserved account PP remainder and excluding new bonus PP. No account data is changed.
+See `SeiraCore/docs/addpp.md` for the full command contract. Update both service packages together.
+
+### Group challenge inputs
+
+These JSON endpoints support Seira's configurable group challenges. Both services must be updated together.
+
+| Method | Endpoint                                                      | Purpose                                                                                                                          |
+|--------|---------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| GET    | `/challenges/beatmapsets/{beatmapsetId}`                      | Ranked/approved osu!standard difficulties in a set                                                                               |
+| GET    | `/challenges/beatmaps/{beatmapId}`                            | Resolve a specific map to the eligible difficulties in its set                                                                   |
+| GET    | `/challenges/users/{userId}/skill?exclude_set={beatmapsetId}` | Median effective star rating of up to 20 unique eligible best plays, excluding the challenge set; at least 5 samples required    |
+| GET    | `/challenges/scores/{scoreId}`                                | Standardised score, effective star rating with default mods, completion time and eligibility; assisted/custom-mod plays rejected |
+
+No replay download or image rendering is required. Responses use the regular `success`, `message`, `data` envelope.
 
 ### Replays (enabled when `replayRender.enabled` is true)
 

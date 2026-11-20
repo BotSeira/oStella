@@ -7,8 +7,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.config.Configurator;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.config.ConfigLoader;
+import xyz.zcraft.ostella.db.SqliteDatabase;
 import xyz.zcraft.ostella.runtime.OstellaApplication;
-import xyz.zcraft.ostella.util.format.UserFormatUtil;
+import xyz.zcraft.ostella.util.Users;
 
 import java.io.IOException;
 
@@ -39,8 +40,11 @@ public class oStella {
             Configurator.setRootLevel(Level.DEBUG);
             LOG.warn("Debug mode is enabled. Disable it in production.");
         }
-        UserFormatUtil.setSafeFlags(conf.ostella().safeFlags());
+        Users.setSafeFlags(conf.ostella().safeFlags());
         initializeNativeLibraries();
+
+        LOG.info("Initializing database...");
+        SqliteDatabase.init(conf.ostella().sqlitePath());
 
         try (OstellaApplication application = new OstellaApplication(conf)) {
             Thread shutdownHook = new Thread(application::close, "ostella-shutdown");

@@ -9,9 +9,6 @@ import java.util.regex.Pattern;
 public final class ScoreId {
     private static final Pattern LOCAL_ID = Pattern.compile("(?i)^loc([1-9]\\d*)$");
 
-    private ScoreId() {
-    }
-
     public static long parse(String value) {
         if (value == null) {
             throw new IllegalArgumentException("Score ID is missing");

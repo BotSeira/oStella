@@ -1,0 +1,125 @@
+package xyz.zcraft.ostella.service;
+
+import xyz.zcraft.ostella.db.SetMetaStore;
+import xyz.zcraft.ostella.util.MusicMetaUtil;
+
+import java.util.*;
+
+public final class MusicMatchService {
+    public static final int CANDIDATE_LIMIT = 500;
+    public static final int RESULT_LIMIT = 100;
+
+    public static Result match(String title, String artist) {
+        LinkedList<SetMetaStore.Metadata> candidates = new LinkedList<>();
+
+        final List<SetMetaStore.Metadata> candidateExactTitle = SetMetaStore.candidates(title, artist, CANDIDATE_LIMIT + 1);
+        final List<SetMetaStore.Metadata> candidatePartTitle = SetMetaStore.candidates(title.split(" ")[0], artist, CANDIDATE_LIMIT + 1);
+
+        candidates.addAll(candidateExactTitle);
+        candidates.addAll(candidatePartTitle);
+
+        return match(title, artist, candidates.stream().distinct().toList());
+    }
+
+    public static Result match(String title, String artist, List<SetMetaStore.Metadata> candidates) {
+        String titleBase = MusicMetaUtil.baseTitle(title);
+        String titleNormalized = MusicMetaUtil.normalize(title);
+        String artistNormalized = MusicMetaUtil.normalize(artist);
+
+        if (titleNormalized.isEmpty()) throw new IllegalArgumentException("Title must contain letters or numbers");
+
+        boolean truncated = candidates.size() > CANDIDATE_LIMIT;
+
+        List<Match> matches = new ArrayList<>();
+
+        for (var candidate : candidates.stream().limit(CANDIDATE_LIMIT).toList()) {
+            if (!"ranked".equals(candidate.status())) continue;
+
+            Set<String> titles = keys(candidate.title(), candidate.titleUnicode());
+
+            boolean exactTitle = titles.contains(titleNormalized);
+            boolean baseTitle = titles.stream()
+                    .anyMatch(t -> MusicMetaUtil.baseTitle(t).equals(titleBase));
+
+            if (!exactTitle && !baseTitle) continue;
+
+            Set<String> artists = keys(candidate.artist(), candidate.artistUnicode());
+
+            boolean exactArtist = !artistNormalized.isEmpty() && artists.contains(artistNormalized);
+            boolean sharedArtistCredit = !artistNormalized.isEmpty() && !exactArtist && artists.stream()
+                    .anyMatch(a -> containsArtistCredit(artistNormalized, a));
+            double artistSimilarity = artistNormalized.isEmpty() ? 0 : artists.stream()
+                    .mapToDouble(a -> similarity(artistNormalized, a)).max().orElse(0);
+
+            double allowedEdits = Math.max(0.85, (int)Math.floor(0.15 * candidate.artistUnicode().length())) * (candidates.size() == 1 ? 0.5 : 1.0);
+            if (!artistNormalized.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits)
+                continue;
+
+            boolean exact = exactTitle && exactArtist;
+            String reason = exact ? "exact_title_and_artist"
+                    : !exactTitle ? "length_variant_requires_review"
+                    : sharedArtistCredit ? "shared_artist_credit_requires_review"
+                    : artistNormalized.isEmpty() ? "title_only_requires_review" : "similar_artist_requires_review";
+
+            double score = exact ? 1.0 : sharedArtistCredit ? (exactTitle ? 0.95 : 0.69)
+                    : (exactTitle ? 0.7 : 0.5) + 0.2 * artistSimilarity;
+
+            matches.add(new Match(candidate, score, reason, exact));
+        }
+
+        matches.sort(Comparator.comparingDouble(Match::score).reversed()
+                .thenComparing(Comparator.comparingLong((Match m) -> m.beatmapset().favouriteCount()).reversed())
+                .thenComparing(Comparator.comparingLong((Match m) -> m.beatmapset().playCount()).reversed())
+                .thenComparingLong(m -> m.beatmapset().id()));
+
+        String status = matches.isEmpty() ? "no_match" : matches.stream().anyMatch(Match::exact) ? "matched" : "ambiguous";
+
+        return new Result(
+                title, artist, status, matches.stream().limit(RESULT_LIMIT).toList(),
+                truncated || matches.size() > RESULT_LIMIT
+        );
+    }
+
+    private static Set<String> keys(String primary, String unicode) {
+        Set<String> keys = new HashSet<>(List.of(
+                MusicMetaUtil.normalize(primary), MusicMetaUtil.normalize(unicode),
+                MusicMetaUtil.baseTitle(primary), MusicMetaUtil.baseTitle(unicode)
+        ));
+        keys.remove("");
+        return keys;
+    }
+
+    /** Compare complete normalized phrases, not arbitrary substrings or individual name tokens. */
+    private static boolean containsArtistCredit(String left, String right) {
+        if (left.equals(right)) return false;
+        String shorter = left.length() <= right.length() ? left : right;
+        String longer = left.length() <= right.length() ? right : left;
+        if (shorter.codePointCount(0, shorter.length()) < 2) return false;
+        return (longer).contains(shorter);
+    }
+
+    private static double similarity(String left, String right) {
+        if (left.equals(right)) return 1;
+
+        final int max = Math.max(left.length(), right.length());
+        if (Math.min(left.length(), right.length()) < 2 || max > 256) return 0;
+        int[] previous = new int[right.length() + 1];
+        for (int j = 0; j < previous.length; j++) previous[j] = j;
+        for (int i = 1; i <= left.length(); i++) {
+            int[] current = new int[right.length() + 1];
+            current[0] = i;
+            for (int j = 1; j <= right.length(); j++) {
+                current[j] = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1),
+                        previous[j - 1] + (left.charAt(i - 1) == right.charAt(j - 1) ? 0 : 1));
+            }
+            previous = current;
+        }
+        return 1.0 - (double) previous[right.length()] / max;
+    }
+
+    public record Match(SetMetaStore.Metadata beatmapset, double score, String reason, boolean exact) {
+    }
+
+    public record Result(String title, String artist, String status, List<Match> matches, boolean truncated) {
+    }
+}

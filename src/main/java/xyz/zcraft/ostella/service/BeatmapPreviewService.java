@@ -1,52 +1,32 @@
 package xyz.zcraft.ostella.service;
 
+import xyz.zcraft.osu.model.ModSettings;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.beatmap.WindowDifficulty;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
 
 public final class BeatmapPreviewService {
     static final double OUTPUT_DURATION_SECONDS = 30.0;
     private static final int MAX_DIFFICULTY_CANDIDATES = 120;
     private static final Set<String> SUPPORTED_MODS = Set.of(
-            "NF", "EZ", "HD", "HR", "SD", "DT", "HT", "NC", "FL", "SO", "PF", "MR"
+            "NF", "EZ", "HD", "HR", "SD", "DT", "HT", "NC", "FL", "SO", "PF", "MR", "DA", "DC"
     );
 
     private BeatmapPreviewService() {
     }
 
     public static String normalizeMods(String value) {
-        if (value == null || value.isBlank() || "NM".equalsIgnoreCase(value.trim())) {
-            return "";
-        }
-
-        String compact = value.trim().toUpperCase(Locale.ROOT);
-        if (compact.startsWith("+")) {
-            compact = compact.substring(1);
-        }
-        if (compact.isEmpty() || compact.length() % 2 != 0 || !compact.matches("[A-Z0-9]+")) {
-            throw new IllegalArgumentException("Mod must be a sequence of two-character acronyms");
-        }
-
-        List<String> acronyms = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (int i = 0; i < compact.length(); i += 2) {
-            String acronym = compact.substring(i, i + 2);
-            if (!SUPPORTED_MODS.contains(acronym)) {
-                throw new IllegalArgumentException("Unsupported Mod: " + acronym);
-            }
-            if (!seen.add(acronym)) {
-                throw new IllegalArgumentException("Duplicate Mod: " + acronym);
-            }
-            acronyms.add(acronym);
-        }
-
-        requireAtMostOne(seen, "EZ", "HR");
-        requireAtMostOne(seen, "DT", "NC", "HT");
-        requireAtMostOne(seen, "SD", "PF");
-        return String.join("", acronyms);
+        var mods = ModSettings.parse(value);
+        for (var mod : mods)
+            if (!SUPPORTED_MODS.contains(mod.getAcronym()))
+                throw new IllegalArgumentException("Unsupported Mod: " + mod.getAcronym());
+        return ModSettings.format(mods);
     }
 
     public static PreviewSegment selectSegment(OsuBeatmap beatmap, String mods) throws AnalyzeException {
@@ -69,7 +49,7 @@ public final class BeatmapPreviewService {
             return new PreviewSegment(start, end, "full-map");
         }
 
-        List<WindowDifficulty> windows = sampledWindowDifficulties(beatmap, sourceDurationMs);
+        List<WindowDifficulty> windows = sampledWindowDifficulties(beatmap, sourceDurationMs, mods);
         WindowDifficulty selected = windows.stream()
                 .max(Comparator.comparingDouble(window -> previewScore(beatmap, window)))
                 .orElseThrow(() -> new IllegalArgumentException("Unable to select a preview segment"));
@@ -87,13 +67,14 @@ public final class BeatmapPreviewService {
         return pressure * (1.0 + 0.25 * kiaiCoverage(beatmap, window.start(), window.end()));
     }
 
-    private static List<WindowDifficulty> sampledWindowDifficulties(OsuBeatmap beatmap, long durationMs)
+    private static List<WindowDifficulty> sampledWindowDifficulties(OsuBeatmap beatmap, long durationMs, String mods)
             throws AnalyzeException {
         int objectCount = beatmap.getHitObjects().size();
         int stride = Math.max(1,
                 (objectCount + MAX_DIFFICULTY_CANDIDATES - 1) / MAX_DIFFICULTY_CANDIDATES);
         long lastObject = beatmap.getHitObjects().getLast().getTime();
         List<WindowDifficulty> windows = new ArrayList<>();
+        var parsedMods = ModSettings.parse(mods);
 
         try {
             for (int i = 0; i < objectCount; i += stride) {
@@ -102,7 +83,7 @@ public final class BeatmapPreviewService {
                 if (end > lastObject) {
                     break;
                 }
-                var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end);
+                var difficulty = BeatmapAnalyzer.calculateWindowDifficulty(beatmap, start, end, parsedMods);
                 windows.add(new WindowDifficulty(start, end, difficulty.getKey(), difficulty.getValue()));
             }
         } catch (RuntimeException e) {
@@ -143,25 +124,7 @@ public final class BeatmapPreviewService {
     }
 
     private static double clockRate(String mods) {
-        if (mods.contains("DT") || mods.contains("NC")) {
-            return 1.5;
-        }
-        if (mods.contains("HT")) {
-            return 0.75;
-        }
-        return 1.0;
-    }
-
-    private static void requireAtMostOne(Set<String> mods, String... mutuallyExclusive) {
-        int count = 0;
-        for (String mod : mutuallyExclusive) {
-            if (mods.contains(mod)) {
-                count++;
-            }
-        }
-        if (count > 1) {
-            throw new IllegalArgumentException("Conflicting Mods: " + String.join("/", mutuallyExclusive));
-        }
+        return ModSettings.clockRate(ModSettings.parse(mods));
     }
 
     public record PreviewSegment(double start, double end, String reason) {
