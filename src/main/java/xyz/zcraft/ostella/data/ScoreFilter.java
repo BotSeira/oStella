@@ -82,6 +82,14 @@ public final class ScoreFilter {
         Operator operator = Operator.from(matcher.group(2));
         String value = matcher.group(3).trim();
 
+        if (field.isBoolean() || field == Field.CLIENT || field == Field.RANK) {
+            operator = switch (operator) {
+                case CONTAINS -> Operator.EQUAL;
+                case NOT_CONTAINS -> Operator.NOT_EQUAL;
+                default -> operator;
+            };
+        }
+
         if (field == Field.MODS) {
             return parseMods(field, operator, value, replayProvider);
         }
@@ -91,8 +99,8 @@ public final class ScoreFilter {
         if (field.isMetadataText()) {
             return parseMetadataText(field, operator, value, replayProvider);
         }
-        if (field.isBoolean()) {
-            return parseBoolean(field, operator, value, replayProvider);
+        if (field.isBoolean() || field == Field.CLIENT) {
+            return parseExactValue(field, operator, value, replayProvider);
         }
         if (!operator.isNumeric()) {
             throw new IllegalArgumentException("Filter " + field.label + " does not support operator " + operator.symbol);
@@ -121,7 +129,7 @@ public final class ScoreFilter {
 
     private static ScoreFilter parseRank(Field field, Operator operator, String value, Function<Long, Path> replayProvider) {
         if (!operator.isNumeric()) {
-            throw new IllegalArgumentException("Rank only supports >, >=, <, <=, = and !=");
+            throw new IllegalArgumentException("Rank only supports >, >=, <, <=, =, !=, ~ and !~");
         }
         String rank = normalizeRank(value);
         Integer rankValue = rankValue(rank);
@@ -161,15 +169,12 @@ public final class ScoreFilter {
         if (!operator.isText()) {
             throw new IllegalArgumentException(field.label + " only supports ~, !~, = and !=");
         }
-        if (field == Field.ANY && operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
-            throw new IllegalArgumentException("Any metadata only supports = and !=");
-        }
         if (value.isBlank()) {
             throw new IllegalArgumentException(field.label + " cannot be empty");
         }
         Pattern regex = null;
         if (isRegexValue(value)) {
-            if (operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
+            if (operator != Operator.CONTAINS && operator != Operator.NOT_CONTAINS) {
                 throw new IllegalArgumentException("Regular expressions only support = and !=");
             }
             String expression = value.substring(1, value.length() - 1);
@@ -182,28 +187,22 @@ public final class ScoreFilter {
                 throw new IllegalArgumentException("Invalid regular expression: " + e.getDescription(), e);
             }
         }
-        // Plain text defaults to containment; regex syntax keeps its existing semantics.
-        if (regex == null) {
-            operator = switch (operator) {
-                case EQUAL -> Operator.CONTAINS;
-                case NOT_EQUAL -> Operator.NOT_CONTAINS;
-                case CONTAINS -> Operator.EQUAL;
-                case NOT_CONTAINS -> Operator.NOT_EQUAL;
-                default -> throw new IllegalStateException("Invalid text operator");
-            };
-        }
         return new ScoreFilter(
                 field, operator, Double.NaN, Set.of(value.toLowerCase(Locale.ROOT)), regex,
                 field.label + " " + operator.display + " " + value, replayProvider
         );
     }
 
-    private static ScoreFilter parseBoolean(Field field, Operator operator, String value, Function<Long, Path> replayProvider) {
+    private static ScoreFilter parseExactValue(Field field, Operator operator, String value, Function<Long, Path> replayProvider) {
         if (operator != Operator.EQUAL && operator != Operator.NOT_EQUAL) {
-            throw new IllegalArgumentException(field.label + " only supports = and !=");
+            throw new IllegalArgumentException(field.label + " only supports =, !=, ~ and !~");
         }
         String normalized = value.toLowerCase(Locale.ROOT);
-        if (!normalized.equals("true") && !normalized.equals("false")) {
+        if (field == Field.CLIENT) {
+            if (!normalized.equals("lazer") && !normalized.equals("stable")) {
+                throw new IllegalArgumentException("Client must be lazer or stable");
+            }
+        } else if (!normalized.equals("true") && !normalized.equals("false")) {
             throw new IllegalArgumentException(field.label + " must be true or false");
         }
         return new ScoreFilter(
@@ -658,10 +657,10 @@ public final class ScoreFilter {
         GREATER_OR_EQUAL(">=", "≥"),
         LESS("<", "<"),
         LESS_OR_EQUAL("<=", "≤"),
-        EQUAL("=", "="),
-        NOT_EQUAL("!=", "≠"),
-        CONTAINS("~", "contains"),
-        NOT_CONTAINS("!~", "does not contain");
+        EQUAL("~", "="),
+        NOT_EQUAL("!~", "≠"),
+        CONTAINS("=", "contains"),
+        NOT_CONTAINS("!=", "does not contain");
 
         private final String symbol;
         private final String display;

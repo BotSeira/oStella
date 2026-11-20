@@ -233,7 +233,7 @@ public class OsuAPI {
         try {
             var requestedMods = ModSettings.parse(mods);
             if (requestedMods.stream().anyMatch(mod -> mod.getSettings() != null && !mod.getSettings().isEmpty())) {
-                var filter = xyz.zcraft.ostella.data.ScoreFilter.parse("mod=" + ModSettings.format(requestedMods),
+                var filter = xyz.zcraft.ostella.data.ScoreFilter.parse("mod~" + ModSettings.format(requestedMods),
                         (id) -> {
                             try {
                                 return CacheService.getReplayBlocking(tokenData, id);
