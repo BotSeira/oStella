@@ -714,7 +714,7 @@ public class UserController {
 
                     return executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScores(tokenManager.getTokenData(), userId, beatmapId))
                             .thenCompose(scoresBrief -> {
-                                if (scoresBrief.isEmpty()) {
+                                if (scoresBrief == null || scoresBrief.isEmpty()) {
                                     throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                                 }
 
