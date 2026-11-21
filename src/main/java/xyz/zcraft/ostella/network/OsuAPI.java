@@ -631,15 +631,44 @@ public class OsuAPI {
     public static List<Room.PlaylistItem> getRoomEventPlaylistItems(
             TokenData tokenData, long roomId
     ) {
+        var items = new LinkedHashMap<Long, Room.PlaylistItem>();
+        Long before = null;
+        while (true) {
+            JsonObject page = getRoomEventsPage(tokenData, roomId, before);
+            if (page == null) return List.copyOf(items.values());
+            eventPlaylistItems(page.toString()).forEach(item -> items.putIfAbsent(item.getId(), item));
+            JsonArray events = page.getAsJsonArray("events");
+            if (events.isEmpty()) {
+                if (before != null) {
+                    throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Incomplete event history for room " + roomId);
+                }
+                return List.copyOf(items.values());
+            }
+            long oldest = events.get(0).getAsJsonObject().get("id").getAsLong();
+            if (oldest <= page.get("first_event_id").getAsLong()) {
+                return List.copyOf(items.values());
+            }
+            if (before != null && oldest >= before) {
+                throw new ApiException(ErrorCode.ROOM_FETCH_FAILED, "Incomplete event history for room " + roomId);
+            }
+            before = oldest;
+        }
+    }
+
+    private static JsonObject getRoomEventsPage(TokenData tokenData, long roomId, Long before) {
         LOG.debug("Fetching events for multiplayer room {}", roomId);
         try {
-            final var request = newRequestBuilder(tokenData, "/rooms/" + roomId + "/events")
+            String endpoint = "/rooms/" + roomId + "/events";
+            if (before != null) {
+                endpoint += "?before=" + before;
+            }
+            final var request = newRequestBuilder(tokenData, endpoint)
                     .GET()
                     .build();
             final HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() == 404) {
-                return List.of();
+                return null;
             }
             if (response.statusCode() >= 400) {
                 throw new ApiException(
@@ -648,7 +677,7 @@ public class OsuAPI {
                 );
             }
 
-            return eventPlaylistItems(response.body());
+            return JsonParser.parseString(response.body()).getAsJsonObject();
         } catch (JsonSyntaxException | IOException | InterruptedException e) {
             throw new ApiException(
                     ErrorCode.ROOM_FETCH_FAILED,
