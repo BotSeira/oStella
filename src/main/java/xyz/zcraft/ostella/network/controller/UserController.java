@@ -488,19 +488,35 @@ public class UserController {
     public void lookupUser(@NotNull Context context) {
         final UserLookupBody body = GSON.fromJson(context.body(), UserLookupBody.class);
 
-        if (body.userName() == null || body.userName().isBlank()) {
-            context.status(400).result(Response.error("Missing 'user_name' in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+        if ((body.userName() == null || body.userName().isBlank())
+                && (body.userNames() == null || body.userNames().isEmpty())) {
+            context.status(400).result(Response.error("Missing 'user_name' or 'user_names' in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
             return;
         }
 
-        context.future(() -> executor
-                .enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), body.userName()))
+        Set<String> names = new HashSet<>();
+
+        if (body.userNames() != null) {
+            names.addAll(body.userNames());
+        }
+
+        if (body.userName() != null) {
+            names.add(body.userName());
+        }
+
+
+        final var futures = names.stream()
+                .map(u -> executor.enqueueAsync(() -> (User) OsuAPI.getUser(tokenManager.getTokenData(), u)))
+                .toList();
+
+        context.future(() -> CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                 .thenApply(u -> {
-                    if (u == null)
+                    final List<User> list = futures.stream().map(CompletableFuture::join).toList();
+                    if (list.isEmpty())
                         throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found for the provided username!");
-                    return (User) u;
+                    return list;
                 })
-                .thenAccept(u -> context.status(200).result(new Response(true, "Success", GSON.toJsonTree(u)).toString()))
+                .thenAccept(u -> putResult(context, u))
         );
     }
 
@@ -756,7 +772,8 @@ public class UserController {
     }
 
     public record UserLookupBody(
-            @SerializedName("user_name") String userName
+            @SerializedName("user_name") String userName,
+            @SerializedName("user_names") List<String> userNames
     ) {
     }
 
