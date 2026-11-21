@@ -130,6 +130,7 @@ public class UserController {
 
     public void getRecentScores(@NotNull Context context) {
         final long u = requirePathLong(context, "userId");
+        final var verbosity = ResponseVerbosity.forJson(context);
         final var range = ScoreListRange.from(context);
         final boolean fail = requireBoolean(context, "fail", false);
         final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
@@ -151,7 +152,8 @@ public class UserController {
                             FilteredScores filteredScores = applyFilters(scores, filters, range.start());
                             return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Recent Scores", null);
                         }))
-                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
+                .thenCompose(data -> ImageResponse.respond(
+                        context, data, verbosity::project, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getUsers(@NotNull Context context) {
@@ -224,6 +226,7 @@ public class UserController {
     }
 
     public void getBestOfN(@NotNull Context context) {
+        final var verbosity = ResponseVerbosity.forJson(context);
         final long u = requirePathLong(context, "userId");
         final var range = ScoreListRange.from(context);
         final List<ScoreFilter> filters = requireScoreFilters(context, router::getReplayBlocking);
@@ -294,7 +297,8 @@ public class UserController {
                                 return prepareScoreList(context, user, filteredScores, filterLabels(filters), "Best Scores", extraTitle.toString());
                             });
                 })
-                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
+                .thenCompose(data -> ImageResponse.respond(
+                        context, data, verbosity::project, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getRecentScoresBatch(@NotNull Context context) {
@@ -341,6 +345,7 @@ public class UserController {
 
     public void getTodayBestScores(@NotNull Context context) {
         final long userId = requirePathLong(context, "userId");
+        final var verbosity = ResponseVerbosity.forJson(context);
         final String daysParam = context.queryParam("days");
         final int days = daysParam == null ? 1 : requirePositiveInt(context, "days");
         final Instant cutoff = Instant.now().minus(days, ChronoUnit.DAYS);
@@ -372,7 +377,8 @@ public class UserController {
                                 return prepareScoreList(context, user, data.scores(), List.of(), "Recent Bests", extraTitle);
                             });
                 })
-                .thenCompose(data -> ImageResponse.respond(context, data, this::renderScoreList, renderer.getRenderExecutor())));
+                .thenCompose(data -> ImageResponse.respond(
+                        context, data, verbosity::project, this::renderScoreList, renderer.getRenderExecutor())));
     }
 
     public void getUserInfo(@NotNull Context context) {
@@ -527,6 +533,7 @@ public class UserController {
     }
 
     public void getDerankedBest(@NotNull Context ctx) {
+        final var verbosity = ResponseVerbosity.forJson(ctx);
         final long u = requirePathLong(ctx, "userId");
         final var range = ScoreListRange.from(ctx);
         final int endPosition = range.end();
@@ -632,7 +639,8 @@ public class UserController {
                                 );
                             });
                 })
-                .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderDerankedBest, renderer.getRenderExecutor())));
+                .thenCompose(data -> ImageResponse.respond(
+                        ctx, data, verbosity::project, this::renderDerankedBest, renderer.getRenderExecutor())));
     }
 
     private CompletableFuture<Void> fillDerankedMetadata(
@@ -682,6 +690,7 @@ public class UserController {
     public void getUserBeatmapScores(@NotNull Context ctx) {
         final long userId = requirePathLong(ctx, "userId");
         final long beatmapId = requirePathLong(ctx, "beatmapId");
+        final var verbosity = ResponseVerbosity.forJson(ctx);
 
         ctx.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
                 .thenCompose(user -> {
@@ -719,7 +728,8 @@ public class UserController {
                                         });
                             });
                 })
-                .thenCompose(data -> ImageResponse.respond(ctx, data, this::renderScoreList, renderer.getRenderExecutor()))
+                .thenCompose(data -> ImageResponse.respond(
+                        ctx, data, verbosity::project, this::renderScoreList, renderer.getRenderExecutor()))
         );
     }
 

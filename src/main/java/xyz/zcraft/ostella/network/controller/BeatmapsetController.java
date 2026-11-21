@@ -25,10 +25,12 @@ import xyz.zcraft.osu.model.Beatmapset;
 import java.io.IOException;
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
@@ -174,11 +176,13 @@ public class BeatmapsetController {
 
     public void getBeatmapsetById(@NotNull Context context) {
         final long ms = requirePathLong(context, "beatmapsetId");
+        final var verbosity = ResponseVerbosity.forJson(context);
 
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), ms))
                 .thenApply(beatmapset -> prepareBeatmapsetResponse(beatmapset, context))
                 .thenCompose(beatmapset -> ImageResponse.respond(
-                        context, beatmapset, renderer::renderBeatmapset, renderer.getRenderExecutor())));
+                        context, beatmapset, verbosity::project, renderer::renderBeatmapset,
+                        renderer.getRenderExecutor())));
     }
 
     private void lookupBeatmapsetOfIdAsync(@NotNull Context context) {
