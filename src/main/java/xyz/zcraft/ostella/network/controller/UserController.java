@@ -488,6 +488,19 @@ public class UserController {
     public void lookupUser(@NotNull Context context) {
         final UserLookupBody body = GSON.fromJson(context.body(), UserLookupBody.class);
 
+        if ((body.userName() == null || body.userName().isBlank())) {
+            context.status(400).result(Response.error("Missing 'user_name' in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
+            return;
+        }
+
+        context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), body.userName()))
+                .thenAccept(u -> putResult(context, u))
+        );
+    }
+
+    public void lookupUserBatch(@NotNull Context context) {
+        final UserLookupBody body = GSON.fromJson(context.body(), UserLookupBody.class);
+
         if ((body.userName() == null || body.userName().isBlank())
                 && (body.userNames() == null || body.userNames().isEmpty())) {
             context.status(400).result(Response.error("Missing 'user_name' or 'user_names' in request body", ErrorCode.ILLEGAL_ARGUMENT).toString());
@@ -514,7 +527,11 @@ public class UserController {
                     final List<User> list = futures.stream().map(CompletableFuture::join).toList();
                     if (list.isEmpty())
                         throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found for the provided username!");
-                    return list;
+                    HashMap<String, User> userMap = new HashMap<>();
+                    for (User user : list) {
+                        userMap.put(user.getUsername(), user);
+                    }
+                    return userMap;
                 })
                 .thenAccept(u -> putResult(context, u))
         );

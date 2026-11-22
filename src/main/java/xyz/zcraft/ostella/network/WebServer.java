@@ -95,6 +95,7 @@ public class WebServer implements Closeable {
 
                     .post("/users", router.userController::getUsers)
                     .post("/users/lookup", router.userController::lookupUser)
+                    .post("/users/lookup/batch", router.userController::lookupUserBatch)
                     .get("/users/me", router.userController::getSelf)
                     .get("/users/me/friends", router.userController::getFriends)
                     .post("/users/leaderboards", router.leaderboardController::getLeaderboard)
