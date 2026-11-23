@@ -13,7 +13,6 @@ import java.lang.reflect.Type;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 public final class ScoreStore {
     public static final String METRICS_REVISION = "2026-10";
@@ -75,9 +74,6 @@ public final class ScoreStore {
                 metrics_revision = excluded.metrics_revision,
                 calculated_at = excluded.calculated_at
             """;
-
-    private ScoreStore() {
-    }
 
     public static void createTablesIfNeeded(Connection connection)
             throws SQLException {
@@ -165,8 +161,7 @@ public final class ScoreStore {
                 List<Long> batch = ids.subList(
                         start, Math.min(start + USER_BATCH_SIZE, ids.size()));
 
-                String placeholders = String.join(
-                        ",", Collections.nCopies(batch.size(), "?"));
+                String placeholders = String.join(",", Collections.nCopies(batch.size(), "?"));
 
                 String sql = SELECT_SCORES
                         + " WHERE s.beatmap_id = ?"
@@ -456,11 +451,7 @@ public final class ScoreStore {
         statement.setLong(16, record.updatedAt());
     }
 
-    private static void bindMetrics(
-            PreparedStatement statement,
-            ScoreRecord record,
-            String revision
-    ) throws SQLException {
+    private static void bindMetrics(PreparedStatement statement, ScoreRecord record, String revision) throws SQLException {
         statement.setLong(1, record.scoreId());
         statement.setLong(2, record.totalScore());
         setDouble(statement, 3, record.pp());

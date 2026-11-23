@@ -733,7 +733,7 @@
         </div>
         <div style="display: grid;">
             <span class="acc-number"
-                  th:text="${Osu.formatAccuracy(score.accuracy)} + ' ' + ${score.maxCombo} + 'x'">100.00% 456x</span>
+                  th:text="${(score.accuracy == null ? '—' : Osu.formatAccuracy(score.accuracy)) + (score.maxCombo == null ? '' : ' ' + score.maxCombo + 'x')}">100.00% 456x</span>
             <div class="hit-stat" th:text="${Scores.getHitResultString(score)}">
                 456 / 132 / 12 / 34
             </div>
@@ -743,7 +743,7 @@
                     <span th:text="${score.getWeight().getPp().intValue()} + 'pp'">123pp</span>
                 </div>
                 <div class="pp-number"
-                     th:text="${#numbers.formatDecimal(score.getPp(), 1, 1)} + 'pp'">123pp
+                     th:text="${score.pp == null ? '—' : #numbers.formatDecimal(score.pp, 1, 1) + 'pp'}">123pp
                 </div>
             </div>
 

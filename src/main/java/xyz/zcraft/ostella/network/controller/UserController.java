@@ -107,6 +107,29 @@ public class UserController {
         return new RecentBestData(new FilteredScores(entries), currentPp - beforePp);
     }
 
+    static List<Score> mergeBeatmapScores(List<Score> official, List<Score> stored) {
+        var byMods = new LinkedHashMap<Set<JsonObject>, Score>();
+        for (Score score : official) {
+            byMods.putIfAbsent(beatmapScoreMods(score), score);
+        }
+        for (Score score : stored) {
+            if (Scores.getRankStatus(score) != Scores.RankStatus.RANKED) {
+                byMods.putIfAbsent(beatmapScoreMods(score), score);
+            }
+        }
+        return List.copyOf(byMods.values());
+    }
+
+    private static Set<JsonObject> beatmapScoreMods(Score score) {
+        if (score.getMods() == null) return Set.of();
+        return score.getMods().stream().map(mod -> {
+            var key = GSON.toJsonTree(mod).getAsJsonObject();
+            var settings = key.getAsJsonObject("settings");
+            if (settings != null && settings.isEmpty()) key.remove("settings");
+            return key;
+        }).collect(Collectors.toSet());
+    }
+
     private FilteredScores applyFilters(List<Score> scores, List<ScoreFilter> filters, int firstPosition) {
         List<ScoreEntry> entries = new ArrayList<>();
         for (int index = 0; index < scores.size(); index++) {
@@ -731,11 +754,7 @@ public class UserController {
 
                     return executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScores(tokenManager.getTokenData(), userId, beatmapId))
                             .thenCompose(scoresBrief -> {
-                                if (scoresBrief == null || scoresBrief.isEmpty()) {
-                                    throw new ApiException(ErrorCode.NO_SCORE_FOUND);
-                                }
-
-                                final var futures = scoresBrief.stream()
+                                final var futures = Optional.ofNullable(scoresBrief).orElseGet(List::of).stream()
                                         .map(Score::getId)
                                         .map(router::getScore)
                                         .toList();
@@ -746,10 +765,18 @@ public class UserController {
                                                 .filter(Objects::nonNull)
                                                 .toList())
                                         .thenApply(scores -> {
-                                            router.enrichScoreFields(scores, false);
-
-                                            ctx.header("X-Beatmap-Id", String.valueOf(scores.getFirst().getBeatmapId()));
-                                            ctx.header("X-Beatmapset-Id", String.valueOf(scores.getFirst().getBeatmapset().getId()));
+                                            var stored = ScoreStore.getScoresForUsers(beatmapId, List.of(userId), ScoreStore.SortType.SCORE)
+                                                    .stream().map(ScoreRecord::toScore).toList();
+                                            if (scores.isEmpty() && stored.isEmpty()) {
+                                                throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                                            }
+                                            var metadataScores = scores.isEmpty() ? List.of(stored.getFirst()) : scores;
+                                            router.enrichScoreFields(metadataScores, false);
+                                            var reference = metadataScores.getFirst();
+                                            for (Score score : stored) {
+                                                score.setBeatmap(reference.getBeatmap());
+                                                score.setBeatmapset(reference.getBeatmapset());
+                                            }
 
                                             for (Score score : scores) {
                                                 Router.ensurePp(score);
@@ -757,7 +784,11 @@ public class UserController {
 
                                             ScoreStore.upsertScores(scores);
 
-                                            return prepareScoreList(ctx, user, applyFilters(scores, List.of(), 1), List.of(), "Beatmap " + beatmapId, null);
+                                            var merged = mergeBeatmapScores(scores, stored);
+                                            if (merged.isEmpty()) throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                                            ctx.header("X-Beatmap-Id", String.valueOf(beatmapId));
+                                            ctx.header("X-Beatmapset-Id", String.valueOf(reference.getBeatmapset().getId()));
+                                            return prepareScoreList(ctx, user, applyFilters(merged, List.of(), 1), List.of(), "Beatmap " + beatmapId, null);
                                         });
                             });
                 })
