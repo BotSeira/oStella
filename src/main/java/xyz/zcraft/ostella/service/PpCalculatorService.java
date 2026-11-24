@@ -1,6 +1,7 @@
 package xyz.zcraft.ostella.service;
 
 import com.google.gson.Gson;
+import lombok.Getter;
 import xyz.zcraft.ostella.config.OsuConfig;
 import xyz.zcraft.ostella.config.PpCalculatorConfig;
 import xyz.zcraft.ostella.data.PpCalculation;
@@ -15,12 +16,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class PpCalculatorService {
+    @Getter
+    private final String name;
+    @Getter
+    private final String description;
     private final PpCalculatorConfig config;
     private final OsuConfig osuConfig;
     private static final Gson GSON = new Gson();
     private final ExecutorService calculateCalculator = Executors.newSingleThreadExecutor();
 
     public PpCalculatorService(PpCalculatorConfig config, OsuConfig osuConfig) {
+        this.name = config.name();
+        this.description = config.description();
         this.config = config;
         this.osuConfig = osuConfig;
     }

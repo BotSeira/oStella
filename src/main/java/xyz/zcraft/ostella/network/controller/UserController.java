@@ -786,7 +786,11 @@ public class UserController {
                                     }
                                 }
                                 scores.sort(Comparator.comparingDouble(ReworkedScore::localPp).reversed());
-                                return new ReworkedBestData(user, scores, calc.livePp(), calc.localPp(), calc.playcountPp(), calc.pp(), calculatorVersion);
+                                return new ReworkedBestData(
+                                        user, scores,
+                                        calc.livePp(), calc.localPp(), calc.playcountPp(), calc.pp(),
+                                        calculator.getName(), calculator.getDescription()
+                                );
                             })
                             .thenCompose(data -> ImageResponse.respond(
                                     ctx, data, verbosity::project, this::renderReworkedBest, renderer.getRenderExecutor()
@@ -851,7 +855,7 @@ public class UserController {
 
     public record ReworkedBestData(
             UserExtended user, List<ReworkedScore> scores, double livePp, double localPp, double playcountPp,
-            PerformanceBreakdown ppTypes, String ppVersion
+            PerformanceBreakdown ppTypes, String ppVersion, String ppDesc
     ) {
     }
 

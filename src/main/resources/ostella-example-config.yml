@@ -59,5 +59,6 @@ performancePlus:
 # === Extra PP calculators ===
 ppCalculators:
   - name: "pp-dev" # Name of the calculator
+    description: "2026-11-14 - 56a249de"
     path: "path/to/calculator"
     cmd: "dotnet run -c Release"

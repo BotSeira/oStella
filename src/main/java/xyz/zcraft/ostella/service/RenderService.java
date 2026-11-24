@@ -224,6 +224,7 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("playcountPp", data.playcountPp());
         ctx.setVariable("ppTypes", data.ppTypes());
         ctx.setVariable("ppVersion", data.ppVersion());
+        ctx.setVariable("ppDesc", data.ppDesc());
         ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
 
         String finalHtml = templateEngine.process("reworked-score-list", ctx);
