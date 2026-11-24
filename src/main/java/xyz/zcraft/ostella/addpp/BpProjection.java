@@ -9,7 +9,9 @@ public final class BpProjection {
     private BpProjection() {
     }
 
-    /** Preserve bonus PP and the unsampled tail while replacing the observed BP window. */
+    /**
+     * Preserve bonus PP and the unsampled tail while replacing the observed BP window.
+     */
     public static double projectBests(double currentPp, List<Double> official, List<Double> merged, int window) {
         double before = weighted(official.stream().sorted(Comparator.reverseOrder()).toList(), window);
         double after = weighted(merged.stream().sorted(Comparator.reverseOrder()).toList(), window);

@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 
 public final class LocalScoreService {
     private static final long LOCAL_ID_FLOOR = 100_000_000_000_000L;

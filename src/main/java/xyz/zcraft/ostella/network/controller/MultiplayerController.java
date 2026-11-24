@@ -655,7 +655,7 @@ public class MultiplayerController {
         }
         if (score.getBeatmap() != null) {
             try {
-                router.ensurePp(score);
+                Router.ensurePp(score);
             } catch (RuntimeException e) {
                 LOG.warn("Failed to estimate pp for stable multiplayer score {}", score.getId(), e);
             }
@@ -761,7 +761,7 @@ public class MultiplayerController {
             }
             if (score.getBeatmap() != null) {
                 try {
-                    router.ensurePp(score);
+                    Router.ensurePp(score);
                 } catch (RuntimeException e) {
                     LOG.warn("Failed to estimate pp for multiplayer score {}", score.getId(), e);
                 }

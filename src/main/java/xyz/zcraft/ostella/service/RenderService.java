@@ -1,6 +1,8 @@
 package xyz.zcraft.ostella.service;
 
-import com.microsoft.playwright.*;
+import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.Route;
+import com.microsoft.playwright.TimeoutError;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -77,6 +79,26 @@ public class RenderService implements AutoCloseable {
         } catch (IOException e) {
             LOG.error("Failed to create local templates or assets directory", e);
         }
+    }
+
+    private static void setupRoutes(BrowserContext context) {
+        context.route("http://ostella-cache/**", route -> {
+            String url = route.request().url();
+            String filename = url.substring(url.lastIndexOf('/') + 1);
+
+            Path imagePath = CacheService.getImagePathFromFilename(filename);
+
+            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+        });
+
+        context.route("http://local-asset/**", route -> {
+            String url = route.request().url();
+            String filename = url.substring("http://local-asset/".length());
+
+            Path imagePath = LOCAL_ASSETS_PATH.resolve(filename);
+
+            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
+        });
     }
 
     private byte[] takeScreenshot(String html) {
@@ -332,26 +354,6 @@ public class RenderService implements AutoCloseable {
         LOG.info("Shutting down RenderService executor");
         rasterExecutor.close();
         renderExecutor.close();
-    }
-
-    private static void setupRoutes(BrowserContext context) {
-        context.route("http://ostella-cache/**", route -> {
-            String url = route.request().url();
-            String filename = url.substring(url.lastIndexOf('/') + 1);
-
-            Path imagePath = CacheService.getImagePathFromFilename(filename);
-
-            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-        });
-
-        context.route("http://local-asset/**", route -> {
-            String url = route.request().url();
-            String filename = url.substring("http://local-asset/".length());
-
-            Path imagePath = LOCAL_ASSETS_PATH.resolve(filename);
-
-            route.fulfill(new Route.FulfillOptions().setPath(imagePath));
-        });
     }
 
     public record Status(int active, int poolSize, int queued, long completed) {

@@ -131,6 +131,12 @@ public class UserController {
         return entries;
     }
 
+    private static void putScoreListHeaders(Context context, UserExtended user, List<ScoreEntry> scores) {
+        putRankPpHeaders(context, user);
+        context.header("X-Score-Ids", scores.stream().map(ScoreEntry::getScore).map(Score::getId)
+                .map(String::valueOf).collect(Collectors.joining(",")));
+    }
+
     private FilteredScores applyFilters(List<ScoreEntry> candidates, List<ScoreFilter> filters, String extraTitle) {
         var counter = new ScoreFilter.FilterStatusCounter();
         List<ScoreEntry> entries = candidates.stream().filter(entry ->
@@ -414,12 +420,6 @@ public class UserController {
         return new ScoreListData(user, scores.entries(), scores.filters(), title, scores.extraTitle());
     }
 
-    private static void putScoreListHeaders(Context context, UserExtended user, List<ScoreEntry> scores) {
-        putRankPpHeaders(context, user);
-        context.header("X-Score-Ids", scores.stream().map(ScoreEntry::getScore).map(Score::getId)
-                .map(String::valueOf).collect(Collectors.joining(",")));
-    }
-
     public void getFriends(@NotNull Context context) {
         final String auth = context.header(Headers.OSU_AUTHORIZATION);
 
@@ -620,7 +620,7 @@ public class UserController {
                     CompletableFuture<Void> loaded = CompletableFuture.completedFuture(null);
                     for (var type : List.of(ScoreType.RECENT_PASS, ScoreType.FIRSTS, ScoreType.PINNED)) {
                         loaded = loaded.thenCompose(_ -> executor.enqueueAsync(() ->
-                                OsuAPI.getUserScores(tokenManager.getTokenData(), userId, type, limit))
+                                        OsuAPI.getUserScores(tokenManager.getTokenData(), userId, type, limit))
                                 .thenAccept(combined::addAll));
                     }
                     return loaded.thenCompose(_ -> {
@@ -758,7 +758,8 @@ public class UserController {
 
     private record DerankedBestData(
             UserExtended user, List<ScoreEntry> scores, Long newGlobalRank, double newPp, double bonusPp,
-            ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts, List<String> filters, String extraTitle
+            ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts, List<String> filters,
+            String extraTitle
     ) {
     }
 

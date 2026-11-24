@@ -1560,7 +1560,8 @@
             <div class="hero-footer">
                 <div class="map-meta">
                     <span class="pill" th:text="${result.client}">Lazer</span>
-                    <span class="pill" th:if="${result.client != 'Lazer'}" th:text="${result.scoringType}">ScoreV2</span>
+                    <span class="pill" th:if="${result.client != 'Lazer'}"
+                          th:text="${result.scoringType}">ScoreV2</span>
                     <span class="pill" th:text="${result.teamType}">Head to Head</span>
                     <span class="pill diff"
                           th:text="${result.beatmap.difficultyName() + ' · ' + (result.beatmap.difficultyRating() == null ? '--' : Osu.formatStarRating(result.beatmap.difficultyRating())) + '★'}">

@@ -51,7 +51,7 @@ public final class MusicMatchService {
             double artistSimilarity = artistNormalized.isEmpty() ? 0 : artists.stream()
                     .mapToDouble(a -> similarity(artistNormalized, a)).max().orElse(0);
 
-            double allowedEdits = Math.max(0.85, (int)Math.floor(0.15 * candidate.artistUnicode().length())) * (candidates.size() == 1 ? 0.5 : 1.0);
+            double allowedEdits = Math.max(0.85, (int) Math.floor(0.15 * candidate.artistUnicode().length())) * (candidates.size() == 1 ? 0.5 : 1.0);
             if (!artistNormalized.isEmpty() && !exactArtist && !sharedArtistCredit && artistSimilarity < allowedEdits)
                 continue;
 
@@ -89,7 +89,9 @@ public final class MusicMatchService {
         return keys;
     }
 
-    /** Compare complete normalized phrases, not arbitrary substrings or individual name tokens. */
+    /**
+     * Compare complete normalized phrases, not arbitrary substrings or individual name tokens.
+     */
     private static boolean containsArtistCredit(String left, String right) {
         if (left.equals(right)) return false;
         String shorter = left.length() <= right.length() ? left : right;

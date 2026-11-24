@@ -57,16 +57,6 @@ public class Router implements Closeable {
     final WhatIfController whatIfController;
     private final Runnable detachWhatIfObserver;
 
-    public Path getReplayBlocking(Long id) {
-        return executor.enqueueAsync(() -> {
-            try {
-                return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }).join();
-    }
-
     public Router(AppConfig conf, TokenManager tokenManager) throws IOException {
         this.conf = conf;
         this.tokenManager = tokenManager;
@@ -98,6 +88,44 @@ public class Router implements Closeable {
 
         this.detachWhatIfObserver = OsuAPI.addUserStatObserver(whatIf::observe);
         LOG.info("Router created");
+    }
+
+    public static void ensurePp(Score score) {
+        if (score.getPp() == null) {
+            Long beatmapId;
+            if ((beatmapId = score.getBeatmapId()) == null) {
+                beatmapId = score.getBeatmap().getId();
+            }
+            try {
+                final Path beatmapPath = CacheService.getBeatmapPath(beatmapId);
+                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
+                ensurePp(score, osuBeatmap);
+            } catch (ParseException e) {
+                LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
+            }
+        }
+
+        CacheService.tryCache(score);
+    }
+
+    public static void ensurePp(Score score, OsuBeatmap osuBeatmap) {
+        if (score.getPp() == null) {
+            try {
+                score.setPp(OsuParser.estimatePp(score, osuBeatmap));
+            } catch (AnalyzeException e) {
+                LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
+            }
+        }
+    }
+
+    public Path getReplayBlocking(Long id) {
+        return executor.enqueueAsync(() -> {
+            try {
+                return CacheService.getReplayBlocking(tokenManager.getTokenData(), id);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }).join();
     }
 
     protected void getServerStatus(@NotNull Context context) {
@@ -144,34 +172,6 @@ public class Router implements Closeable {
                 ? replayService.fetchCacheWorkers(request, fetchedPath)
                 : replayService.controlCacheWorkers(request));
         return new CacheControlResult(local.operation(), local.type(), local.id(), nodes);
-    }
-
-    public static void ensurePp(Score score) {
-        if (score.getPp() == null) {
-            Long beatmapId;
-            if ((beatmapId = score.getBeatmapId()) == null) {
-                beatmapId = score.getBeatmap().getId();
-            }
-            try {
-                final Path beatmapPath = CacheService.getBeatmapPath(beatmapId);
-                final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
-                ensurePp(score, osuBeatmap);
-            } catch (ParseException e) {
-                LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
-            }
-        }
-
-        CacheService.tryCache(score);
-    }
-
-    public static void ensurePp(Score score, OsuBeatmap osuBeatmap) {
-        if (score.getPp() == null) {
-            try {
-                score.setPp(OsuParser.estimatePp(score, osuBeatmap));
-            } catch (AnalyzeException e) {
-                LOG.error("Failed to estimate pp for score id: {}", score.getId(), e);
-            }
-        }
     }
 
     protected void getDaily(@NotNull Context context) {

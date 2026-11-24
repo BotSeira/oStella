@@ -176,7 +176,7 @@ public class ReplayController {
         final double end = optionalDouble(context, "end");
         final boolean obscured = optionalBoolean(context, "obscured", false);
 
-        router.ensurePp(score);
+        Router.ensurePp(score);
 
         return renderScoreForAsync(context, score, start, end, obscured, qqUpload);
     }
