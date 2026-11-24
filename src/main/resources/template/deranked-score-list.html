@@ -475,20 +475,26 @@
                         <div class="stat-group">
                             <span class="stat-label">Performance</span>
                             <span class="stat-value" th:text="${#numbers.formatInteger(newPp, 1, 'COMMA')} + 'pp'">3,000pp</span>
-                            <span class="stat-sub" th:text="${'▲ ' + #numbers.formatInteger(newPp - user.statistics.pp, 1, 'COMMA')} + 'pp'">▲ 1,234pp</span>
+                            <span class="stat-sub"
+                                  th:text="${'▲ ' + #numbers.formatInteger(newPp - user.statistics.pp, 1, 'COMMA')} + 'pp'">▲ 1,234pp</span>
                         </div>
                         <div class="stat-group">
                             <span class="stat-label">Global Rank</span>
                             <span class="stat-value"
                                   th:text="'#' + ${#numbers.formatInteger(newGlobalRank, 1, 'COMMA')}">#123,456,789</span>
-                            <span class="stat-sub" th:text="${'▲ #' + #numbers.formatInteger(user.statistics.globalRank - newGlobalRank, 1, 'COMMA')}">▲ #1,234</span>
+                            <span class="stat-sub"
+                                  th:text="${'▲ #' + #numbers.formatInteger(user.statistics.globalRank - newGlobalRank, 1, 'COMMA')}">▲ #1,234</span>
                         </div>
                         <div class="stat-group">
                             <span class="stat-label">PP Types</span>
-                            <span class="stat-small" th:text="'Ranked: ' + ${#numbers.formatInteger(countsPp.ranked(), 1, 'COMMA')} + 'pp'">Ranked: 3,000pp</span>
-                            <span class="stat-small" th:text="'Unranked: ' + ${#numbers.formatInteger(countsPp.unranked(), 1, 'COMMA')} + 'pp'">Unranked: 3,000pp</span>
-                            <span class="stat-small" th:text="'Local: ' + ${#numbers.formatInteger(countsPp.local(), 1, 'COMMA')} + 'pp'">Local: 3,000pp</span>
-                            <span class="stat-small" th:text="'Bonus: ' + ${#numbers.formatInteger(bonusPp, 1, 'COMMA')} + 'pp'">Bonus: 3,000pp</span>
+                            <span class="stat-small"
+                                  th:text="'Ranked: ' + ${#numbers.formatInteger(countsPp.ranked(), 1, 'COMMA')} + 'pp'">Ranked: 3,000pp</span>
+                            <span class="stat-small"
+                                  th:text="'Unranked: ' + ${#numbers.formatInteger(countsPp.unranked(), 1, 'COMMA')} + 'pp'">Unranked: 3,000pp</span>
+                            <span class="stat-small"
+                                  th:text="'Local: ' + ${#numbers.formatInteger(countsPp.local(), 1, 'COMMA')} + 'pp'">Local: 3,000pp</span>
+                            <span class="stat-small"
+                                  th:text="'Bonus: ' + ${#numbers.formatInteger(bonusPp, 1, 'COMMA')} + 'pp'">Bonus: 3,000pp</span>
                         </div>
                     </div>
                 </div>
@@ -498,17 +504,19 @@
         <div style="width: 700px; height: 100%;">
             <div style="width: 700px; height: 100%; display: flex; gap: 10px; justify-content: end; margin: -10px 0;">
                 <div style="align-content: center; margin-top: -40px; font-size: 2em; margin-right: 10px;">Scores</div>
-                <canvas width="600" height="100" id="scoreRatioChart"></canvas>
+                <canvas height="100" id="scoreRatioChart" width="600"></canvas>
             </div>
             <div style="width: 700px; height: 100%; display: flex; gap: 10px; justify-content: end;">
                 <div style="align-content: center; margin-top: -40px; font-size: 2em; margin-right: 10px;">PP</div>
-                <canvas width="600" height="100" id="ppRatioChart"></canvas>
+                <canvas height="100" id="ppRatioChart" width="600"></canvas>
             </div>
         </div>
     </div>
 </div>
 
 <div class="score-type">Bests Deranked</div>
+<div th:if="${!filters.isEmpty()}" th:text="${#strings.listJoin(filters, ' · ')}"></div>
+<div th:if="${extraTitle != null}" th:text="${extraTitle}"></div>
 
 <div class="grid-container">
     <div class="card" th:each="entry, iterstat : ${scores}" th:with="score=${entry.score}">
@@ -532,8 +540,8 @@
             </div>
             <div class="extra-score-info"
                  th:if="${Scores.shouldShowRankStatus(entry.scoreType)}"
-                 th:text="${entry.scoreType}"
-                 th:style="${'background-color: ' + Scores.getScoreRankColor(entry.scoreType)}">
+                 th:style="${'background-color: ' + Scores.getScoreRankColor(entry.scoreType)}"
+                 th:text="${entry.scoreType}">
                 Unranked
             </div>
             <img alt="jacket" class="jacket"
@@ -579,6 +587,7 @@
             </div>
 
         </div>
+        <div th:if="${!entry.extras.isEmpty()}" th:text="${entry.extraString}"></div>
         <div class="score-record" th:style="${Scores.isLocal(score) ? 'font-size: 0.8em;' : ''}">
             <div style="display: flex; gap: 2px; align-items: center;">
                 <span th:text="${'#' + entry.bestIndex}">#1</span>
@@ -676,7 +685,7 @@
             responsive: false,
             animated: false,
             maintainAspectRatio: false,
-            layout: { padding: 0 },
+            layout: {padding: 0},
             scales: {
                 x: {
                     stacked: true,

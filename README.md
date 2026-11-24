@@ -65,7 +65,8 @@ Here are some demo:
 
 ## Quick Start
 
-Local administration commands are documented in [docs/console.md](docs/console.md). Runtime output is handled by Log4J2 and interactive input by JLine.
+Local administration commands are documented in [docs/console.md](docs/console.md). Runtime output is handled by Log4J2
+and interactive input by JLine.
 
 1. Copy default config file in the project root.
 2. Install Playwright dependencies if not already present.
@@ -145,11 +146,13 @@ The existing `GET /beatmapsets/search` remains an online keyword search.
 - Only cached `ranked` sets are eligible. Both ordinary and Unicode title/artist forms are indexed.
   `matched` means at least one exact normalized title-and-artist pair; multiple sets can represent the same song.
   `ambiguous` means candidates require review; `no_match` means none qualified within the searched cache.
-- Title-only queries, similar artist spellings, shared artist credits, and TV-size/short-version variants require review.
+- Title-only queries, similar artist spellings, shared artist credits, and TV-size/short-version variants require
+  review.
   A complete artist phrase may occur inside a longer credit in either direction, for example
   `ABC` and `ABC DEFG`. These return `shared_artist_credit_requires_review`, below exact pairs
   but above spelling-only matches. Matching requires phrase boundaries; arbitrary substrings do not qualify.
-  Remix, live, cover, and other qualifiers remain significant. This version does not perform arbitrary fuzzy title search.
+  Remix, live, cover, and other qualifiers remain significant. This version does not perform arbitrary fuzzy title
+  search.
   Popularity orders otherwise equal matches; it is not evidence that two songs are identical.
 - Retrieval examines at most 500 candidates and returns at most 50 matches per query.
   `truncated` signals that either bound was exceeded, so the response may be incomplete.
@@ -188,24 +191,30 @@ refresh stale rows. A missing match may indicate incomplete catalogue coverage.
 
 ### Users
 
-| Method | Path                                | Purpose                       | Params / POST Body                                      | Response |
-|--------|-------------------------------------|-------------------------------|---------------------------------------------------------|----------|
-| POST   | `/users`                            | Get multiple user data        | POST Body `{"ids":[user ids]}`                          | JSON     |
-| GET    | `/users/me`                         | User data                     | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
-| GET    | `/users/me/friends`                 | Friends list for user         | Requires `X-Osu-Authorization: Bearer <osuAccessToken>` | JSON     |
-| POST   | `/users/leaderboards`               | User PP leaderboard image     | `{"uids":[user ids]}`                                   | PNG      |
-| GET    | `/users/{userId}/scores/bestof`     | Best scores image             | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
-| GET    | `/users/{userId}/scores/deranked-best` | Deranked best scores image  | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
-| GET    | `/users/{userId}/scores/recent`     | Recent scores image           | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
-| GET    | `/users/{userId}/scores/today-best` | Best scores achieved recently | path `userId`, optional query `days` (default 1)        | PNG      |
+| Method | Path                                   | Purpose                       | Params / POST Body                                          | Response |
+|--------|----------------------------------------|-------------------------------|-------------------------------------------------------------|----------|
+| POST   | `/users`                               | Get multiple user data        | POST Body `{"ids":[user ids]}`                              | JSON     |
+| GET    | `/users/me`                            | User data                     | Requires `X-Osu-Authorization: Bearer <osuAccessToken>`     | JSON     |
+| GET    | `/users/me/friends`                    | Friends list for user         | Requires `X-Osu-Authorization: Bearer <osuAccessToken>`     | JSON     |
+| POST   | `/users/leaderboards`                  | User PP leaderboard image     | `{"uids":[user ids]}`                                       | PNG      |
+| GET    | `/users/{userId}/scores/bestof`        | Best scores image             | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/deranked-best` | Deranked best scores image    | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/recent`        | Recent scores image           | path `userId`, query `n`, `start` + `n`, or `start` + `end` | PNG      |
+| GET    | `/users/{userId}/scores/today-best`    | Best scores achieved recently | path `userId`, optional query `days` (default 1)            | PNG      |
 
-All three score-list endpoints accept `n=10` (positions 1 through 10),
+The `bestof`, `deranked-best`, and `recent` endpoints accept `n=10` (positions 1 through 10),
 `start=21&end=30` (inclusive positions 21 through 30), or `start=21&n=10`
 (10 scores starting at position 21). Positions must satisfy
 `1 <= start <= end <= 200`; `n` must be between 1 and 200, and `start+n-1`
 must not exceed 200. Do not combine `n` and `end`, or supply `start` alone. Fewer available scores
-produce a shorter list. Filters apply after selecting the range and preserve
-the original position numbers.
+produce a shorter list.
+
+All four endpoints accept the optional `filters` query parameter, for example
+`filters=acc%3E98,mods%3DHD`. All conditions must match. Filtering preserves the
+original positions and applies within the requested range or, for `today-best`,
+within the `days` window. The estimated PP change for that window and the
+deranked PP, rank projection, and category totals use the complete underlying
+lists. The `X-Score-Ids` header contains only the returned scores.
 
 ### Hypothetical PP updates
 
@@ -221,7 +230,8 @@ and map calculation with addpp, including its condition syntax and defaults desc
 `POST /users/{userId}/addpp` accepts `{"pp":200,"count":4,"conditions":[]}` or
 `{"beatmapId":1234567,"count":1,"conditions":["HDDT","97.41%","13miss","18ok","1200x"]}`.
 It returns a JSON estimate of the BP reweighting, before/after total PP, existing rank and resolved map judgments.
-oStella returns `rankProjection` (rank, status, updatedAt, stale) from its shared `/whatif` model; the bot only formats the response. Map calculations pass only supplied parameters to rosu-pp (lazer by default, stable with CL).
+oStella returns `rankProjection` (rank, status, updatedAt, stale) from its shared `/whatif` model; the bot only formats
+the response. Map calculations pass only supplied parameters to rosu-pp (lazer by default, stable with CL).
 Missing values are left to rosu-pp; actual accuracy and hit state are read back from it. Only duplicate,
 unsupported, obviously conflicting or out-of-bounds conditions return HTTP 400. Up to 200 BP are used,
 preserving the unobserved account PP remainder and excluding new bonus PP. No account data is changed.
@@ -281,8 +291,8 @@ the render request can contain a bearer credential.
 |--------|------------------------------------|----------|
 | POST   | `/templates/{templateName}/render` | PNG      |
 
-To render custom templates, you can use this endpoint. 
-Put your template file under `templates/` directory, 
+To render custom templates, you can use this endpoint.
+Put your template file under `templates/` directory,
 and call the endpoint with the filename without `.html` as the template name.
 
 #### POST Body Structure
@@ -302,9 +312,9 @@ You can POST a JSON body with the following structure:
 
 If `@score`, `@beatmap`, `@beatmapset`, or `@user` are provided,
 the corresponding data will be fetched and made available in the template context.
-The rest of key-value pairs will be  available as direct variables in the template.
+The rest of key-value pairs will be available as direct variables in the template.
 
-Template rendering is powered by [Thymeleaf](https://www.thymeleaf.org/), 
+Template rendering is powered by [Thymeleaf](https://www.thymeleaf.org/),
 and you can use Thymeleaf syntax in your templates to access the data.
 
 Use `Osu.formatStarRating(value)` and `Osu.formatAccuracy(value)` for values that
@@ -320,7 +330,7 @@ For example, if you have `templates/assets/image.png`,
 you can reference it in your template as:
 
 ```html
-<img src="http://local-asset/image.png"  alt="Image"/>
+<img src="http://local-asset/image.png" alt="Image"/>
 ```
 
 ### Lookup Params

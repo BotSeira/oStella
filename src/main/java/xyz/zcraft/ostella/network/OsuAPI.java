@@ -247,7 +247,7 @@ public class OsuAPI {
                 if (!response.has("scores")) return null;
                 Score matched = response.getAsJsonArray("scores").asList().stream()
                         .map(value -> GSON.fromJson(value, Score.class))
-                        .filter(score -> filter.matches(score, () -> null))
+                        .filter(score -> filter.matches(score, () -> null, null))
                         .max(java.util.Comparator.comparingLong(score -> score.getTotalScore() == null ? 0 : score.getTotalScore()))
                         .orElse(null);
                 return matched != null && matched.getBeatmap() == null ? getScore(tokenData, matched.getId()) : matched;
@@ -781,9 +781,6 @@ public class OsuAPI {
         }
     }
 
-    private record MatchPage(Match match, long firstEventId) {
-    }
-
     public static List<MultiplayerRoomScore> getRoomPlaylistScores(
             TokenData tokenData, long roomId, long playlistItemId
     ) {
@@ -829,7 +826,6 @@ public class OsuAPI {
             );
         }
     }
-
 
     private static String multiplayerTeam(JsonObject score) {
         if (score.has("team") && !score.get("team").isJsonNull()) {
@@ -1080,6 +1076,9 @@ public class OsuAPI {
         } catch (IOException | InterruptedException e) {
             throw new ApiException(ErrorCode.USER_FETCH_FAILED, "Network failed to get self data", e);
         }
+    }
+
+    private record MatchPage(Match match, long firstEventId) {
     }
 
     record UserScoresPage(int limit, int offset) {

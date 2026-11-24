@@ -3,23 +3,26 @@ package xyz.zcraft.ostella.data;
 import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.ostella.util.Scores;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.*;
 import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
-import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.OsuReplay;
 import xyz.zcraft.osu.parser.data.replay.ReplayAnalyze;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import static xyz.zcraft.ostella.util.Scores.replayPresent;
 
 public final class ScoreFilter {
     private static final Pattern FILTER_PATTERN = Pattern.compile(
@@ -373,56 +376,72 @@ public final class ScoreFilter {
         return values;
     }
 
-    public boolean matches(Score score, Supplier<Beatmapset> beatmapsetSupplier) {
+    public boolean matches(Score score, Supplier<Beatmapset> beatmapsetSupplier, @Nullable FilterStatusCounter counter) {
+        return matches(score, beatmapsetSupplier, counter, null);
+    }
+
+    public boolean matches(ScoreEntry entry, Supplier<Beatmapset> beatmapsetSupplier, FilterStatusCounter counter) {
+        return matches(entry.getScore(), beatmapsetSupplier, counter, entry);
+    }
+
+    private boolean matches(Score score, Supplier<Beatmapset> beatmapsetSupplier,
+                            @Nullable FilterStatusCounter counter, @Nullable ScoreEntry entry) {
         if (score == null) {
             return false;
         }
         if (field == Field.MODS) return compareMods(score.getMods());
-        if (field == Field.UR && !score.getHasReplay()) return false;
+        if (field == Field.UR && !replayPresent(score)) {
+            if (counter != null) {
+                counter.getFilteredForNoReplay().getAndIncrement();
+            }
+            return false;
+        }
 
         BeatmapExtended beatmap = score.getBeatmap();
         Beatmapset beatmapset = score.getBeatmapset();
-        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(score);
         DiffSpec diffSpec = null;
         BeatmapPatternAnalysis beatmapAnalysis = null;
         ReplayAnalyze analyze = null;
 
         if (field == Field.LENGTH || field == Field.STAR || field == Field.TYPE || field == Field.UR) {
-            if (beatmap == null) {
-                throw new IllegalStateException("Beatmap has not been set");
-            }
             try {
                 final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmap.getId()));
-                diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
-                beatmapAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
-
                 if (field == Field.UR) {
                     final OsuReplay osuReplay = ReplayParser.parseReplay(replayProvider.apply(score.getId()));
                     analyze = ReplayAnalyzer.analyze(osuBeatmap, osuReplay);
+                } else if (field == Field.TYPE) {
+                    beatmapAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, BeatmapAnalyzer.calculateDifficulty(score));
+                } else {
+                    diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, score.getMods());
                 }
             } catch (Exception e) {
                 LOG.error("Failed to get necessary files for score filter", e);
+                if (counter != null) {
+                    counter.getFilteredForError().getAndIncrement();
+                }
             }
         }
 
-        if (field == Field.TAG || field == Field.ANY) {
+        if (beatmapset != null && (field == Field.TAG || field == Field.ANY
+                || (field == Field.GENRE && beatmapset.getGenre() == null)
+                || (field == Field.LANGUAGE && beatmapset.getLanguage() == null))) {
             beatmapset = CacheService.getBeatmapsetJsonCache(beatmapset.getId()).orElseGet(beatmapsetSupplier);
         }
 
-        return switch (field) {
+        boolean matched = switch (field) {
             case ACCURACY -> score.getAccuracy() != null && compare(score.getAccuracy() * 100);
             case COMBO -> score.getMaxCombo() != null && compare(score.getMaxCombo());
             case PP -> score.getPp() != null && compare(score.getPp());
             case LENGTH -> diffSpec != null && compare(diffSpec.getLength());
             case STAR -> diffSpec != null && compare(diffSpec.getStar());
             case AR -> beatmap != null && beatmap.getAr() != null
-                    && compare(difficultyAttribute.ar());
+                    && compare(BeatmapAnalyzer.calculateDifficulty(score).ar());
             case CS -> beatmap != null && beatmap.getCs() != null
-                    && compare(difficultyAttribute.cs());
+                    && compare(BeatmapAnalyzer.calculateDifficulty(score).cs());
             case HP -> beatmap != null && beatmap.getDrain() != null
-                    && compare(difficultyAttribute.hp());
+                    && compare(BeatmapAnalyzer.calculateDifficulty(score).hp());
             case OD -> beatmap != null && beatmap.getAccuracy() != null
-                    && compare(difficultyAttribute.od());
+                    && compare(BeatmapAnalyzer.calculateDifficulty(score).od());
             case BPM -> beatmap != null && beatmap.getBpm() != null
                     && compare(beatmap.getBpm() * ModSettings.clockRate(score.getMods()));
             case MISS -> score.getStatistics() != null && compare(score.getStatistics().getOrDefault("miss", 0L));
@@ -442,7 +461,7 @@ public final class ScoreFilter {
             case NSFW -> beatmapset != null && compareBoolean(beatmapset.getNsfw());
             case VIDEO -> beatmapset != null && compareBoolean(beatmapset.getVideo());
             case STORYBOARD -> beatmapset != null && compareBoolean(beatmapset.getStoryboard());
-            case REPLAY -> compareBoolean(score.getHasReplay() || CacheService.hasReplayCache(score.getId()));
+            case REPLAY -> compareBoolean(replayPresent(score));
             case FULL_COMBO -> compareBoolean(score.getIsPerfectCombo());
             case TAG -> beatmapset != null && beatmapset.getTags() != null
                     && compareText(beatmapset.getTags());
@@ -451,6 +470,17 @@ public final class ScoreFilter {
             case CLIENT -> compareClient(score);
             default -> throw new IllegalStateException("Unexpected value: " + field);
         };
+        if (matched && entry != null) {
+            String extra = null;
+            if (field == Field.UR) {
+                extra = "UR: %.2f".formatted(analyze.unstableRate());
+            } else if (field == Field.TYPE) {
+                var primary = beatmapAnalysis.primaryType();
+                extra = "%s: %d%%".formatted(primary.type().name(), (int) primary.percentage());
+            }
+            if (extra != null && !entry.getExtras().contains(extra)) entry.addExtra(extra);
+        }
+        return matched;
     }
 
     private boolean compareClient(Score score) {
@@ -684,5 +714,11 @@ public final class ScoreFilter {
         boolean isText() {
             return this == CONTAINS || this == NOT_CONTAINS || this == EQUAL || this == NOT_EQUAL;
         }
+    }
+
+    @Getter
+    public static class FilterStatusCounter {
+        private final AtomicInteger filteredForNoReplay = new AtomicInteger(0);
+        private final AtomicInteger filteredForError = new AtomicInteger(0);
     }
 }

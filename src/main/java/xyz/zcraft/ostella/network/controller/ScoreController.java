@@ -122,7 +122,7 @@ public class ScoreController {
                     final var beatmapset = executor.enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), id)).join();
                     tryCache(beatmapset);
                     return beatmapset;
-                })))
+                }, null)))
                 .toList();
     }
 
