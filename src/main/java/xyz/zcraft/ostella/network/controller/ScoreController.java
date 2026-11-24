@@ -228,17 +228,22 @@ public class ScoreController {
         final String mod = optionalString(context, "mod");
 
         context.future(() -> executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), u, m, mod))
-                .thenCompose(score -> {
-                            if (score == null) {
+                .thenCompose(onlineScore -> {
+                            final List<ScoreRecord> stored = ScoreStore.getScoresForUsers(m, List.of(u), ScoreStore.SortType.PP);
+                            if (onlineScore == null && stored.isEmpty()) {
                                 throw new ApiException(ErrorCode.NO_SCORE_FOUND);
                             }
 
-                            context.header("X-Score-Id", String.valueOf(score.getId()));
-                            return executor
-                                    .enqueueAsync(() -> OsuAPI.getBeatmapset(tokenManager.getTokenData(), score.getBeatmap().getBeatmapsetId()))
-                                    .thenApply(beatmapset -> {
-                                        score.getBeatmap().setBeatmapset(beatmapset);
-                                        score.setBeatmapset(beatmapset);
+                            stored.add(ScoreRecord.fromScore(onlineScore));
+
+                            final ScoreRecord scoreRecord = stored.stream()
+                                    .max(Comparator.comparingDouble(ScoreRecord::pp))
+                                    .orElseThrow(() -> new ApiException(ErrorCode.NO_SCORE_FOUND));
+
+                            return router.getScore(scoreRecord.scoreId())
+                                    .thenApply(score -> {
+                                        context.header("X-Score-Id", String.valueOf(score.getId()));
+                                        router.enrichScoreFields(List.of(score), false);
                                         return score;
                                     });
                         }
@@ -297,14 +302,25 @@ public class ScoreController {
                     final BeatmapExtended beatmap = beatmaps.get(i - 1);
                     beatmap.setBeatmapset(beatmapset);
                     context.header("X-Beatmap-Id", String.valueOf(beatmap.getId()));
-                    return executor
-                            .enqueueAsync(() ->
-                                    OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), u, beatmap.getId(), mod)
-                            )
-                            .thenApply(score -> {
-                                score.setBeatmap(beatmap);
-                                score.setBeatmapset(beatmapset);
-                                return score;
+                    return executor.enqueueAsync(() -> OsuAPI.getUserBeatmapScore(tokenManager.getTokenData(), u, beatmap.getId(), mod))
+                            .thenCompose(onlineScore -> {
+                                final List<ScoreRecord> stored = ScoreStore.getScoresForUsers(beatmap.getId(), List.of(u), ScoreStore.SortType.PP);
+                                if (onlineScore == null && stored.isEmpty()) {
+                                    throw new ApiException(ErrorCode.NO_SCORE_FOUND);
+                                }
+
+                                stored.add(ScoreRecord.fromScore(onlineScore));
+
+                                final ScoreRecord scoreRecord = stored.stream()
+                                        .max(Comparator.comparingDouble(ScoreRecord::pp))
+                                        .orElseThrow(() -> new ApiException(ErrorCode.NO_SCORE_FOUND));
+
+                                return router.getScore(scoreRecord.scoreId())
+                                        .thenApply(score -> {
+                                            score.setBeatmap(beatmap);
+                                            score.setBeatmapset(beatmapset);
+                                            return score;
+                                        });
                             });
                 });
 
