@@ -55,3 +55,9 @@ replayRender:
 performancePlus:
   # URL of the performance+ API. Leave empty to omit its skill breakdown from score analysis.
   endpoint: "http://localhost:5000/api"
+
+# === Extra PP calculators ===
+ppCalculators:
+  - name: "pp-dev" # Name of the calculator
+    path: "path/to/calculator"
+    cmd: "dotnet run -c Release"

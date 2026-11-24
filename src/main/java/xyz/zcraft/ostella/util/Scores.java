@@ -1,5 +1,6 @@
 package xyz.zcraft.ostella.util;
 
+import xyz.zcraft.ostella.data.ReworkedScore;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.service.CacheService;
 import xyz.zcraft.osu.model.Mod;
@@ -131,6 +132,10 @@ public class Scores {
 
     public static String getHitResultString(Score score) {
         return getGreatCount(score) + " / " + getOkCount(score) + " / " + getMehCount(score) + " / " + getMissCount(score);
+    }
+
+    public static String getHitResultString(ReworkedScore score) {
+        return score.count300() + " / " + score.count100() + " / " + score.count50() + " / " + score.countMiss();
     }
 
     public static long getGreatCount(Score score) {
@@ -266,6 +271,26 @@ public class Scores {
             return false;
         }
     }
+
+    public static String getReworkedScoreInfo(ReworkedScore score) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("%+.2fpp".formatted(score.localPp() - score.livePp()));
+        if (score.posChange() != 0) {
+            sb.append(" (%s#%d)".formatted(score.posChange() > 0 ? "▲" : "▼", Math.abs(score.posChange())));
+        }
+        return sb.toString();
+    }
+
+    public static String getReworkedScoreSr(ReworkedScore score) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("★").append(Formats.formatStarRating(score.localSr()));
+        if (Math.abs(score.localSr() - score.liveSr()) >= 0.01) {
+            final double diff = score.localSr() - score.liveSr();
+            sb.append("(%s%.2f)".formatted(diff > 0 ? "+" : "-", Math.abs(diff)));
+        }
+        return sb.toString();
+    }
+
 
     public enum RankStatus {
         LOCAL, RANKED, UNRANKED, LOVED;

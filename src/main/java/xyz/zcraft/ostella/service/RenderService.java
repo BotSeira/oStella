@@ -14,6 +14,7 @@ import org.thymeleaf.templateresolver.FileTemplateResolver;
 import xyz.zcraft.ostella.data.*;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
+import xyz.zcraft.ostella.network.controller.UserController;
 import xyz.zcraft.ostella.util.*;
 import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
@@ -210,6 +211,22 @@ public class RenderService implements AutoCloseable {
         ctx.setVariable("extraTitle", extraTitle);
 
         String finalHtml = templateEngine.process("deranked-score-list", ctx);
+
+        return takeScreenshot(finalHtml);
+    }
+
+    public byte[] renderReworkedBest(UserController.ReworkedBestData data) {
+        Context ctx = createContext();
+        ctx.setVariable("user", data.user());
+        ctx.setVariable("scores", data.scores().subList(0, Math.min(data.scores().size(), 20)));
+        ctx.setVariable("livePp", data.livePp());
+        ctx.setVariable("localPp", data.localPp());
+        ctx.setVariable("playcountPp", data.playcountPp());
+        ctx.setVariable("ppTypes", data.ppTypes());
+        ctx.setVariable("ppVersion", data.ppVersion());
+        ctx.setVariable("time", Instant.now().truncatedTo(ChronoUnit.SECONDS));
+
+        String finalHtml = templateEngine.process("reworked-score-list", ctx);
 
         return takeScreenshot(finalHtml);
     }

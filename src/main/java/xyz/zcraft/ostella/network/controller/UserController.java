@@ -14,6 +14,7 @@ import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.*;
 import xyz.zcraft.ostella.service.AsyncService;
 import xyz.zcraft.ostella.service.CacheService;
+import xyz.zcraft.ostella.service.PpCalculatorService;
 import xyz.zcraft.ostella.service.RenderService;
 import xyz.zcraft.ostella.util.ScoreListRange;
 import xyz.zcraft.ostella.util.Scores;
@@ -22,7 +23,14 @@ import xyz.zcraft.ostella.whatif.RankPpModel;
 import xyz.zcraft.ostella.whatif.WhatIfEstimates;
 import xyz.zcraft.ostella.whatif.WhatIfService;
 import xyz.zcraft.osu.model.*;
+import xyz.zcraft.osu.parser.BeatmapParser;
+import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
+import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
+import xyz.zcraft.osu.parser.exception.AnalyzeException;
+import xyz.zcraft.osu.parser.exception.ParseException;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
@@ -527,6 +535,10 @@ public class UserController {
         );
     }
 
+    private byte[] renderReworkedBest(ReworkedBestData data) {
+        return renderer.renderReworkedBest(data);
+    }
+
     public void getDerankedBest(@NotNull Context ctx) {
         final var verbosity = ResponseVerbosity.forJson(ctx);
         final long u = requirePathLong(ctx, "userId");
@@ -746,6 +758,80 @@ public class UserController {
         );
     }
 
+    public void getReworkedBests(@NotNull Context ctx) {
+        final long userId = requirePathLong(ctx, "userId");
+        final String calculatorVersion = requireString(ctx, "version");
+        final var verbosity = ResponseVerbosity.forJson(ctx);
+
+        final PpCalculatorService calculator = router.getPpCalculatorServices().get(calculatorVersion);
+
+        if (calculator == null) {
+            throw new ApiException(ErrorCode.ILLEGAL_ARGUMENT, "Calculator '%s' not found".formatted(calculatorVersion));
+        }
+
+        ctx.future(() -> executor.enqueueAsync(() -> OsuAPI.getUser(tokenManager.getTokenData(), userId))
+                .thenCompose(user -> {
+                    if (user == null) {
+                        throw new ApiException(ErrorCode.NO_USER_FOUND);
+                    }
+
+                    return calculator.enqueueCalculation(user.getId())
+                            .thenApply(calc -> {
+                                ArrayList<ReworkedScore> scores = new ArrayList<>(200);
+                                for (CalculatedScore score : calc.scores()) {
+                                    try {
+                                        scores.add(toReworkedScore(score));
+                                    } catch (ParseException | AnalyzeException e) {
+                                        throw new RuntimeException(e);
+                                    }
+                                }
+                                scores.sort(Comparator.comparingDouble(ReworkedScore::localPp).reversed());
+                                return new ReworkedBestData(user, scores, calc.livePp(), calc.localPp(), calc.playcountPp(), calc.pp(), calculatorVersion);
+                            })
+                            .thenCompose(data -> ImageResponse.respond(
+                                    ctx, data, verbosity::project, this::renderReworkedBest, renderer.getRenderExecutor()
+                            ));
+                }));
+    }
+
+    private ReworkedScore toReworkedScore(CalculatedScore score) throws ParseException, AnalyzeException {
+        final BeatmapExtended beatmap = CacheService.getBeatmapJsonCache(score.beatmapId())
+                .orElseGet(() -> {
+                    final var bm = OsuAPI.getBeatmap(tokenManager.getTokenData(), score.beatmapId());
+                    tryCache(bm);
+                    return bm;
+                });
+
+        if (beatmap == null) {
+            throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED);
+        }
+
+        final Beatmapset beatmapset = CacheService.getBeatmapsetJsonCache(beatmap.getBeatmapsetId())
+                .orElseGet(() -> {
+                    final var set = OsuAPI.getBeatmapset(tokenManager.getTokenData(), beatmap.getBeatmapsetId());
+                    tryCache(set);
+                    return set;
+                });
+
+        final List<Mod> modList = score.mods().stream().map(s -> {
+            var mod = new Mod();
+            mod.setAcronym(s);
+            return mod;
+        }).toList();
+
+        final Path beatmapPath = CacheService.getBeatmapPath(beatmap.getId());
+        final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(beatmapPath);
+
+        DiffSpec diffSpec = OsuParser.getDiffSpecForMods(osuBeatmap, modList);
+
+        return new ReworkedScore(
+                beatmap, beatmapset, score.liveId(), score.rank(), score.combo(), score.accuracy(),
+                score.missCount(), score.count100(), score.count50(), score.count300(), score.mods(),
+                diffSpec.getStar(), score.livePp(), score.localSr(), score.localPp(), score.weight(),
+                score.endedAt(), score.performanceBreakdown(), score.positionChange()
+        );
+    }
+
     record RecentBestData(List<ScoreEntry> scores, Double ppChange) {
     }
 
@@ -760,6 +846,12 @@ public class UserController {
             UserExtended user, List<ScoreEntry> scores, Long newGlobalRank, double newPp, double bonusPp,
             ScoreCategoryTotals<Integer> counts, ScoreCategoryTotals<Double> ppCounts, List<String> filters,
             String extraTitle
+    ) {
+    }
+
+    public record ReworkedBestData(
+            UserExtended user, List<ReworkedScore> scores, double livePp, double localPp, double playcountPp,
+            PerformanceBreakdown ppTypes, String ppVersion
     ) {
     }
 

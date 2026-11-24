@@ -2,20 +2,19 @@ package xyz.zcraft.ostella.network;
 
 import com.google.gson.*;
 import io.javalin.http.Context;
+import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.config.AppConfig;
+import xyz.zcraft.ostella.config.PpCalculatorConfig;
 import xyz.zcraft.ostella.data.ScoreId;
 import xyz.zcraft.ostella.db.SetMetaStore;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.controller.*;
-import xyz.zcraft.ostella.service.AsyncService;
-import xyz.zcraft.ostella.service.CacheService;
-import xyz.zcraft.ostella.service.RenderService;
-import xyz.zcraft.ostella.service.ReplayService;
+import xyz.zcraft.ostella.service.*;
 import xyz.zcraft.ostella.util.TokenManager;
 import xyz.zcraft.ostella.util.VersionInfo;
 import xyz.zcraft.osu.model.BeatmapExtended;
@@ -55,6 +54,8 @@ public class Router implements Closeable {
     final ChallengeController challengeController;
     final AddPpController addPpController;
     final WhatIfController whatIfController;
+    @Getter
+    private final HashMap<String, PpCalculatorService> ppCalculatorServices;
     private final Runnable detachWhatIfObserver;
 
     public Router(AppConfig conf, TokenManager tokenManager) throws IOException {
@@ -87,6 +88,13 @@ public class Router implements Closeable {
         this.replayController = new ReplayController(this);
 
         this.detachWhatIfObserver = OsuAPI.addUserStatObserver(whatIf::observe);
+
+        this.ppCalculatorServices = new HashMap<>();
+
+        for (PpCalculatorConfig ppCalculator : conf.ppCalculators()) {
+            ppCalculatorServices.put(ppCalculator.name(), new PpCalculatorService(ppCalculator, conf.osu()));
+        }
+
         LOG.info("Router created");
     }
 

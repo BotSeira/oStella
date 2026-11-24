@@ -105,6 +105,7 @@ public class WebServer implements Closeable {
                     .get("/users/{userId}/rank", router.userController::getUserRank)
                     .post("/users/{userId}/addpp", router.addPpController::addPp)
                     .get("/users/{userId}/scores/bestof", router.userController::getBestOfN)
+                    .get("/users/{userId}/scores/bestof/recalculate", router.userController::getReworkedBests)
                     .get("/users/{userId}/scores/deranked-best", router.userController::getDerankedBest)
                     .get("/users/{userId}/scores/recent", router.userController::getRecentScores)
                     .get("/users/{userId}/scores/today-best", router.userController::getTodayBestScores)

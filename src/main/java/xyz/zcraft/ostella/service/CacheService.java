@@ -3,6 +3,7 @@ package xyz.zcraft.ostella.service;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import lombok.Getter;
 import lombok.SneakyThrows;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,7 +43,7 @@ public class CacheService {
     private static final Logger LOG = LogManager.getLogger(CacheService.class);
     private static final Path CACHE_PATH = Paths.get("data", "cache");
 
-    private static final Path BEATMAP_CACHE = CACHE_PATH.resolve("beatmap");
+    public static final Path BEATMAP_CACHE = CACHE_PATH.resolve("beatmap");
     private static final Path IMAGE_CACHE = CACHE_PATH.resolve("image");
     private static final Path REPLAY_CACHE = CACHE_PATH.resolve("replay");
 
