@@ -25,11 +25,7 @@ import xyz.zcraft.osu.model.Beatmapset;
 import java.io.IOException;
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -69,11 +65,6 @@ public class BeatmapsetController implements AutoCloseable {
 
     }
 
-    @Override
-    public void close() {
-        scheduler.shutdownNow();
-    }
-
     static List<SearchQuery> parseSearchQueries(String body) {
         try {
             JsonElement root = JsonParser.parseString(body);
@@ -111,6 +102,11 @@ public class BeatmapsetController implements AutoCloseable {
             throw new IllegalArgumentException(field + " must contain searchable text and be at most 256 characters");
         }
         return value;
+    }
+
+    @Override
+    public void close() {
+        scheduler.shutdownNow();
     }
 
     public void lookupBeatmapset(@NotNull Context context) {

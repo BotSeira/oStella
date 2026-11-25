@@ -10,24 +10,21 @@ import xyz.zcraft.ostella.data.PpCalculation;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class PpCalculatorService implements AutoCloseable {
+    private static final Gson GSON = new Gson();
+    private static final Logger LOG = LogManager.getLogger(PpCalculatorService.class);
     @Getter
     private final String name;
     @Getter
     private final String description;
     private final PpCalculatorConfig config;
     private final OsuConfig osuConfig;
-    private static final Gson GSON = new Gson();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Set<Process> activeProcesses = new HashSet<>();
 
@@ -36,6 +33,11 @@ public class PpCalculatorService implements AutoCloseable {
         this.description = config.description();
         this.config = config;
         this.osuConfig = osuConfig;
+    }
+
+    private static void stopProcess(Process process) {
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
+        process.destroyForcibly();
     }
 
     public CompletableFuture<PpCalculation> enqueueCalculation(long uid) {
@@ -47,8 +49,6 @@ public class PpCalculatorService implements AutoCloseable {
             }
         }, executor);
     }
-
-    private static final Logger LOG = LogManager.getLogger(PpCalculatorService.class);
 
     public PpCalculation calculate(long uid) throws IOException, InterruptedException {
         LOG.info("Starting PP recalculation for user {} on version {}", uid, name);
@@ -97,10 +97,5 @@ public class PpCalculatorService implements AutoCloseable {
     public synchronized void close() {
         executor.shutdownNow();
         activeProcesses.forEach(PpCalculatorService::stopProcess);
-    }
-
-    private static void stopProcess(Process process) {
-        process.descendants().forEach(ProcessHandle::destroyForcibly);
-        process.destroyForcibly();
     }
 }
