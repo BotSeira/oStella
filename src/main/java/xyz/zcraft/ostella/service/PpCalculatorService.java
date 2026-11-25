@@ -95,8 +95,7 @@ public class PpCalculatorService implements AutoCloseable {
 
     @Override
     public synchronized void close() {
-        // Let queued futures complete exceptionally when they reach the shutdown check.
-        executor.shutdown();
+        executor.shutdownNow();
         activeProcesses.forEach(PpCalculatorService::stopProcess);
     }
 
