@@ -13,6 +13,7 @@
         <maven.compiler.target>25</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <exec.mainClass>xyz.zcraft.ostella.oStella</exec.mainClass>
+        <exec.daemonThreadJoinTimeout>500</exec.daemonThreadJoinTimeout>
     </properties>
 
     <repositories>

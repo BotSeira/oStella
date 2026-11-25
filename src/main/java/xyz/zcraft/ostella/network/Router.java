@@ -214,6 +214,7 @@ public class Router implements Closeable {
 
     @Override
     public void close() {
+        beatmapsetController.close();
         ppCalculatorServices.values().forEach(PpCalculatorService::close);
         detachWhatIfObserver.run();
         whatIf.close();

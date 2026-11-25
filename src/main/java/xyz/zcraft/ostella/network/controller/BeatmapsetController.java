@@ -28,13 +28,14 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static xyz.zcraft.ostella.util.RequestUtil.*;
 
-public class BeatmapsetController {
+public class BeatmapsetController implements AutoCloseable {
     private static final Gson GSON = new Gson();
     private static final Logger LOG = LogManager.getLogger(BeatmapsetController.class);
     public final RenderService renderer;
@@ -44,6 +45,7 @@ public class BeatmapsetController {
     public final AtomicBoolean doCacheMeta = new AtomicBoolean(true);
 
     private final ArrayDeque<String> queryQueue = new ArrayDeque<>();
+    private final ScheduledExecutorService scheduler;
 
     public BeatmapsetController(Router router) {
         this.router = router;
@@ -51,7 +53,7 @@ public class BeatmapsetController {
         this.tokenManager = router.tokenManager;
         this.executor = router.executor;
 
-        var scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "set-meta-fetch");
             thread.setDaemon(true);
             return thread;
@@ -65,7 +67,11 @@ public class BeatmapsetController {
             SetMetaStore.upsertBeatmapset(OsuAPI.searchBeatmapset(tokenManager.getTokenData(), q));
         }), 0, 2, TimeUnit.SECONDS);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(scheduler::close));
+    }
+
+    @Override
+    public void close() {
+        scheduler.shutdownNow();
     }
 
     static List<SearchQuery> parseSearchQueries(String body) {
