@@ -775,47 +775,67 @@ public class UserController {
                         throw new ApiException(ErrorCode.NO_USER_FOUND);
                     }
 
-                    return calculator.enqueueCalculation(user.getId())
-                            .thenApply(calc -> {
-                                ArrayList<ReworkedScore> scores = new ArrayList<>(200);
-                                for (CalculatedScore score : calc.scores()) {
-                                    try {
-                                        scores.add(toReworkedScore(score));
-                                    } catch (ParseException | AnalyzeException e) {
-                                        throw new RuntimeException(e);
+                    return executor.enqueueAsync(() -> OsuAPI.getUserScores(
+                                    tokenManager.getTokenData(), user.getId(), ScoreType.BEST, OsuAPI.MAX_USER_SCORES_LIMIT
+                            ))
+                            .thenCompose(bestScores -> {
+                                HashMap<Long, Beatmap> beatmaps = new HashMap<>();
+                                HashMap<Long, Beatmapset> beatmapsets = new HashMap<>();
+                                for (Score bestScore : bestScores) {
+                                    if (bestScore.getBeatmap() != null && bestScore.getBeatmap().getId() != null) {
+                                        beatmaps.put(bestScore.getBeatmap().getId(), bestScore.getBeatmap());
+                                    }
+                                    if (bestScore.getBeatmapset() != null && bestScore.getBeatmapset().getId() != null) {
+                                        beatmapsets.put(bestScore.getBeatmapset().getId(), bestScore.getBeatmapset());
                                     }
                                 }
-                                scores.sort(Comparator.comparingDouble(ReworkedScore::localPp).reversed());
-                                return new ReworkedBestData(
-                                        user, scores,
-                                        calc.livePp(), calc.localPp(), calc.playcountPp(), calc.pp(),
-                                        calculator.getName(), calculator.getDescription()
-                                );
-                            })
-                            .thenCompose(data -> ImageResponse.respond(
-                                    ctx, data, verbosity::project, this::renderReworkedBest, renderer.getRenderExecutor()
-                            ));
+
+                                return calculator.enqueueCalculation(user.getId())
+                                        .thenApply(calc -> {
+                                            ArrayList<ReworkedScore> scores = new ArrayList<>(200);
+                                            for (CalculatedScore score : calc.scores()) {
+                                                try {
+                                                    scores.add(toReworkedScore(score, beatmaps, beatmapsets));
+                                                } catch (ParseException | AnalyzeException e) {
+                                                    throw new RuntimeException(e);
+                                                }
+                                            }
+                                            scores.sort(Comparator.comparingDouble(ReworkedScore::localPp).reversed());
+                                            return new ReworkedBestData(
+                                                    user, scores,
+                                                    calc.livePp(), calc.localPp(), calc.playcountPp(), calc.pp(),
+                                                    calculator.getName(), calculator.getDescription()
+                                            );
+                                        })
+                                        .thenCompose(data -> ImageResponse.respond(
+                                                ctx, data, verbosity::project, this::renderReworkedBest, renderer.getRenderExecutor()
+                                        ));
+                            });
                 }));
     }
 
-    private ReworkedScore toReworkedScore(CalculatedScore score) throws ParseException, AnalyzeException {
-        final BeatmapExtended beatmap = CacheService.getBeatmapJsonCache(score.beatmapId())
-                .orElseGet(() -> {
-                    final var bm = OsuAPI.getBeatmap(tokenManager.getTokenData(), score.beatmapId());
-                    tryCache(bm);
-                    return bm;
-                });
+    private ReworkedScore toReworkedScore(
+            CalculatedScore score, Map<Long, Beatmap> beatmaps, Map<Long, Beatmapset> beatmapsets
+    ) throws ParseException, AnalyzeException {
+        final Beatmap beatmap = Optional.ofNullable(beatmaps.get(score.beatmapId()))
+                .orElseGet(() -> CacheService.getBeatmapJsonCache(score.beatmapId())
+                        .orElseGet(() -> {
+                            final var bm = OsuAPI.getBeatmap(tokenManager.getTokenData(), score.beatmapId());
+                            tryCache(bm);
+                            return bm;
+                        }));
 
         if (beatmap == null) {
             throw new ApiException(ErrorCode.BEATMAP_FETCH_FAILED);
         }
 
-        final Beatmapset beatmapset = CacheService.getBeatmapsetJsonCache(beatmap.getBeatmapsetId())
-                .orElseGet(() -> {
-                    final var set = OsuAPI.getBeatmapset(tokenManager.getTokenData(), beatmap.getBeatmapsetId());
-                    tryCache(set);
-                    return set;
-                });
+        final Beatmapset beatmapset = Optional.ofNullable(beatmapsets.get(beatmap.getBeatmapsetId()))
+                .orElseGet(() -> CacheService.getBeatmapsetJsonCache(beatmap.getBeatmapsetId())
+                        .orElseGet(() -> {
+                            final var set = OsuAPI.getBeatmapset(tokenManager.getTokenData(), beatmap.getBeatmapsetId());
+                            tryCache(set);
+                            return set;
+                        }));
 
         final List<Mod> modList = score.mods().stream().map(s -> {
             var mod = new Mod();
