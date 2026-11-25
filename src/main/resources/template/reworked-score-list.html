@@ -237,7 +237,7 @@
         .extra-score-info {
             right: 0;
             bottom: 6px;
-            background-color: #262639;
+            background-color: #7fb42f;
             padding: 4px 8px;
             position: absolute;
             border-radius: 6px 0 0 6px;
@@ -556,7 +556,7 @@
             </div>
             <div class="extra-score-info"
                  th:text="${Scores.getReworkedScoreInfo(score)}"
-                 th:style="'background-color:' + ${score.localPp - score.livePp > 0 ? '#a9e34b' : '#f03e3e'}">
+                 th:style="'background-color:' + ${score.localPp - score.livePp > 0 ? '#7fb42f' : '#f03e3e'}">
                 +123.45pp ▲#1
             </div>
             <img alt="jacket" class="jacket"
