@@ -40,17 +40,17 @@ public class PpCalculatorService implements AutoCloseable {
         process.destroyForcibly();
     }
 
-    public CompletableFuture<PpCalculation> enqueueCalculation(long uid) {
+    public CompletableFuture<PpCalculation> enqueueProfileCalculation(long uid) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return calculate(uid);
+                return calculateProfile(uid);
             } catch (IOException | InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }, executor);
     }
 
-    public PpCalculation calculate(long uid) throws IOException, InterruptedException {
+    public PpCalculation calculateProfile(long uid) throws IOException, InterruptedException {
         LOG.info("Starting PP recalculation for user {} on version {}", uid, name);
 
         var command = new ArrayList<>(Arrays.stream(config.cmd().split(" ")).toList());
@@ -90,7 +90,11 @@ public class PpCalculatorService implements AutoCloseable {
 
         var output = outputRaw.substring(outputRaw.indexOf("{"));
 
-        return GSON.fromJson(output, PpCalculation.class);
+        final PpCalculation ppCalculation = GSON.fromJson(output, PpCalculation.class);
+
+        LOG.info("Calculation completed for user {} with {} scores", uid, ppCalculation.scores().size());
+
+        return ppCalculation;
     }
 
     @Override

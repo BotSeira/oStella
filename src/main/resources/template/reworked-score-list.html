@@ -469,7 +469,7 @@
                 </svg>
                 <img alt="team-flag" class="teamFlag"
                      src="https://assets.ppy.sh/teams/flag/41211/7e1c4a9bf4562f0375e955d230f56e06a579ea1881691b423d0a015572abf645.png"
-                     th:if="${user.team != null}"
+                     th:if="${user.team != null && user.team.flagUrl != null}"
                      th:src="${cache.getImageSrc(user.getTeam().getFlagUrl())}">
                 <span class="teamName" th:if="${user.team != null}" th:text="${user.team.name}">Team Name</span>
                 <div style="margin-left: auto; font-size: 1.5em;">

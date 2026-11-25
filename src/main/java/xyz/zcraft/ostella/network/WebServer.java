@@ -7,6 +7,7 @@ import lombok.Getter;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.thymeleaf.exceptions.TemplateProcessingException;
 import xyz.zcraft.ostella.config.AppConfig;
 import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.service.CacheService;
@@ -161,6 +162,15 @@ public class WebServer implements Closeable {
                         } else {
                             LOG.error("API error occurred while processing request: {} - {}", ctx.queryString(), e.getMessage());
                         }
+                    })
+                    .exception(TemplateProcessingException.class, (e, ctx) -> {
+                        ctx.status(500)
+                                .contentType("application/json")
+                                .result(new Response(
+                                        false,
+                                        "Error rendering template",
+                                        ErrorCode.TEMPLATE_RENDER_ERROR.toJson()
+                                ).toString());
                     })
                     .exception(Exception.class, (e, ctx) -> {
                         failures.incrementAndGet();

@@ -148,6 +148,8 @@ public class CacheService {
     }
 
     public static String getImageSrc(String url) {
+        if (url == null) return null;
+
         final String fileName = getFileName(url);
 
         if (!Files.exists(IMAGE_CACHE.resolve(fileName))) {

@@ -14,6 +14,6 @@ public class PpCalculationTest {
         final AppConfig appConfig = ConfigLoader.loadConfig();
         PpCalculatorService ppCalculatorService = new PpCalculatorService(appConfig.ppCalculators().getFirst(), appConfig.osu());
 
-        final PpCalculation calculate = ppCalculatorService.calculate(21445688);
+        final PpCalculation calculate = ppCalculatorService.calculateProfile(21445688);
     }
 }

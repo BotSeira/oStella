@@ -794,7 +794,7 @@ public class UserController {
                                     CacheService.getBeatmapPath(bestScore.getBeatmapId());
                                 }
 
-                                return calculator.enqueueCalculation(user.getId())
+                                return calculator.enqueueProfileCalculation(user.getId())
                                         .thenApply(calc -> {
                                             ArrayList<ReworkedScore> scores = new ArrayList<>(200);
                                             for (CalculatedScore score : calc.scores()) {
