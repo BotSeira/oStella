@@ -493,7 +493,7 @@ public class UserController {
                 .toList();
 
         context.future(() -> CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .thenApply(u -> {
+                .thenApply(_ -> {
                     final List<User> list = futures.stream().map(CompletableFuture::join).toList();
                     if (list.isEmpty())
                         throw new ApiException(ErrorCode.NO_USER_FOUND, "No user found for the provided username!");

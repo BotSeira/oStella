@@ -12,8 +12,8 @@ public class PpCalculationTest {
     @Test
     public void test() throws IOException, InterruptedException {
         final AppConfig appConfig = ConfigLoader.loadConfig();
-        PpCalculatorService ppCalculatorService = new PpCalculatorService(appConfig.ppCalculators().getFirst(), appConfig.osu());
-
-        final PpCalculation calculate = ppCalculatorService.calculateProfile(21445688);
+        try (var calculator = new PpCalculatorService(appConfig.ppCalculators().getFirst(), appConfig.osu())) {
+            calculator.calculateProfile(21445688);
+        }
     }
 }

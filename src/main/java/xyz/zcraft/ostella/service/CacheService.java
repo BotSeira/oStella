@@ -7,6 +7,7 @@ import lombok.SneakyThrows;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 import xyz.zcraft.ostella.cache.CacheControlRequest;
 import xyz.zcraft.ostella.cache.CacheControlResult;
 import xyz.zcraft.ostella.data.TokenData;
@@ -500,7 +501,8 @@ public class CacheService {
         return Optional.of(GSON.fromJson(jsonElement, Score.class));
     }
 
-    public static synchronized void cacheBeatmapsetJson(Beatmapset beatmapset) throws IOException {
+    public static synchronized void cacheBeatmapsetJson(@Nullable Beatmapset beatmapset) throws IOException {
+        if (beatmapset == null) return;
         Path destination = BEATMAPSET_JSON_CACHE.resolve(beatmapset.getId() + ".json");
         Path temporary = Files.createTempFile(BEATMAPSET_JSON_CACHE, "metadata-", ".tmp");
         try {
@@ -551,7 +553,8 @@ public class CacheService {
         }
     }
 
-    public static void cacheBeatmapJson(BeatmapExtended beatmap) throws IOException {
+    public static void cacheBeatmapJson(@Nullable BeatmapExtended beatmap) throws IOException {
+        if (beatmap == null) return;
         Files.writeString(BEATMAP_JSON_CACHE.resolve(beatmap.getId() + ".json"), GSON.toJson(beatmap));
     }
 

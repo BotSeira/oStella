@@ -171,6 +171,7 @@ public class WebServer implements Closeable {
                                         "Error rendering template",
                                         ErrorCode.TEMPLATE_RENDER_ERROR.toJson()
                                 ).toString());
+                        LOG.error("Error rendering template: {}", ctx.queryString(), e);
                     })
                     .exception(Exception.class, (e, ctx) -> {
                         failures.incrementAndGet();
