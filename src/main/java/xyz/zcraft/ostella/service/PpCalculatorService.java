@@ -2,6 +2,8 @@ package xyz.zcraft.ostella.service;
 
 import com.google.gson.Gson;
 import lombok.Getter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import xyz.zcraft.ostella.config.OsuConfig;
 import xyz.zcraft.ostella.config.PpCalculatorConfig;
 import xyz.zcraft.ostella.data.PpCalculation;
@@ -42,7 +44,11 @@ public class PpCalculatorService {
         }, calculateCalculator);
     }
 
+    private static final Logger LOG = LogManager.getLogger(PpCalculatorService.class);
+
     public PpCalculation calculate(long uid) throws IOException, InterruptedException {
+        LOG.info("Starting PP recalculation for user {} on version {}", uid, name);
+
         var command = new ArrayList<>(Arrays.stream(config.cmd().split(" ")).toList());
 
         command.addAll(List.of(

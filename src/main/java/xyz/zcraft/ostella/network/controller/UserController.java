@@ -790,14 +790,20 @@ public class UserController {
                                     }
                                 }
 
+                                for (Score bestScore : bestScores) {
+                                    CacheService.getBeatmapPath(bestScore.getBeatmapId());
+                                }
+
                                 return calculator.enqueueCalculation(user.getId())
                                         .thenApply(calc -> {
                                             ArrayList<ReworkedScore> scores = new ArrayList<>(200);
                                             for (CalculatedScore score : calc.scores()) {
                                                 try {
                                                     scores.add(toReworkedScore(score, beatmaps, beatmapsets));
-                                                } catch (ParseException | AnalyzeException e) {
-                                                    throw new RuntimeException(e);
+                                                } catch (ParseException e) {
+                                                    throw new ApiException(ErrorCode.BEATMAP_PARSE_FAILED, e);
+                                                } catch (AnalyzeException e) {
+                                                    throw new ApiException(ErrorCode.SCORE_PARSE_FAILED, e);
                                                 }
                                             }
                                             scores.sort(Comparator.comparingDouble(ReworkedScore::localPp).reversed());
