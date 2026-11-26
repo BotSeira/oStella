@@ -797,7 +797,7 @@ public class UserController {
                                 return calculator.enqueueProfileCalculation(user.getId())
                                         .thenApply(calc -> {
                                             ArrayList<ReworkedScore> scores = new ArrayList<>(200);
-                                            for (CalculatedScore score : calc.scores()) {
+                                            for (CalculatedProfileScore score : calc.scores()) {
                                                 try {
                                                     scores.add(toReworkedScore(score, beatmaps, beatmapsets));
                                                 } catch (ParseException e) {
@@ -821,7 +821,7 @@ public class UserController {
     }
 
     private ReworkedScore toReworkedScore(
-            CalculatedScore score, Map<Long, Beatmap> beatmaps, Map<Long, Beatmapset> beatmapsets
+            CalculatedProfileScore score, Map<Long, Beatmap> beatmaps, Map<Long, Beatmapset> beatmapsets
     ) throws ParseException, AnalyzeException {
         final Beatmap beatmap = Optional.ofNullable(beatmaps.get(score.beatmapId()))
                 .orElseGet(() -> CacheService.getBeatmapJsonCache(score.beatmapId())

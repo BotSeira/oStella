@@ -25,9 +25,9 @@ import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
 import xyz.zcraft.osu.parser.BeatmapPatternAnalyzer;
 import xyz.zcraft.osu.parser.OsuParser;
+import xyz.zcraft.osu.parser.data.beatmap.BeatmapAttributes;
 import xyz.zcraft.osu.parser.data.beatmap.BeatmapPatternAnalysis;
 import xyz.zcraft.osu.parser.data.beatmap.DiffSpec;
-import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.AnalyzeException;
 import xyz.zcraft.osu.parser.exception.ParseException;
@@ -663,7 +663,7 @@ public class ScoreController {
     private double getWeight(ScoreEntry entry) throws ParseException {
         final Long beatmapId = entry.getScore().getBeatmapId();
         final OsuBeatmap osuBeatmap = BeatmapParser.parseBeatmap(CacheService.getBeatmapPath(beatmapId));
-        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, entry.getScore().getMods());
+        final BeatmapAttributes difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, entry.getScore().getMods());
         final BeatmapPatternAnalysis patternAnalysis = BeatmapPatternAnalyzer.analyze(osuBeatmap, difficultyAttribute);
 
         double patternWeight = 0;
@@ -710,7 +710,7 @@ public class ScoreController {
         return factor;
     }
 
-    private double getAttributeFactor(DifficultyAttribute difficultyAttribute) {
+    private double getAttributeFactor(BeatmapAttributes difficultyAttribute) {
         double attributeFactor = 0.0;
 
         // Precision...

@@ -4,7 +4,7 @@ import xyz.zcraft.ostella.exception.ApiException;
 import xyz.zcraft.ostella.network.ErrorCode;
 import xyz.zcraft.ostella.network.controller.AnalyzeController;
 import xyz.zcraft.osu.parser.ReplayAnalyzer;
-import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+import xyz.zcraft.osu.parser.data.beatmap.BeatmapAttributes;
 import xyz.zcraft.osu.parser.data.beatmap.HitObject;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.data.replay.HitEvent;
@@ -160,7 +160,7 @@ public class MissVisualizeService {
 
     public record MissVisualizationData(
             int index, HitEvent target, List<HitEvent> nearbyHitEvents, List<OsuReplay.TimedKeyFrame> keyFrames,
-            OsuBeatmap beatmap, DifficultyAttribute difficulty, boolean hardRock,
+            OsuBeatmap beatmap, BeatmapAttributes difficulty, boolean hardRock,
             AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
             AnalyzeController.PPLoss totalMissPpLoss
     ) {
@@ -248,7 +248,7 @@ public class MissVisualizeService {
             }
         }
 
-        private static int getHitWindowCategory(long offset, DifficultyAttribute diff) {
+        private static int getHitWindowCategory(long offset, BeatmapAttributes diff) {
             long absOffset = Math.abs(offset);
 
             if (absOffset < diff.getPerfectWindow()) return 4;
@@ -263,7 +263,7 @@ public class MissVisualizeService {
 
         private static byte[] drawMiss(
                 int missIndex, HitEvent targetMiss, List<OsuReplay.TimedKeyFrame> keyFrames,
-                OsuBeatmap beatmap, DifficultyAttribute diff, boolean hr,
+                OsuBeatmap beatmap, BeatmapAttributes diff, boolean hr,
                 AnalyzeController.PPLoss realtimePpLoss, AnalyzeController.PPLoss finalPpLoss,
                 AnalyzeController.PPLoss totalMissPpLoss
         ) {
@@ -338,7 +338,7 @@ public class MissVisualizeService {
                     });
         }
 
-        private static void drawTimingIndicator(DifficultyAttribute diff, Graphics2D g2d, LinkedList<Long> hitTimes) {
+        private static void drawTimingIndicator(BeatmapAttributes diff, Graphics2D g2d, LinkedList<Long> hitTimes) {
             final double startY = (CANVAS_HEIGHT * (1 - TIMING_INDICATOR_PERCENTAGE)) / 2;
             final double barHeight = CANVAS_HEIGHT - 2 * startY;
             g2d.setStroke(new BasicStroke(4));
@@ -449,7 +449,7 @@ public class MissVisualizeService {
 
         private static void drawCursorPath(HitObject hitObject,
                                            List<OsuReplay.TimedKeyFrame> keyFrames,
-                                           DifficultyAttribute diff,
+                                           BeatmapAttributes diff,
                                            boolean hardRock,
                                            Graphics2D g2d) {
             Path2D.Double currentPath = new Path2D.Double();

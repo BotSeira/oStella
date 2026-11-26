@@ -5,7 +5,7 @@ import xyz.zcraft.osu.model.Score;
 
 import java.util.List;
 
-public record CalculatedScore(
+public record CalculatedProfileScore(
         @SerializedName("LiveId") long liveId,
         @SerializedName("BeatmapId") long beatmapId,
         @SerializedName("BeatmapName") String beatmapName,

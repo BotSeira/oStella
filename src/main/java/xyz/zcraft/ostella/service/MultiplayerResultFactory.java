@@ -6,7 +6,7 @@ import xyz.zcraft.osu.model.*;
 import xyz.zcraft.osu.model.multiplayer.Room;
 import xyz.zcraft.osu.parser.BeatmapAnalyzer;
 import xyz.zcraft.osu.parser.BeatmapParser;
-import xyz.zcraft.osu.parser.data.beatmap.DifficultyAttribute;
+import xyz.zcraft.osu.parser.data.beatmap.BeatmapAttributes;
 import xyz.zcraft.osu.parser.data.beatmap.OsuBeatmap;
 import xyz.zcraft.osu.parser.exception.ParseException;
 
@@ -243,7 +243,7 @@ public final class MultiplayerResultFactory {
             throw new RuntimeException(e);
         }
 
-        final DifficultyAttribute difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, mods);
+        final BeatmapAttributes difficultyAttribute = BeatmapAnalyzer.calculateDifficulty(osuBeatmap, mods);
 
         return new MultiplayerResultData.BeatmapInfo(
                 map == null || map.getId() == null ? beatmapId : map.getId(),
